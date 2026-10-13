@@ -1,6 +1,6 @@
 # 实验室管理系统开发约定
 
-仓库：[zhou-hack/lab-manegement](https://github.com/zhou-hack/lab-manegement)。本文约定项目技术栈、接口契约和协作流程；自动化开发约束见根目录 `AGENTS.md`。
+仓库：[zhou-hack/lab-management](https://github.com/zhou-hack/lab-management)。本文约定项目技术栈、接口契约和协作流程；自动化开发约束见根目录 `AGENTS.md`。
 
 ## 1. 技术栈
 
@@ -201,7 +201,7 @@ JSON 接口统一返回 `code`、`msg`、`data`，成功时 `code = 0`，失败�
 
 ### 初始化时先检测仓库与分支
 
-为每位协作者首次初始化开发环境前，先只读检测是否处于 Git 仓库、远端是否指向 `zhou-hack/lab-manegement`（HTTPS 或 SSH 均可），以及当前分支是否匹配 `^dev/[a-z][a-z0-9_]*$`。当前分支不能是游离 HEAD 或已知属于他人的分支。
+为每位协作者首次初始化开发环境前，先只读检测是否处于 Git 仓库、远端是否指向 `zhou-hack/lab-management`（HTTPS 或 SSH 均可），以及当前分支是否匹配 `^dev/[a-z][a-z0-9_]*$`。当前分支不能是游离 HEAD 或已知属于他人的分支。
 
 检测到仓库和当前分支符合要求时，直接沿用当前分支继续初始化，不再询问，也不重新克隆、创建或切换分支。开发者已在本次会话明确指定另一分支及新建或复用意图时，按该指示执行，不重复询问。
 
@@ -215,7 +215,7 @@ JSON 接口统一返回 `code`、`msg`、`data`，成功时 `code = 0`，失败�
 
 ```shell
 # 1. 首次克隆仓库
-git clone https://github.com/zhou-hack/lab-manegement.git lab_management
+git clone https://github.com/zhou-hack/lab-management.git lab_management
 cd lab_management
 
 # 2. 获取主分支最新状态，创建自己的开发分支
