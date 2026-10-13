@@ -1,23 +1,79 @@
-# Dependencies
+# ---------- 依赖 ----------
 node_modules/
 
-# Build output
+# ---------- 构建产物 ----------
 dist/
+dist-ssr/
 target/
+*.class
 
-# IDE
+# 打包文件（Maven Wrapper JAR 除外，必须提交）
+*.jar
+*.war
+*.ear
+!.mvn/wrapper/maven-wrapper.jar
+
+# ---------- Maven ----------
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper-downloader.java
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+
+# ---------- IDE ----------
+# IntelliJ IDEA
 .idea/
-.vscode/
 *.iml
+*.ipr
+*.iws
+out/
 
-# Environment
+# Eclipse
+.settings/
+.classpath
+.project
+.factorypath
+
+# VS Code
+.vscode/
+
+# ---------- 环境与敏感配置 ----------
 .env
 .env.local
 .env.*.local
+application-local.yml
+application-local.yaml
+application-local.properties
 
-# Logs
+# ---------- 日志 ----------
+logs/
 *.log
+hs_err_pid*.log
+replay_pid*
 
-# OS
+# ---------- 测试与覆盖率 ----------
+coverage/
+*.lcov
+
+# ---------- 前端缓存 ----------
+node_modules/.vite/
+.vite/
+eslintcache
+.eslintcache
+
+# ---------- 操作系统 ----------
 .DS_Store
 Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ---------- 临时文件 ----------
+*.tmp
+*.temp
+*.swp
+*.swo
+*~

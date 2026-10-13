@@ -1,0 +1,102 @@
+/* ==========================================================================
+   全局基础样式：reset、原子类、通用组件类、响应式与触摸端规则
+   （断点：sm 480 / md 768 / lg 1024 / xl 1280 / 2xl 1600 / 1920）
+   ========================================================================== */
+
+#app {
+  min-height: 100vh;
+}
+
+a {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+/* ---------- 文字原子类（规范第 4 节） ---------- */
+.t-title { font-size: 22px; font-weight: var(--fw-semibold); color: var(--g1); }
+.t-body  { font-size: 14px; font-weight: var(--fw-regular); color: var(--g2); }
+.t-sub   { font-size: 13px; font-weight: var(--fw-regular); color: var(--g3); }
+.t-hint  { font-size: 12px; font-weight: var(--fw-regular); color: var(--g4); }
+.t-strong { font-weight: var(--fw-semibold); color: var(--g1); }
+.t-brand { color: var(--brand); }
+.t-num {
+  font-family: var(--font-num);
+  font-size: 30px;
+  font-weight: var(--fw-semibold);
+  color: var(--g1);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 卡片（规范 7.1：18px 圆角 + 0.5px 细线，无阴影） ---------- */
+.card {
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  border: .5px solid var(--hair);
+  padding: 22px;
+}
+.card--hover:hover {
+  border-color: var(--hair-brand);
+  transform: translateY(-2px);
+  transition: all var(--dur) var(--ease);
+}
+
+/* ---------- 状态胶囊（规范 7.3） ---------- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: var(--r-full);
+  font-size: 12px;
+  line-height: 1;
+}
+.pill::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.pill--brand  { color: var(--brand);  background: var(--info-bg); }
+.pill--ok     { color: var(--ok);     background: var(--ok-bg); }
+.pill--warn   { color: var(--warn);   background: var(--warn-bg); }
+.pill--danger { color: var(--danger); background: var(--danger-bg); }
+.pill--muted  { color: var(--muted);  background: var(--muted-bg); }
+
+/* ---------- 窄屏表格横向滚动（规范第 10 节） ---------- */
+.table-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ---------- 通用自适应网格 ---------- */
+.grid-responsive {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+/* ---------- 响应式：卡片 padding 与指标数字随断点收缩 ---------- */
+@media (max-width: 1280px) {
+  .card { padding: 18px; }
+  .t-num { font-size: 24px; }
+}
+@media (max-width: 1024px) {
+  .card { padding: 16px; }
+  .t-num { font-size: 22px; }
+}
+@media (max-width: 768px) {
+  .card { padding: 14px; }
+  .t-num { font-size: 22px; }
+}
+@media (max-width: 480px) {
+  .t-num { font-size: 19px; }
+}
+
+/* ---------- 触摸设备：移除 hover 上浮，可点区域 ≥36px（规范第 9 节） ---------- */
+@media (hover: none), (pointer: coarse) {
+  .card--hover:hover {
+    transform: none;
+  }
+}

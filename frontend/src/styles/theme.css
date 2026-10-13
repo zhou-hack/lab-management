@@ -1,0 +1,81 @@
+/* ==========================================================================
+   设计令牌（Design Tokens）——《UI设计规范》v1.0 第 2 节原样落地
+   品牌蓝 #3f86ff · 四级灰阶 · 发丝线分隔 · 大圆角卡片 · 单一强调色
+   ========================================================================== */
+
+:root {
+  /* ---------- 品牌主色 ---------- */
+  --brand: #3f86ff;
+  --brand-600: #2f74ee;          /* hover 按压 */
+  --brand-700: #1f5fd6;          /* active */
+  --brand-300: #8fb8ff;          /* 禁用 / 装饰 */
+  --brand-100: #e2edff;          /* 选中背景 */
+  --brand-50:  #f2f7ff;          /* hover 背景 */
+
+  /* 品牌蓝渐变：135° 三段，用于实心主按钮 / 强调区块 / Tabs 指示条 / 页头 */
+  --brand-grad:       linear-gradient(135deg, #5b9bff 0%, #3f86ff 48%, #2f74ee 100%);
+  --brand-grad-hover: linear-gradient(135deg, #4d90ff 0%, #3f86ff 40%, #2568e0 100%);
+  --brand-grad-soft:  linear-gradient(135deg, #eaf2ff 0%, #f6f9ff 100%);
+
+  /* 透明度变体（描边、浅底、悬停态的黄金工具） */
+  --brand-a04: rgba(63, 134, 255, .04);
+  --brand-a08: rgba(63, 134, 255, .08);
+  --brand-a12: rgba(63, 134, 255, .12);
+  --brand-a20: rgba(63, 134, 255, .20);
+  --brand-a32: rgba(63, 134, 255, .32);
+
+  /* 品牌蓝投影：仅用于主按钮浮起，不给卡片用 */
+  --brand-shadow:    0 6px 18px -6px rgba(63, 134, 255, .48);
+  --brand-shadow-lg: 0 10px 28px -8px rgba(63, 134, 255, .52);
+
+  /* ---------- 四级灰阶（信息层级） ---------- */
+  --g1: #1a1a1a;   /* 一级：标题、核心数据 */
+  --g2: #5c5c66;   /* 二级：正文、字段值 */
+  --g3: #909099;   /* 三级：辅助说明、标签 */
+  --g4: #c8c8d0;   /* 四级：占位、禁用、极弱信息 */
+
+  /* ---------- 细线与底色 ---------- */
+  --hair:        rgba(26, 26, 26, .07);   /* 0.5px 细线（主分隔） */
+  --hair-strong: rgba(26, 26, 26, .11);   /* 稍强细线（表头/输入框） */
+  --hair-brand:  rgba(63, 134, 255, .24);
+  --bg: #f7f8fa;             /* 页面底：极浅灰 */
+  --surface: #ffffff;        /* 卡片面：纯白 */
+  --surface-sunken: #fafbfc; /* 卡片内嵌浅底（表头/输入底/分段条槽） */
+
+  /* ---------- 语义色（克制使用） ---------- */
+  --ok: #17b26a;      --ok-bg: rgba(23, 178, 106, .10);
+  --warn: #f79009;    --warn-bg: rgba(247, 144, 9, .12);
+  --danger: #f04438;  --danger-bg: rgba(240, 68, 56, .10);
+  --info: #3f86ff;    --info-bg: var(--brand-a08);
+  --muted: #909099;   --muted-bg: rgba(144, 144, 153, .12);
+
+  /* ---------- 圆角 ---------- */
+  --r-xs: 8px;   --r-sm: 10px;  --r-md: 14px;
+  --r-lg: 18px;  --r-xl: 22px;  --r-full: 999px;
+
+  /* ---------- 字重 ---------- */
+  --fw-regular: 400;  --fw-medium: 500;  --fw-semibold: 600;
+
+  /* ---------- 动效 ---------- */
+  --ease: cubic-bezier(.22, .61, .36, 1);        /* 标准缓出 */
+  --ease-spring: cubic-bezier(.34, 1.4, .5, 1);  /* 轻回弹 */
+  --dur-fast: .16s;  --dur: .24s;  --dur-slow: .4s;
+
+  /* ---------- 字体族 ---------- */
+  --font: "PingFang SC", -apple-system, BlinkMacSystemFont, "HarmonyOS Sans SC",
+          "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-num: "PingFang SC", "SF Pro Display", -apple-system, "DIN Alternate",
+              "Helvetica Neue", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--g1);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
