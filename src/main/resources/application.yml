@@ -8,8 +8,6 @@ spring:
     active: dev
   jackson:
     time-zone: UTC
-    serialization:
-      write-dates-as-timestamps: false
 
 mybatis-plus:
   configuration:

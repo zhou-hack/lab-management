@@ -6,6 +6,8 @@ import com.labmanage.common.result.Result;
 import com.labmanage.common.result.ResultCode;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ConstraintViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
@@ -23,6 +25,8 @@ import org.springframework.web.servlet.NoHandlerFoundException;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     /**
      * 业务异常：HTTP 状态按错误码映射（40000→400、40100→401、40300→403、
@@ -120,11 +124,12 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 其他未捕获异常
+     * 其他未捕获异常：记录堆栈便于排查，响应不泄露内部实现
      */
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<Void> handleException(Exception e) {
+        log.error("[系统异常] 未捕获异常：{} - {}", e.getClass().getSimpleName(), e.getMessage(), e);
         return Result.error(ResultCode.INTERNAL_ERROR.getCode(), ResultCode.INTERNAL_ERROR.getMsg());
     }
 }
