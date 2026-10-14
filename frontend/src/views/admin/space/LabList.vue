@@ -137,12 +137,45 @@
             教室/实训室建档与状态维护 · 开放时段为上海本地时间（不做时区转换）
           </p>
         </div>
+        <div class="space_list__toolbar_actions">
+          <el-button
+            v-permission="'space:space:list'"
+            :loading="exporting"
+            @click="onExport"
+          >
+            导出 CSV
+          </el-button>
+          <el-button
+            v-permission="'space:space:create'"
+            type="primary"
+            @click="onCreate"
+          >
+            新建场地
+          </el-button>
+        </div>
+      </div>
+
+      <!-- 批量操作条：选中行后出现 -->
+      <div
+        v-if="selectedRows.length"
+        class="space_list__batch"
+      >
+        <span class="t-sub">已选 {{ selectedRows.length }} 项</span>
         <el-button
-          v-permission="'space:space:create'"
-          type="primary"
-          @click="onCreate"
+          v-permission="'space:space:update'"
+          size="small"
+          @click="onBatchStatus('AVAILABLE')"
         >
-          新建场地
+          批量启用
+        </el-button>
+        <el-button
+          v-permission="'space:space:update'"
+          size="small"
+          type="warning"
+          plain
+          @click="onBatchStatus('CLOSED')"
+        >
+          批量停用
         </el-button>
       </div>
 
@@ -151,7 +184,12 @@
         :data="records"
         class="table-scroll-x"
         row-key="id"
+        @selection-change="onSelectionChange"
       >
+        <el-table-column
+          type="selection"
+          width="44"
+        />
         <el-table-column
           label="场地名称"
           min-width="170"
@@ -218,7 +256,7 @@
         </el-table-column>
         <el-table-column
           label="操作"
-          width="200"
+          width="230"
           fixed="right"
         >
           <template #default="{ row }">
@@ -228,6 +266,15 @@
               @click="onDetail(row)"
             >
               详情
+            </el-button>
+            <el-button
+              v-if="row.status === 'AVAILABLE'"
+              v-permission="'booking:lab:create'"
+              link
+              type="primary"
+              @click="onBook(row)"
+            >
+              预约
             </el-button>
             <el-button
               v-permission="'space:space:update'"
@@ -295,6 +342,12 @@
       :space="detailSpace"
       @close="detailVisible = false"
     />
+    <SpaceBookDialog
+      v-model="bookVisible"
+      :preset-space-id="bookSpaceId"
+      @close="bookVisible = false"
+      @submit="onSubmitBooking"
+    />
   </div>
 </template>
 
@@ -303,20 +356,28 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import SpaceFormDialog from './SpaceFormDialog.vue'
 import SpaceDetailDrawer from './SpaceDetailDrawer.vue'
+import SpaceBookDialog from '@/views/booking/SpaceBookDialog.vue'
 import { SPACE_TYPES, SPACE_TYPE_MAP, SPACE_STATUS, SPACE_STATUS_MAP } from './space.constants'
 import {
-  fetchSpacePage,
-  fetchSpaceStats,
-  fetchSpaceDetail,
-  saveSpace,
-  switchSpaceEnabled,
-  removeSpace
-} from './space.service'
+  pageSpaces,
+  getSpaceStats,
+  getSpaceDetail,
+  createSpace,
+  updateSpace,
+  enableSpace,
+  disableSpace,
+  deleteSpace,
+  exportSpaces,
+  batchStatusSpaces
+} from '@/api/space'
+import { createBooking } from '@/api/booking'
 
 const loading = ref(false)
 const records = ref([])
 const total = ref(0)
 const stats = reactive({ total: 0, available: 0, maintaining: 0, closed: 0 })
+const selectedRows = ref([])
+const exporting = ref(false)
 
 const query = reactive({
   pageNum: 1,
@@ -333,10 +394,12 @@ const formVisible = ref(false)
 const editingSpace = ref(null)
 const detailVisible = ref(false)
 const detailSpace = ref(null)
+const bookVisible = ref(false)
+const bookSpaceId = ref('')
 
 async function loadStats() {
   try {
-    const data = await fetchSpaceStats()
+    const data = await getSpaceStats()
     Object.assign(stats, {
       total: Number(data.total) || 0,
       available: Number(data.available) || 0,
@@ -361,7 +424,7 @@ async function loadData() {
       minCapacity: query.minCapacity || undefined,
       maxCapacity: query.maxCapacity || undefined
     }
-    const data = await fetchSpacePage(params)
+    const data = await pageSpaces(params)
     records.value = data.records || []
     total.value = Number(data.total) || 0
   } finally {
@@ -397,7 +460,7 @@ function onEdit(row) {
 
 async function onDetail(row) {
   try {
-    detailSpace.value = await fetchSpaceDetail(row.id)
+    detailSpace.value = await getSpaceDetail(row.id)
     detailVisible.value = true
   } catch (e) {
     ElMessage.error(e.message || '详情加载失败')
@@ -405,7 +468,7 @@ async function onDetail(row) {
 }
 
 async function onSubmitForm({ id, payload }) {
-  await saveSpace(id, payload)
+  await (id ? updateSpace(id, payload) : createSpace(payload))
   ElMessage.success(id ? '场地已更新' : '场地已创建')
   formVisible.value = false
   loadData()
@@ -424,23 +487,91 @@ async function onToggle(row, enabled) {
   } catch {
     return
   }
-  await switchSpaceEnabled(row.id, enabled)
+  await (enabled ? enableSpace(row.id) : disableSpace(row.id))
   ElMessage.success(enabled ? '已启用' : '已停用')
   loadData()
   loadStats()
 }
 
+function onSelectionChange(rows) {
+  selectedRows.value = rows || []
+}
+
+/** 批量启停（target 仅 AVAILABLE/CLOSED；停用需二次确认） */
+async function onBatchStatus(target) {
+  const enabled = target === 'AVAILABLE'
+  const names = selectedRows.value.map((r) => r.spaceName).join('、')
+  try {
+    await ElMessageBox.confirm(
+      `确定批量${enabled ? '启用' : '停用'} ${selectedRows.value.length} 个场地（${names}）吗？${
+        enabled ? '启用后可恢复预约。' : '停用后不可新建预约。'
+      }`,
+      '批量操作确认',
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  const result = await batchStatusSpaces({
+    ids: selectedRows.value.map((r) => r.id),
+    target
+  })
+  const missing = result?.missing?.length || 0
+  ElMessage.success(`批量${enabled ? '启用' : '停用'}完成：更新 ${result?.updated || 0} 项${missing ? `，${missing} 项不存在或已删除` : ''}`)
+  loadData()
+  loadStats()
+}
+
+/** 按当前筛选条件导出 CSV（UTF-8 BOM，时间按上海时区展示） */
+async function onExport() {
+  exporting.value = true
+  try {
+    const blob = await exportSpaces({
+      spaceName: query.spaceName || undefined,
+      location: query.location || undefined,
+      spaceType: query.spaceType || undefined,
+      status: query.status || undefined,
+      minCapacity: query.minCapacity || undefined,
+      maxCapacity: query.maxCapacity || undefined
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `spaces_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch {
+    // 错误提示由请求拦截器统一处理
+  } finally {
+    exporting.value = false
+  }
+}
+
+function onBook(row) {
+  bookSpaceId.value = row.id
+  bookVisible.value = true
+}
+
+async function onSubmitBooking(payload) {
+  await createBooking(payload)
+  ElMessage.success('预约已提交，等待审批')
+  bookVisible.value = false
+}
+
 async function onDelete(row) {
   try {
     await ElMessageBox.confirm(
-      `确定删除场地「${row.spaceName}」吗？逻辑删除且名称不可复用；存在数据范围授权时将被后端拒绝。`,
+      `确定删除场地「${row.spaceName}」吗？逻辑删除且名称不可复用；存在未结预约或数据范围授权时将被后端拒绝。`,
       '删除确认',
       { type: 'warning' }
     )
   } catch {
     return
   }
-  await removeSpace(row.id)
+  await deleteSpace(row.id)
   ElMessage.success('已删除')
   if (records.value.length === 1 && query.pageNum > 1) {
     query.pageNum -= 1
@@ -542,6 +673,22 @@ onMounted(() => {
   margin-bottom: 14px;
 }
 
+.space_list__toolbar_actions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.space_list__batch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: var(--surface-sunken, #f5f7fa);
+  border-radius: 8px;
+}
+
 .space_list__title {
   margin: 0 0 4px;
   font-size: 18px;
@@ -561,6 +708,10 @@ onMounted(() => {
   .space_list__toolbar {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .space_list__toolbar_actions {
+    justify-content: flex-end;
   }
 
   .space_list__input,

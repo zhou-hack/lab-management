@@ -80,6 +80,7 @@
 
 <script setup>
 import { SPACE_STATUS_MAP, SPACE_TYPE_MAP } from './space.constants'
+import { formatInstant } from '@/utils/datetime'
 
 defineProps({
   modelValue: { type: Boolean, default: false },
@@ -90,18 +91,7 @@ const emit = defineEmits(['close'])
 
 /** UTC ISO 时间点按上海时区展示（不依赖浏览器本地时区） */
 function formatShanghai(value) {
-  if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
-  return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  }).format(date)
+  return value ? formatInstant(value) : '—'
 }
 </script>
 

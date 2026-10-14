@@ -31,10 +31,10 @@
         <template v-if="mode === 'password'">
           <el-form-item
             label="账号"
-            prop="username"
+            prop="accountName"
           >
             <el-input
-              v-model="form.username"
+              v-model="form.accountName"
               placeholder="学号 / 工号"
               size="large"
             />
@@ -97,39 +97,6 @@
         >
           登 录
         </el-button>
-
-        <!-- 开发环境测试入口（后端接入后删除） -->
-        <div
-          v-if="isDev"
-          class="login_test"
-        >
-          <div class="login_test__label t-hint">
-            测试账号（仅开发环境）
-          </div>
-          <div class="login_test__btns">
-            <el-button
-              size="small"
-              round
-              @click="loginTest('STUDENT')"
-            >
-              学生
-            </el-button>
-            <el-button
-              size="small"
-              round
-              @click="loginTest('TEACHER')"
-            >
-              老师
-            </el-button>
-            <el-button
-              size="small"
-              round
-              @click="loginTest('ADMIN')"
-            >
-              管理员
-            </el-button>
-          </div>
-        </div>
       </el-form>
     </div>
   </div>
@@ -154,17 +121,10 @@ const tabs = [
 const mode = ref('password')
 const loading = ref(false)
 const formRef = ref()
-const form = reactive({ username: '', password: '', phone: '', code: '' })
-
-const isDev = import.meta.env.DEV
-
-function loginTest(role) {
-  store.loginAsTest(role)
-  router.push(store.homePath)
-}
+const form = reactive({ accountName: '', password: '', phone: '', code: '' })
 
 const rules = {
-  username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
+  accountName: [{ required: true, message: '请输入账号', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
   phone: [
     { required: true, message: '请输入手机号', trigger: 'blur' },
@@ -308,19 +268,5 @@ onBeforeUnmount(() => {
 
 .login_submit:active {
   transform: scale(.985);
-}
-
-.login_test {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: .5px dashed var(--hair-strong);
-  text-align: center;
-}
-
-.login_test__btns {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 8px;
 }
 </style>

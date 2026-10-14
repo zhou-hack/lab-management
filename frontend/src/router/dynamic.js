@@ -10,7 +10,10 @@ import AdminLayout from '@/layout/admin/AdminLayout.vue'
 const viewModules = {
   '/home': () => import('@/views/front/home/FrontHome.vue'),
   '/admin/home': () => import('@/views/admin/home/AdminHome.vue'),
-  '/admin/space/labs': () => import('@/views/admin/space/LabList.vue')
+  '/admin/space/labs': () => import('@/views/admin/space/LabList.vue'),
+  '/admin/booking/labs': () => import('@/views/admin/booking/BookingList.vue'),
+  '/admin/booking/approval': () => import('@/views/admin/booking/BookingApproval.vue'),
+  '/booking/labs': () => import('@/views/booking/BookingList.vue')
 }
 
 const addedRouteNames = []

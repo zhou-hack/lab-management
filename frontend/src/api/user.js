@@ -1,23 +1,29 @@
 import request from './request'
 
-/** 账号密码登录 → { token } */
+/**
+ * 账号密码登录 → LoginVO { token, userId, realName, userType, roles, passwordChangeRequired, needSetPassword }
+ * @param {{ accountName: string, password: string }} data
+ */
 export function loginByPassword(data) {
   return request.post('/auth/login', data)
 }
 
-/** 手机验证码登录 → { token } */
-export function loginByPhone(data) {
-  return request.post('/auth/login_phone', data)
+/**
+ * 手机验证码登录（首登匹配预录名单自动建档）→ LoginVO
+ * @param {{ phone: string, code: string }} data
+ */
+export function loginBySms(data) {
+  return request.post('/auth/sms/login', data)
 }
 
 /** 发送短信验证码 */
 export function sendSmsCode(phone) {
-  return request.post('/auth/sms_code', { phone })
+  return request.post('/auth/sms/send', { phone })
 }
 
-/** 当前用户 + 角色 + 权限 + 菜单树 */
-export function getUserMenus() {
-  return request.get('/auth/user_menus')
+/** 当前身份：用户信息 + 角色 + 权限码 + 菜单树（ProfileVO） */
+export function getProfile() {
+  return request.get('/auth/profile')
 }
 
 /** 注销 */

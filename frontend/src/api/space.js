@@ -6,7 +6,25 @@ export function pageSpaces(params) {
   return request.get('/space/spaces', { params })
 }
 
-/** 统计卡片：总块数与各状态块数 */
+/** 场地下拉选项（供预约表单等下游模块联调；availableOnly=true 仅可用场地） */
+export function listSpaceOptions(params) {
+  return request.get('/space/spaces/options', { params })
+}
+
+/**
+ * 按当前筛选条件导出 CSV（UTF-8 BOM，时间按上海时区展示）。
+ * 返回 Blob，由调用方触发浏览器下载。
+ */
+export function exportSpaces(params) {
+  return request.get('/space/spaces/export', { params, responseType: 'blob' })
+}
+
+/** 批量启停（target 仅 AVAILABLE/CLOSED）→ { updated, missing } */
+export function batchStatusSpaces(data) {
+  return request.post('/space/spaces/batch_status', data)
+}
+
+/** 统计卡片：总块数、各状态块数与类型分布 */
 export function getSpaceStats() {
   return request.get('/space/spaces/stats')
 }
