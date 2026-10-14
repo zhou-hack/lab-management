@@ -432,7 +432,7 @@
       destroy-on-close
     >
       <el-alert
-        title="仅空闲（IDLE）且无未完结借用业务的设备可迁移；迁移将登记历史轨迹"
+        title="仅空闲（IDLE）设备可迁移；迁移将登记历史轨迹"
         type="info"
         :closable="false"
         class="asset_manage__alert"
@@ -500,7 +500,7 @@
       destroy-on-close
     >
       <el-alert
-        title="定级后记录定级人与时间；未定级设备不可被借用"
+        title="定级后记录定级人与时间"
         type="info"
         :closable="false"
         class="asset_manage__alert"
