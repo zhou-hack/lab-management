@@ -3,40 +3,94 @@ import { loginByPassword, loginByPhone, logout as apiLogout, getUserMenus } from
 import { getToken, setToken, removeToken } from '@/utils/token'
 import { registerDynamicRoutes, removeDynamicRoutes } from '@/router/dynamic'
 
-/** 开发环境测试账号数据（后端接入后删除） */
+/**
+ * 开发环境测试账号数据（后端接入后删除）。
+ * perms 与 sql/ 固定设备.sql、equipment_module.sql 种子一致（M/C/F 菜单格式）；
+ * 生产菜单走未来 user_menus 接口并映射 DIRECTORY/PAGE/ACTION。
+ */
+const BOOKING_PERMS_STUDENT = [
+  'my:page',
+  'space:lab:list',
+  'equipment:asset:list',
+  'equipment:booking:create',
+  'equipment:booking:cancel',
+  'equipment:booking:list',
+  'equipment:booking:checkout',
+  'equipment:booking:return'
+]
+
+const FRONT_MENUS = (extra) => ({
+  menuId: 100,
+  menuName: '设备服务',
+  menuType: 'M',
+  path: '/',
+  children: [
+    { menuId: 130, menuName: '首页', menuType: 'C', path: '/home', perms: 'my:page' },
+    { menuId: 131, menuName: '发起借用', menuType: 'C', path: '/equipment/booking/create', perms: 'equipment:booking:create' },
+    { menuId: 132, menuName: '我的借用', menuType: 'C', path: '/equipment/bookings/mine', perms: 'equipment:booking:list' },
+    ...(extra || [])
+  ]
+})
+
 const TEST_PROFILES = {
   STUDENT: {
     userInfo: { realName: '测试学生', username: '20230001' },
     roles: ['STUDENT'],
-    perms: ['my:page'],
-    menus: [
-      {
-        menuId: 100,
-        menuName: '学生视图',
-        menuType: 'M',
-        path: '/',
-        children: [{ menuId: 130, menuName: '首页', menuType: 'C', path: '/home', perms: 'my:page' }]
-      }
-    ]
+    perms: BOOKING_PERMS_STUDENT,
+    menus: [FRONT_MENUS()]
   },
   TEACHER: {
     userInfo: { realName: '测试老师', username: 'T1001' },
     roles: ['TEACHER'],
-    perms: ['my:page', 'tApprove:page'],
+    perms: [
+      ...BOOKING_PERMS_STUDENT,
+      'equipment:booking:teacher_approve'
+    ],
     menus: [
-      {
-        menuId: 200,
-        menuName: '老师视图',
-        menuType: 'M',
-        path: '/',
-        children: [{ menuId: 230, menuName: '首页', menuType: 'C', path: '/home', perms: 'my:page' }]
-      }
+      FRONT_MENUS([
+        { menuId: 133, menuName: '借用审批', menuType: 'C', path: '/equipment/approvals', perms: 'equipment:booking:teacher_approve' }
+      ])
     ]
   },
   ADMIN: {
     userInfo: { realName: '测试管理员', username: 'admin' },
     roles: ['ADMIN'],
-    perms: ['dashboard:view', 'equipment:edit'],
+    perms: [
+      'dashboard:view',
+      'space:campus:list',
+      'space:campus:create',
+      'space:campus:update',
+      'space:campus:delete',
+      'space:building:list',
+      'space:building:create',
+      'space:building:update',
+      'space:building:delete',
+      'space:lab:list',
+      'space:lab:create',
+      'space:lab:update',
+      'space:lab:delete',
+      'equipment:category:list',
+      'equipment:category:create',
+      'equipment:category:update',
+      'equipment:category:delete',
+      'equipment:model:list',
+      'equipment:model:create',
+      'equipment:model:update',
+      'equipment:model:delete',
+      'equipment:asset:list',
+      'equipment:asset:create',
+      'equipment:asset:update',
+      'equipment:asset:delete',
+      'equipment:asset:transfer',
+      'equipment:asset:classify',
+      'equipment:booking:create',
+      'equipment:booking:cancel',
+      'equipment:booking:list',
+      'equipment:booking:teacher_approve',
+      'equipment:booking:admin_approve',
+      'equipment:booking:checkout',
+      'equipment:booking:return'
+    ],
     menus: [
       {
         menuId: 300,
@@ -44,7 +98,28 @@ const TEST_PROFILES = {
         menuType: 'M',
         path: '/admin',
         children: [
-          { menuId: 381, menuName: '首页', menuType: 'C', path: '/admin/home', perms: 'dashboard:view' }
+          { menuId: 381, menuName: '首页', menuType: 'C', path: '/admin/home', perms: 'dashboard:view' },
+          {
+            menuId: 390,
+            menuName: '基础数据',
+            menuType: 'M',
+            path: '/admin/base',
+            children: [
+              { menuId: 391, menuName: '空间管理', menuType: 'C', path: '/admin/space', perms: 'space:campus:list' }
+            ]
+          },
+          {
+            menuId: 395,
+            menuName: '设备管理',
+            menuType: 'M',
+            path: '/admin/equipment_root',
+            children: [
+              { menuId: 396, menuName: '分类管理', menuType: 'C', path: '/admin/equipment/category', perms: 'equipment:category:list' },
+              { menuId: 397, menuName: '型号管理', menuType: 'C', path: '/admin/equipment/model', perms: 'equipment:model:list' },
+              { menuId: 398, menuName: '设备台账', menuType: 'C', path: '/admin/equipment/asset', perms: 'equipment:asset:list' },
+              { menuId: 399, menuName: '借用管理', menuType: 'C', path: '/admin/equipment/booking', perms: 'equipment:booking:list' }
+            ]
+          }
         ]
       }
     ]

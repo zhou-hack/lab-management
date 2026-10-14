@@ -9,7 +9,15 @@ import AdminLayout from '@/layout/admin/AdminLayout.vue'
  */
 const viewModules = {
   '/home': () => import('@/views/front/home/FrontHome.vue'),
-  '/admin/home': () => import('@/views/admin/home/AdminHome.vue')
+  '/admin/home': () => import('@/views/admin/home/AdminHome.vue'),
+  '/admin/space': () => import('@/views/admin/space/SpaceManage.vue'),
+  '/admin/equipment/category': () => import('@/views/admin/equipment/CategoryManage.vue'),
+  '/admin/equipment/model': () => import('@/views/admin/equipment/ModelManage.vue'),
+  '/admin/equipment/asset': () => import('@/views/admin/equipment/AssetManage.vue'),
+  '/admin/equipment/booking': () => import('@/views/admin/equipment/BookingManage.vue'),
+  '/equipment/booking/create': () => import('@/views/front/equipment/BookingCreate.vue'),
+  '/equipment/bookings/mine': () => import('@/views/front/equipment/MyBookings.vue'),
+  '/equipment/approvals': () => import('@/views/front/equipment/TeacherApprove.vue')
 }
 
 const addedRouteNames = []
