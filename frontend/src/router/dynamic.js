@@ -1,5 +1,4 @@
 import router from '@/router'
-import FrontLayout from '@/layout/front/FrontLayout.vue'
 import AdminLayout from '@/layout/admin/AdminLayout.vue'
 
 /**
@@ -8,16 +7,11 @@ import AdminLayout from '@/layout/admin/AdminLayout.vue'
  * 业务页面落地时在此登记（key 与 sys_menu.path 一致）。
  */
 const viewModules = {
-  '/home': () => import('@/views/front/home/FrontHome.vue'),
   '/admin/home': () => import('@/views/admin/home/AdminHome.vue'),
   '/admin/space': () => import('@/views/admin/space/SpaceManage.vue'),
   '/admin/equipment/category': () => import('@/views/admin/equipment/CategoryManage.vue'),
   '/admin/equipment/model': () => import('@/views/admin/equipment/ModelManage.vue'),
-  '/admin/equipment/asset': () => import('@/views/admin/equipment/AssetManage.vue'),
-  '/admin/equipment/booking': () => import('@/views/admin/equipment/BookingManage.vue'),
-  '/equipment/booking/create': () => import('@/views/front/equipment/BookingCreate.vue'),
-  '/equipment/bookings/mine': () => import('@/views/front/equipment/MyBookings.vue'),
-  '/equipment/approvals': () => import('@/views/front/equipment/TeacherApprove.vue')
+  '/admin/equipment/asset': () => import('@/views/admin/equipment/AssetManage.vue')
 }
 
 const addedRouteNames = []
@@ -31,9 +25,8 @@ function walkMenus(menus, visit) {
   }
 }
 
-/** 将后端菜单树映射为动态路由并注册；front 子树挂 FrontLayout，admin 子树挂 AdminLayout */
+/** 将后端菜单树映射为动态路由并注册；admin 子树挂 AdminLayout */
 export function registerDynamicRoutes(menus) {
-  const frontChildren = []
   const adminChildren = []
 
   walkMenus(menus, (menu) => {
@@ -52,7 +45,7 @@ export function registerDynamicRoutes(menus) {
     if (menu.path.startsWith('/admin')) {
       adminChildren.push(route)
     } else {
-      frontChildren.push(route)
+      console.warn(`[router] 菜单「${menu.menuName}」(${menu.path}) 不属于管理端子树，已跳过`)
     }
   })
 
@@ -65,17 +58,6 @@ export function registerDynamicRoutes(menus) {
       children: adminChildren
     })
     addedRouteNames.push('AdminLayout')
-  }
-  if (frontChildren.length) {
-    // 前台视图挂根路径，URL 不带前缀（如 /home）
-    router.addRoute({
-      path: '/',
-      name: 'FrontLayout',
-      component: FrontLayout,
-      redirect: frontChildren[0].path,
-      children: frontChildren
-    })
-    addedRouteNames.push('FrontLayout')
   }
 }
 

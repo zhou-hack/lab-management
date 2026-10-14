@@ -6,27 +6,21 @@
 --   1. equipment_category 多级设备分类树 / equipment_model 设备型号表；
 --   2. equipment_asset 设备台账（空间层级末端：campus→building→lab→asset）；
 --   3. equipment_location_history 位置变迁历史（追加型）；
---   4. equipment_booking 器材借用单（挂统一单据）/
---      equipment_usage 借出归还流水；
+--   4. equipment_booking / equipment_usage 借用链建表（表结构保留备用，
+--      借用功能已移除：2026-10-14 产品定稿为纯管理员设备管理，
+--      不下发借用权限与菜单种子）；
 --   5. equipment 模块权限与菜单初始数据。
 -- ----------------------------------------------------------------------------
 -- 设计要点（评审稿 4.3 节文首约定）：
---   * 设备状态 IDLE/RESERVED/IN_USE/MAINTAINING/SCRAPPED，报废为最终态；
---     未来预约以预约时段为准，不能因一张未来预约就把设备永久标为
---     RESERVED 并拒绝其他不相交预约；
---   * 页面状态由实体物理状态与当前生效预约派生；
---     实验室禁用不自动报废室内设备；
---   * value_level 为空表示待分类，禁止借用（提交时服务端校验）；
+--   * 设备状态 IDLE/MAINTAINING/SCRAPPED，报废为最终态（RESERVED/IN_USE
+--      随借用功能移除，表 CHECK 约束保留原定义以兼容既有库）；
+--   * 实验室禁用不自动报废室内设备；
+--   * value_level 为空表示待分类；
 --   * equipment_location_history / equipment_usage 为追加型历史，deleted 恒 0。
--- 借用审批链（本期按用户确认执行，与 PRD 普通设备免管理员审批有偏差）：
---   * 学生单：提交 PENDING_TEACHER（指定老师批）→ PENDING_ADMIN（管理员
---     审批发放）→ APPROVED → CHECKED_OUT → RETURNED；
---   * 老师单：提交 PENDING_ADMIN → APPROVED → CHECKED_OUT → RETURNED；
---   * 普通/贵重设备流程一致（value_level 仅作台账属性）。
 -- 执行前提：
 --   * MySQL 8.4.11 LTS，InnoDB / utf8mb4 / utf8mb4_0900_ai_ci；
 --   * 必须先执行 sys_rbac.sql、空间.sql、document_base.sql
---     （依赖 sys_user / sys_department / sys_role / lab / biz_document /
+--     （依赖 sys_user / sys_department / sys_role / lab /
 --     sys_permission / sys_menu / sys_role_permission / sys_role_menu）；
 --   * 服务端与连接会话时区均为 +00:00；
 --   * 审计字段 create_user_id/update_user_id 统一不建外键；
@@ -34,10 +28,12 @@
 --     表属后续模块），只建列与索引，不建外键；uk(lab_booking_id, asset_id)
 --     照建，MySQL 唯一索引允许多个 NULL，独立申请不冲突。
 -- 种子 ID 分段约定：
---   * equipment 权限 141–161；equipment 菜单 161–170
+--   * equipment 权限 141–154（155–161 借用权限已移除，ID 不复用）；
+--     equipment 菜单 161–164、170（165–169 借用菜单已移除，ID 不复用）
 --     （sys_permission 与 sys_menu 为不同表，ID 数值互不影响）；
---   * sys_role_permission 关联 515–535（仅 ADMIN）；sys_role_menu 关联 606–611；
---   * 536–548 / 612–619 曾用于 TEACHER/STUDENT 绑定，已收回（ID 不复用）；
+--   * sys_role_permission 关联 515–528（仅 ADMIN）；sys_role_menu 关联 606–609、611；
+--   * 529–535 / 610 借用绑定已移除；536–548 / 612–619 曾用于
+--     TEACHER/STUDENT 绑定，已收回（ID 均不复用）；
 --   * 本段不得与其他模块脚本（space 101–125/501–514/601–605）复用。
 -- ============================================================================
 SET NAMES utf8mb4;
@@ -98,7 +94,7 @@ CREATE TABLE equipment_model (
 -- ----------------------------------------------------------------------------
 -- 3. equipment_asset 设备台账
 --    资产编号唯一；每台/每套一行；序列号不强制全局唯一；
---    value_level 为空=待分类，禁止借用；状态枚举由服务层维护；
+--    value_level 为空=待分类；状态枚举由服务层维护；
 --    分类信息（classified_by/classified_at/classification_reason）记录
 --    最近一次定级留痕。
 -- ----------------------------------------------------------------------------
@@ -114,11 +110,11 @@ CREATE TABLE equipment_asset (
     purchase_date        DATE          NULL                    COMMENT '采购日期（纯日期，不做时区转换）',
     purchase_price       DECIMAL(18,2) NULL                    COMMENT '采购单价（MONEY）',
     warranty_until       DATE          NULL                    COMMENT '保修截止（纯日期）',
-    value_level          VARCHAR(32)   NULL                    COMMENT '价值分级：NORMAL/VALUABLE（NULL=待分类，禁止借用）',
+    value_level          VARCHAR(32)   NULL                    COMMENT '价值分级：NORMAL/VALUABLE（NULL=待分类）',
     classification_reason TEXT         NULL                    COMMENT '定级理由',
     classified_by        BIGINT        NULL                    COMMENT '定级人（→ sys_user.id）',
     classified_at        DATETIME(3)   NULL                    COMMENT '定级时间（UTC）',
-    status               VARCHAR(32)   NOT NULL                COMMENT '设备状态：IDLE/RESERVED/IN_USE/MAINTAINING/SCRAPPED（报废为最终态）',
+    status               VARCHAR(32)   NOT NULL                COMMENT '设备状态：IDLE/MAINTAINING/SCRAPPED（报废为最终态；RESERVED/IN_USE 随借用功能移除，列定义保留兼容）',
     enabled              TINYINT       NOT NULL DEFAULT 1      COMMENT '启用：1启用 0停用',
     create_time          DATETIME(3)   NOT NULL DEFAULT (UTC_TIMESTAMP(3)) COMMENT '创建时间（UTC）',
     update_time          DATETIME(3)   NOT NULL DEFAULT (UTC_TIMESTAMP(3)) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间（UTC）',
@@ -138,11 +134,11 @@ CREATE TABLE equipment_asset (
     CONSTRAINT chk_equipment_asset_value_level CHECK (value_level IN ('NORMAL', 'VALUABLE')),
     CONSTRAINT chk_equipment_asset_enabled CHECK (enabled IN (0, 1)),
     CONSTRAINT chk_equipment_asset_deleted CHECK (deleted IN (0, 1))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='设备台账表（资产编号唯一，未分类禁止借用）';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='设备台账表（资产编号唯一）';
 
 -- ----------------------------------------------------------------------------
 -- 4. equipment_location_history 位置变迁历史（追加型）
---    仅允许空闲且无冲突业务的资产迁移；当前台账与历史同事务更新；
+--    仅允许空闲资产迁移；当前台账与历史同事务更新；
 --    from_lab_id 可空（首装）；deleted 恒 0，不逻辑删除。
 -- ----------------------------------------------------------------------------
 CREATE TABLE equipment_location_history (
@@ -170,7 +166,7 @@ CREATE TABLE equipment_location_history (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='设备位置变迁历史表（追加型）';
 
 -- ----------------------------------------------------------------------------
--- 5. equipment_booking 器材借用单
+-- 5. equipment_booking 器材借用单（表结构保留备用，借用功能已移除）
 --    document_id 唯一，单据关联一台实物；分类在提交时快照；
 --    冲突判定用半开区间 [start_at, end_at)，有效冲突状态 APPROVED/CHECKED_OUT；
 --    uk(lab_booking_id, asset_id) 照建（MySQL 唯一索引允许多个 NULL，
@@ -253,7 +249,8 @@ CREATE TABLE equipment_usage (
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
--- 7. equipment 模块权限（ID 141–161，module_code='equipment'）
+-- 7. equipment 模块权限（ID 141–154，module_code='equipment'）
+--    借用权限 155–161 已随借用功能移除（ID 不复用）。
 -- ----------------------------------------------------------------------------
 INSERT INTO sys_permission (id, permission_code, permission_name, module_code) VALUES
 (141, 'equipment:category:list',          '设备分类查询', 'equipment'),
@@ -269,38 +266,26 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code) V
 (151, 'equipment:asset:update',          '设备台账修改', 'equipment'),
 (152, 'equipment:asset:delete',          '设备台账删除', 'equipment'),
 (153, 'equipment:asset:transfer',        '设备迁移登记', 'equipment'),
-(154, 'equipment:asset:classify',        '设备价值定级', 'equipment'),
-(155, 'equipment:booking:create',         '借用单提交',   'equipment'),
-(156, 'equipment:booking:cancel',         '借用单撤销',   'equipment'),
-(157, 'equipment:booking:list',           '借用单查询',   'equipment'),
-(158, 'equipment:booking:teacher_approve', '借用单老师审批', 'equipment'),
-(159, 'equipment:booking:admin_approve',   '借用单管理员审批', 'equipment'),
-(160, 'equipment:booking:checkout',        '借用确认借出', 'equipment'),
-(161, 'equipment:booking:return',          '借用确认归还', 'equipment');
+(154, 'equipment:asset:classify',        '设备价值定级', 'equipment');
 
 -- ----------------------------------------------------------------------------
--- 8. equipment 模块菜单（ID 161–170）
+-- 8. equipment 模块菜单（ID 161–164、170）
 --    route_path 与前端组件白名单（frontend/src/router/dynamic.js viewModules）
---    的 key 完全一致；后台页面挂 /admin（AdminLayout），前台页面挂 /equipment
---    （FrontLayout，DEV 假登录演示用）。
+--    的 key 完全一致；页面挂 /admin（AdminLayout）。
+--    借用菜单 165–169 已随借用功能移除（ID 不复用）。
 -- ----------------------------------------------------------------------------
 INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order) VALUES
 (161, NULL, 'M_EQUIPMENT_ADMIN',   '设备管理',   '/admin',                    NULL,                         NULL, 'DIRECTORY', 20),
 (162, 161,  'C_EQUIPMENT_CATEGORY', '分类管理', '/admin/equipment/category', '/admin/equipment/category', 141,  'PAGE',      1),
 (163, 161,  'C_EQUIPMENT_MODEL',    '型号管理', '/admin/equipment/model',    '/admin/equipment/model',    145,  'PAGE',      2),
 (164, 161,  'C_EQUIPMENT_ASSET',    '设备台账', '/admin/equipment/asset',    '/admin/equipment/asset',    149,  'PAGE',      3),
-(165, 161,  'C_EQUIPMENT_BOOKING',  '借用管理', '/admin/equipment/booking',  '/admin/equipment/booking',  157,  'PAGE',      4),
-(166, NULL, 'M_EQUIPMENT_FRONT',   '设备服务', '/equipment',                NULL,                         NULL, 'DIRECTORY', 10),
-(167, 166,  'C_BOOKING_CREATE',    '发起借用', '/equipment/booking/create', '/equipment/booking/create', 155,  'PAGE',      1),
-(168, 166,  'C_MY_BOOKINGS',       '我的借用', '/equipment/bookings/mine',  '/equipment/bookings/mine',  157,  'PAGE',      2),
-(169, 166,  'C_TEACHER_APPROVALS', '借用审批', '/equipment/approvals',       '/equipment/approvals',      158,  'PAGE',      3),
 (170, 164,  'F_EQUIPMENT_ASSET_CREATE', '设备登记', NULL, NULL, 150, 'ACTION', 1);
 
 -- ----------------------------------------------------------------------------
--- 9. 角色权限绑定（sys_role_permission，ID 515–535）
---    当前阶段仅 ADMIN(1) 开放设备模块全量（分类 4 + 型号 4 + 台账 6 + 借用 7 = 21 项）。
---    TEACHER(2)/STUDENT(3) 不绑定任何设备权限（收权决策 2026-10-14：设备模块
---    仅管理员可用）；审批链业务代码保留，后续开放时重新登记绑定即可。
+-- 9. 角色权限绑定（sys_role_permission，ID 515–528）
+--    仅 ADMIN(1) 开放设备管理全量（分类 4 + 型号 4 + 台账 6 = 14 项）。
+--    TEACHER(2)/STUDENT(3) 不绑定任何设备权限（2026-10-14 定稿：
+--    纯管理员设备管理）；借用权限绑定 529–535 已移除（ID 不复用）。
 -- ----------------------------------------------------------------------------
 INSERT INTO sys_role_permission (id, role_id, permission_id) VALUES
 (515, 1, 141),
@@ -316,25 +301,16 @@ INSERT INTO sys_role_permission (id, role_id, permission_id) VALUES
 (525, 1, 151),
 (526, 1, 152),
 (527, 1, 153),
-(528, 1, 154),
-(529, 1, 155),
-(530, 1, 156),
-(531, 1, 157),
-(532, 1, 158),
-(533, 1, 159),
-(534, 1, 160),
-(535, 1, 161);
+(528, 1, 154);
 
 -- ----------------------------------------------------------------------------
--- 10. 角色菜单绑定（sys_role_menu，ID 606–611）
---     仅 ADMIN(1)：设备管理目录 + 后台 4 页 + 设备登记动作。
---     前台设备菜单定义（M_EQUIPMENT_FRONT 166 及子页）保留不绑定，
---     管理员经菜单树外的前台路由使用借用功能。
+-- 10. 角色菜单绑定（sys_role_menu，ID 606–609、611）
+--     仅 ADMIN(1)：设备管理目录 + 后台 3 页 + 设备登记动作。
+--     借用管理菜单绑定 610 已移除（ID 不复用）。
 -- ----------------------------------------------------------------------------
 INSERT INTO sys_role_menu (id, role_id, menu_id) VALUES
 (606, 1, 161),
 (607, 1, 162),
 (608, 1, 163),
 (609, 1, 164),
-(610, 1, 165),
 (611, 1, 170);

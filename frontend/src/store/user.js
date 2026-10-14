@@ -5,7 +5,7 @@ import { registerDynamicRoutes, removeDynamicRoutes } from '@/router/dynamic'
 
 /**
  * 用户会话 store：登录后由 /auth/user_menus 拉取真实用户/角色/权限/菜单。
- * 收权决策 2026-10-14：系统仅 ADMIN 可用。
+ * 产品形态 2026-10-14：纯管理端，仅 ADMIN 可用，登录直达 /admin/home。
  */
 export const useUserStore = defineStore('user', {
   state: () => ({
@@ -18,7 +18,7 @@ export const useUserStore = defineStore('user', {
   }),
   getters: {
     isAdmin: (state) => state.roles.includes('ADMIN'),
-    homePath: (state) => (state.roles.includes('ADMIN') ? '/admin/home' : '/home')
+    homePath: () => '/admin/home'
   },
   actions: {
     /**

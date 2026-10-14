@@ -299,10 +299,10 @@
             placeholder="选填"
           >
             <el-option
-              v-for="teacher in teacherList"
-              :key="teacher.id"
-              :label="`${teacher.realName}（${teacher.personNo}）`"
-              :value="teacher.id"
+              v-for="custodian in custodianList"
+              :key="custodian.userId"
+              :label="custodian.realName"
+              :value="custodian.userId"
             />
           </el-select>
         </el-form-item>
@@ -372,10 +372,10 @@
             placeholder="选填"
           >
             <el-option
-              v-for="teacher in teacherList"
-              :key="teacher.id"
-              :label="`${teacher.realName}（${teacher.personNo}）`"
-              :value="teacher.id"
+              v-for="custodian in custodianList"
+              :key="custodian.userId"
+              :label="custodian.realName"
+              :value="custodian.userId"
             />
           </el-select>
         </el-form-item>
@@ -557,10 +557,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   classifyAsset,
   createAsset,
+  custodianOptions,
   deleteAsset,
   pageAssets,
   pageModels,
-  teacherOptions,
   transferAsset,
   updateAsset
 } from '@/api/equipment'
@@ -572,7 +572,7 @@ import { EQUIPMENT_STATUS, EQUIPMENT_STATUS_OPTIONS, VALUE_LEVEL, enumMeta } fro
 
 const labOptions = ref([])
 const modelOptions = ref([])
-const teacherList = ref([])
+const custodianList = ref([])
 const departmentOptions = ref([])
 
 async function loadLabOptions() {
@@ -593,9 +593,9 @@ async function loadModelOptions() {
   }
 }
 
-async function loadTeacherList() {
+async function loadCustodianList() {
   try {
-    teacherList.value = (await teacherOptions()) || []
+    custodianList.value = (await custodianOptions()) || []
   } catch {
     // 失败提示由请求拦截器统一处理
   }
@@ -890,7 +890,7 @@ onMounted(() => {
   load()
   loadLabOptions()
   loadModelOptions()
-  loadTeacherList()
+  loadCustodianList()
   loadDepartmentOptions()
 })
 </script>

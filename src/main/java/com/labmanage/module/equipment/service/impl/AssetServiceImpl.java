@@ -22,6 +22,7 @@ import com.labmanage.module.equipment.mapper.EquipmentLocationHistoryMapper;
 import com.labmanage.module.equipment.mapper.EquipmentModelMapper;
 import com.labmanage.module.equipment.service.AssetService;
 import com.labmanage.module.equipment.vo.AssetVO;
+import com.labmanage.module.equipment.vo.CustodianOptionVO;
 import com.labmanage.module.space.entity.Lab;
 import com.labmanage.module.space.mapper.LabMapper;
 import com.labmanage.roles.department.entity.SysDepartment;
@@ -46,7 +47,7 @@ import java.util.stream.Collectors;
 @Service
 public class AssetServiceImpl implements AssetService {
 
-    /** 台账维护权限（区分管理员维护视图与学生/老师目录视图） */
+    /** 台账维护权限（区分管理员维护视图与目录视图） */
     private static final String PERM_ASSET_UPDATE = "equipment:asset:update";
 
     private final EquipmentAssetMapper assetMapper;
@@ -79,8 +80,8 @@ public class AssetServiceImpl implements AssetService {
                 wrapper.eq(EquipmentAsset::getStatus, query.getStatus());
             }
         } else {
-            // 无维护权限：强制收敛为「在架且可约」目录视图
-            wrapper.in(EquipmentAsset::getStatus, EquipmentStatus.IDLE, EquipmentStatus.RESERVED)
+            // 无维护权限：强制收敛为「在架」目录视图
+            wrapper.eq(EquipmentAsset::getStatus, EquipmentStatus.IDLE)
                     .eq(EquipmentAsset::getEnabled, 1);
         }
         if (query.getLabId() != null) {
@@ -159,9 +160,6 @@ public class AssetServiceImpl implements AssetService {
     @Override
     public void delete(String id) {
         EquipmentAsset asset = requireAsset(Ids.parse(id));
-        if (assetMapper.countActiveBookings(asset.getId()) > 0) {
-            throw new BusinessException(ResultCode.CONFLICT.getCode(), "设备存在未完结的借用单，无法删除");
-        }
         assetMapper.deleteById(asset.getId());
     }
 
@@ -174,9 +172,6 @@ public class AssetServiceImpl implements AssetService {
         }
         if (asset.getStatus() != EquipmentStatus.IDLE) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "仅空闲设备允许迁移");
-        }
-        if (assetMapper.countActiveBookings(asset.getId()) > 0) {
-            throw new BusinessException(ResultCode.CONFLICT.getCode(), "设备存在未完结的借用单，无法迁移");
         }
         Lab toLab = requireLab(request.toLabId());
         if (Objects.equals(toLab.getId(), asset.getLabId())
@@ -207,6 +202,16 @@ public class AssetServiceImpl implements AssetService {
         asset.setClassifiedBy(StpUtil.getLoginIdAsLong());
         asset.setClassifiedAt(Instant.now());
         assetMapper.updateById(asset);
+    }
+
+    @Override
+    public List<CustodianOptionVO> custodianOptions() {
+        return userMapper.selectList(new LambdaQueryWrapper<SysUser>()
+                        .eq(SysUser::getEnabled, 1)
+                        .orderByAsc(SysUser::getId))
+                .stream()
+                .map(user -> new CustodianOptionVO(String.valueOf(user.getId()), user.getRealName()))
+                .toList();
     }
 
     private EquipmentAsset requireAsset(Long assetId) {

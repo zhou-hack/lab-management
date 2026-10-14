@@ -51,7 +51,7 @@ class AuthFlowTest {
     /** 管理员（RBAC 种子内置） */
     private static final long ADMIN_ID = 1L;
 
-    /** 测试菜单 ID 段（与 EquipmentBookingFlowTest 的 91xxx 约定一致） */
+    /** 测试菜单 ID 段（91xxx 集成测试约定段） */
     private static final long MENU_ROOT_ID = 910000000000000401L;
     private static final long MENU_PAGE_ID = 910000000000000402L;
     private static final long MENU_ACTION_ID = 910000000000000403L;

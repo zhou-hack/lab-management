@@ -10,6 +10,7 @@ import com.labmanage.module.equipment.dto.AssetTransferRequest;
 import com.labmanage.module.equipment.dto.AssetUpdateRequest;
 import com.labmanage.module.equipment.service.AssetService;
 import com.labmanage.module.equipment.vo.AssetVO;
+import com.labmanage.module.equipment.vo.CustodianOptionVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -21,6 +22,8 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 设备台账管理
@@ -36,11 +39,18 @@ public class AssetController {
         this.assetService = assetService;
     }
 
-    @Operation(summary = "台账分页查询（无维护权限时收敛为在架可约目录视图）")
+    @Operation(summary = "台账分页查询（无维护权限时收敛为在架目录视图）")
     @SaCheckPermission("equipment:asset:list")
     @GetMapping
     public Result<PageResult<AssetVO>> page(AssetPageQuery query) {
         return Result.success(assetService.page(query));
+    }
+
+    @Operation(summary = "保管人下拉选项（全部启用用户）")
+    @SaCheckPermission("equipment:asset:list")
+    @GetMapping("/custodian-options")
+    public Result<List<CustodianOptionVO>> custodianOptions() {
+        return Result.success(assetService.custodianOptions());
     }
 
     @Operation(summary = "新增台账")

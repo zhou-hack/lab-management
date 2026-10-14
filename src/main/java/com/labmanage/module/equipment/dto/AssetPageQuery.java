@@ -6,8 +6,8 @@ import com.labmanage.module.equipment.enums.EquipmentStatus;
 /**
  * 设备台账分页查询参数
  * <p>
- * 无台账维护权限的请求由服务端强制收敛为「在架且可约」目录视图
- * （status IN (IDLE, RESERVED) 且启用）。
+ * 无台账维护权限的请求由服务端强制收敛为「在架」目录视图
+ * （status = IDLE 且启用）。
  */
 public class AssetPageQuery extends BasePageQuery {
 

@@ -55,7 +55,7 @@ router.beforeEach(async (to) => {
     }
   }
 
-  // 根路径按角色分流（前台视图挂根路径，无前缀）
+  // 根路径统一进管理端首页
   if (to.path === '/') {
     return store.homePath
   }

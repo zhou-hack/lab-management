@@ -7,6 +7,9 @@ import com.labmanage.module.equipment.dto.AssetPageQuery;
 import com.labmanage.module.equipment.dto.AssetTransferRequest;
 import com.labmanage.module.equipment.dto.AssetUpdateRequest;
 import com.labmanage.module.equipment.vo.AssetVO;
+import com.labmanage.module.equipment.vo.CustodianOptionVO;
+
+import java.util.List;
 
 /**
  * 设备台账服务
@@ -15,7 +18,7 @@ public interface AssetService {
 
     /**
      * 台账分页查询；无台账维护权限的请求强制收敛为
-     * 「在架且可约」目录视图（status IN (IDLE, RESERVED) 且启用）
+     * 「在架」目录视图（status = IDLE 且启用）
      */
     PageResult<AssetVO> page(AssetPageQuery query);
 
@@ -30,18 +33,23 @@ public interface AssetService {
     void update(String id, AssetUpdateRequest request);
 
     /**
-     * 删除台账（逻辑删除；存在未完结借用单时拒绝）
+     * 删除台账（逻辑删除）
      */
     void delete(String id);
 
     /**
-     * 迁移登记（仅允许空闲且无未完结借用单的设备；
+     * 迁移登记（仅允许空闲设备；
      * 当前台账与位置历史同事务更新）
      */
     void transfer(String id, AssetTransferRequest request);
 
     /**
-     * 价值定级（登记分级、理由、定级人与时间；未分类设备禁止借用）
+     * 价值定级（登记分级、理由、定级人与时间）
      */
     void classify(String id, AssetClassifyRequest request);
+
+    /**
+     * 保管人下拉选项（全部启用用户）
+     */
+    List<CustodianOptionVO> custodianOptions();
 }

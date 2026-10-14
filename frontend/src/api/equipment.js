@@ -46,9 +46,14 @@ export function deleteModel(id) {
 
 /* ---------------- 设备台账 ---------------- */
 
-/** 台账分页查询（无维护权限时服务端收敛为在架可约目录视图） */
+/** 台账分页查询（无维护权限时服务端收敛为在架目录视图） */
 export function pageAssets(params) {
   return request.get('/equipment/assets', { params })
+}
+
+/** 保管人下拉选项（全部启用用户） */
+export function custodianOptions() {
+  return request.get('/equipment/assets/custodian-options')
 }
 
 /** 新增台账 */
@@ -74,51 +79,4 @@ export function transferAsset(id, data) {
 /** 价值定级 */
 export function classifyAsset(id, data) {
   return request.put(`/equipment/assets/${id}/classification`, data)
-}
-
-/* ---------------- 器材借用 ---------------- */
-
-/** 借用单分页查询（scope=MINE/PENDING/ALL） */
-export function pageBookings(params) {
-  return request.get('/equipment/bookings', { params })
-}
-
-/** 借用单详情 */
-export function bookingDetail(id) {
-  return request.get(`/equipment/bookings/${id}`)
-}
-
-/** 审批老师下拉选项（学生提交借用时选择） */
-export function teacherOptions() {
-  return request.get('/equipment/bookings/teachers')
-}
-
-/** 提交借用单（服务端校验时间/限制/冲突；幂等键命中返回原单） */
-export function createBooking(data) {
-  return request.post('/equipment/bookings', data)
-}
-
-/** 撤销借用单（仅 PENDING 态本人） */
-export function cancelBooking(id, data) {
-  return request.post(`/equipment/bookings/${id}/cancel`, data)
-}
-
-/** 老师审批（approved=false 时意见必填） */
-export function teacherApproveBooking(id, data) {
-  return request.post(`/equipment/bookings/${id}/teacher_approve`, data)
-}
-
-/** 管理员审批（approved=false 时意见必填） */
-export function adminApproveBooking(id, data) {
-  return request.post(`/equipment/bookings/${id}/admin_approve`, data)
-}
-
-/** 借出确认（须在借用时间窗口内） */
-export function checkoutBooking(id, data) {
-  return request.post(`/equipment/bookings/${id}/checkout`, data)
-}
-
-/** 归还确认（condition=DAMAGED 时 note 必填） */
-export function returnBooking(id, data) {
-  return request.post(`/equipment/bookings/${id}/return`, data)
 }

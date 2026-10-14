@@ -353,29 +353,25 @@ SELECT 30390 + n, 246, CONCAT('ESD', LPAD(n, 2, '0')), 1, 1,
        'NORMAL', '2025 年采购批次定价', 1, UTC_TIMESTAMP(3), 'IDLE', 1, 1 FROM seq;
 
 -- ----------------------------------------------------------------------------
--- 5. 菜单结构调整（ID 171–173；绑定 612–617）
+-- 5. 菜单结构调整（ID 171–172；绑定 612–613）
 --    前端 AdminLayout 以"唯一 /admin 根目录"渲染侧栏，而模块脚本产生了
 --    121（基础数据）与 161（设备管理）两个 /admin 根目录——需补一个管理端
---    根目录将其挂为子树；同时补管理端/前台首页页菜单并绑定 ADMIN。
---    169 借用审批不绑定（收权决策：管理员审批走后台借用管理页）。
+--    根目录将其挂为子树，并补管理端首页菜单绑定 ADMIN。
+--    借用功能已移除（2026-10-14 定稿纯管理员设备管理）：前台菜单 173 与
+--    绑定 614–617 不再下发（ID 不复用）。
 -- ----------------------------------------------------------------------------
 INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key,
                       permission_id, menu_type, sort_order) VALUES
 (171, NULL, 'M_ADMIN_ROOT', '管理端', '/admin', NULL, NULL, 'DIRECTORY', 0),
-(172, 171,  'C_ADMIN_HOME', '首页',   '/admin/home', '/admin/home', NULL, 'PAGE', 0),
-(173, 166,  'C_FRONT_HOME', '首页',   '/home', '/home', NULL, 'PAGE', 0);
+(172, 171,  'C_ADMIN_HOME', '首页',   '/admin/home', '/admin/home', NULL, 'PAGE', 0);
 
 -- 模块脚本的两个 /admin 根目录挂到管理端根下
 UPDATE sys_menu SET parent_id = 171 WHERE id IN (121, 161);
 
--- ADMIN(1) 菜单绑定：管理端根/首页 + 前台设备服务入口（发起借用、我的借用）
+-- ADMIN(1) 菜单绑定：管理端根/首页
 INSERT INTO sys_role_menu (id, role_id, menu_id) VALUES
 (612, 1, 171),
-(613, 1, 172),
-(614, 1, 173),
-(615, 1, 166),
-(616, 1, 167),
-(617, 1, 168);
+(613, 1, 172);
 
 -- ----------------------------------------------------------------------------
 -- 6. 管理员密码（替换 sys_rbac.sql 占位值）
