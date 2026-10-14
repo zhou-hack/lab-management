@@ -1,8 +1,8 @@
 -- ============================================================================
 -- 场地模块集成测试建表脚本（仅测试用，H2 MySQL 模式）。
--- 与 sql/lab_management_all(1).sql 的差异：H2 不支持 UTC_TIMESTAMP(3) 列默认值与
+-- 与 sql/lab_management_all.sql 的差异：H2 不支持 UTC_TIMESTAMP(3) 列默认值与
 -- ON UPDATE CURRENT_TIMESTAMP(3)，时间列由 MyBatis-Plus 审计填充保证；
--- 生产建表仍以 sql/lab_management_all(1).sql（MySQL 8.4）为准。
+-- 生产建表仍以 sql/lab_management_all.sql（MySQL 8.4）为准。
 -- ============================================================================
 
 DROP TABLE IF EXISTS lab;
