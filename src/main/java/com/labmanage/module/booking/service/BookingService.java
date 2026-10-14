@@ -15,7 +15,7 @@ import java.time.LocalDate;
 /**
  * 场地预约业务接口。
  * <p>
- * v1：TEACHER/ADMIN 发起、ADMIN 审批；PENDING/APPROVED/REJECTED/CANCELLED 四态，
+ * 一期：TEACHER/ADMIN 发起、ADMIN 审批；PENDING/APPROVED/REJECTED/CANCELLED 四态，
  * IN_USE/FINISHED 派生展示；待审批不占用时段（提交与审批双重冲突校验，
  * 最后批准者遇冲突拒绝不抢占）；审批事务按场地行锁串行化，防并发双写。
  */

@@ -1,18 +1,18 @@
 -- ============================================================================
--- 实验室设备管理系统 · 场地预约模块建表脚本（v1.0）
+-- 实验室设备管理系统 · 场地预约模块建表脚本（v1.1）
 -- 依据 docs/数据库设计.md 4.5 节（场地预约）、docs/RBAC实施清单.md 2.4 节。
 -- ----------------------------------------------------------------------------
--- v1.0 裁剪说明（相对数据库设计 4.5 终态，均为后续分组落地时补齐）：
+-- 一期裁剪说明（相对数据库设计 4.5 终态，均为后续分组落地时补齐）：
 --   1. biz_document 单据表未落地：lab_booking.document_id 及
 --      lab_booking_equipment / lab_booking_material / equipment_* 延后；
 --   2. 课程模块未落地：offering_id / class_id 与 lab_slot.schedule_occurrence_id
 --      延后，lab_slot.booking_id 暂为 NOT NULL（"恰一非空"约束待排课落地恢复）；
---   3. 学生背书链（PENDING_ENDORSE + endorse_* 字段保留但 v1 不启用）与
---      IN_USE/FINISHED 落库迁移、lab_usage 系统使用档案延后：v1 仅
+--   3. 学生背书链（PENDING_ENDORSE + endorse_* 字段保留但一期不启用）与
+--      IN_USE/FINISHED 落库迁移、lab_usage 系统使用档案延后：一期仅
 --      TEACHER/ADMIN 发起、ADMIN 审批，PENDING/APPROVED/REJECTED/CANCELLED
 --      四态；IN_USE/FINISHED 由接口按当前时间派生展示（文档约定
 --      end_at+2h 为归档宽限，不额外占用场地）；
---   4. 状态机 v1：PENDING → APPROVED / REJECTED；PENDING / APPROVED →
+--   4. 状态机（一期）：PENDING → APPROVED / REJECTED；PENDING / APPROVED →
 --      CANCELLED（APPROVED 取消同步释放 lab_slot 占用）。
 -- ----------------------------------------------------------------------------
 -- 关键约定：
@@ -41,7 +41,7 @@ CREATE TABLE lab_booking (
     start_at           DATETIME(3)  NOT NULL                COMMENT '预约开始（UTC 时间点）',
     end_at             DATETIME(3)  NOT NULL                COMMENT '预约结束（UTC 时间点，须晚于 start_at）',
     status             VARCHAR(32)  NOT NULL                COMMENT '状态：PENDING待审批/APPROVED已批准/REJECTED已驳回/CANCELLED已取消',
-    endorse_teacher_id BIGINT       NULL                    COMMENT '背书老师（→ sys_user.id，学生预约链路预留，v1 不使用）',
+    endorse_teacher_id BIGINT       NULL                    COMMENT '背书老师（→ sys_user.id，学生预约链路预留，一期不使用）',
     endorse_at         DATETIME(3)  NULL                    COMMENT '背书时间（预留）',
     endorse_comment    VARCHAR(512) NULL                    COMMENT '背书意见（预留）',
     reject_reason      VARCHAR(512) NULL                    COMMENT '驳回原因',
@@ -101,7 +101,7 @@ WHERE id = 1;
 
 -- ----------------------------------------------------------------------------
 -- 权限初始数据（3001-3007，标识规范 模块:资源:操作，module_code='booking'）
--- 3005-3007 为登记项：背书链/强制结束/使用台账 v1 未实现，随对应迭代启用。
+-- 3005-3007 为登记项：背书链/强制结束/使用台账一期未实现，随对应迭代启用。
 -- ----------------------------------------------------------------------------
 INSERT INTO sys_permission (id, permission_code, permission_name, module_code, enabled)
 VALUES

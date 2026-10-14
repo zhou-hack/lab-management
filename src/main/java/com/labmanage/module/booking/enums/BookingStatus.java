@@ -1,7 +1,7 @@
 package com.labmanage.module.booking.enums;
 
 /**
- * 场地预约单状态（v1 状态机）。
+ * 场地预约单状态（一期状态机）。
  * <p>
  * PENDING → APPROVED / REJECTED；PENDING / APPROVED → CANCELLED
  * （APPROVED 取消同步释放 lab_slot 占用）。

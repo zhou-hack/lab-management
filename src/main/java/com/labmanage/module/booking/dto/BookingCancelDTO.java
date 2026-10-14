@@ -3,7 +3,7 @@ package com.labmanage.module.booking.dto;
 import jakarta.validation.constraints.Size;
 
 /**
- * 预约取消入参（v1 仅申请人本人取消，取消类型固定 MANUAL）。
+ * 预约取消入参（一期仅申请人本人取消，取消类型固定 MANUAL）。
  */
 public record BookingCancelDTO(
 

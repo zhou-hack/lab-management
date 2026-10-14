@@ -37,7 +37,7 @@ public class LabBooking extends BaseEntity {
     /** 状态：PENDING/APPROVED/REJECTED/CANCELLED */
     private BookingStatus status;
 
-    /** 背书老师（学生预约链路预留，v1 不使用） */
+    /** 背书老师（学生预约链路预留，一期不使用） */
     private Long endorseTeacherId;
 
     /** 背书时间（预留） */
