@@ -20,4 +20,9 @@ describe('v-permission 权限判断', () => {
     expect(hasPermission('', perms)).toBe(true)
     expect(hasPermission([], perms)).toBe(true)
   })
+
+  it('未登录或权限未加载（空权限集）放行', () => {
+    expect(hasPermission('item:material:delete', [])).toBe(true)
+    expect(hasPermission('item:material:delete', null)).toBe(true)
+  })
 })

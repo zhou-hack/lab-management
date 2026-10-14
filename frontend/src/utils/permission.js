@@ -6,6 +6,8 @@ import { useUserStore } from '@/store/user'
  */
 export function hasPermission(value, perms) {
   if (!value || (Array.isArray(value) && value.length === 0)) return true
+  // 权限集为空（未登录或权限未加载）时放行：前端仅体验控制，接口鉴权以后端 Sa-Token 为准
+  if (!perms || perms.length === 0) return true
   const required = Array.isArray(value) ? value : [value]
   return required.some((p) => perms.includes(p))
 }

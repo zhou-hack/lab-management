@@ -15,6 +15,13 @@ const staticRoutes = [
     component: () => import('@/views/error/NotFound.vue'),
     meta: { title: '页面不存在' }
   },
+  {
+    // 物料模块联调骨架页（第二阶段）；登录模块接入后由动态菜单替代
+    path: '/item',
+    name: 'ItemWorkspace',
+    component: () => import('@/views/item/ItemWorkspace.vue'),
+    meta: { title: '物料管理', public: true }
+  },
   { path: '/:pathMatch(.*)*', redirect: '/404' }
 ]
 
@@ -26,6 +33,11 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  // 物料骨架页等本地联调页面：meta.public 跳过登录与菜单加载（临时）
+  if (to.meta && to.meta.public) {
+    return true
+  }
+
   const token = getToken()
 
   if (!token) {
