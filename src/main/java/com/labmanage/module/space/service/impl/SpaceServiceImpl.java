@@ -176,7 +176,6 @@ public class SpaceServiceImpl implements SpaceService {
         space.setOpenStart(openStart);
         space.setOpenEnd(openEnd);
         space.setStatus(dto.status() == null ? SpaceStatus.AVAILABLE : dto.status());
-        fillOperator(space, true);
 
         spaceMapper.insert(space);
         log.info("[场地新增] 完成：操作人={}, 场地ID={}, 名称={}, 类型={}, 状态={}, 开放时段={}~{}",
@@ -387,14 +386,6 @@ public class SpaceServiceImpl implements SpaceService {
             throw new BusinessException(ResultCode.BAD_REQUEST.getCode(),
                     "开放开始时间必须早于开放结束时间");
         }
-    }
-
-    private void fillOperator(BizSpace space, boolean isInsert) {
-        Long uid = SecurityUtils.currentUserId();
-        if (isInsert) {
-            space.setCreateUserId(uid);
-        }
-        space.setUpdateUserId(uid);
     }
 
     private void applySort(LambdaQueryWrapper<BizSpace> wrapper, SpacePageQuery query) {

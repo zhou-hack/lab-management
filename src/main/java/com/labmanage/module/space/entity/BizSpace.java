@@ -1,7 +1,5 @@
 package com.labmanage.module.space.entity;
 
-import com.baomidou.mybatisplus.annotation.FieldFill;
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.labmanage.common.core.BaseEntity;
 import com.labmanage.module.space.enums.SpaceStatus;
@@ -43,12 +41,6 @@ public class BizSpace extends BaseEntity {
 
     /** 状态：AVAILABLE/MAINTAINING/CLOSED（落库） */
     private SpaceStatus status;
-
-    @TableField(fill = FieldFill.INSERT)
-    private Long createUserId;
-
-    @TableField(fill = FieldFill.INSERT_UPDATE)
-    private Long updateUserId;
 
     public String getSpaceName() {
         return spaceName;
@@ -112,21 +104,5 @@ public class BizSpace extends BaseEntity {
 
     public void setStatus(SpaceStatus status) {
         this.status = status;
-    }
-
-    public Long getCreateUserId() {
-        return createUserId;
-    }
-
-    public void setCreateUserId(Long createUserId) {
-        this.createUserId = createUserId;
-    }
-
-    public Long getUpdateUserId() {
-        return updateUserId;
-    }
-
-    public void setUpdateUserId(Long updateUserId) {
-        this.updateUserId = updateUserId;
     }
 }

@@ -1,28 +1,30 @@
 package com.labmanage.module.space;
 
-import cn.dev33.satoken.annotation.SaIgnore;
 import cn.dev33.satoken.stp.StpInterface;
 import cn.dev33.satoken.stp.StpUtil;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.space.service.impl.SpaceServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -50,45 +52,35 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.sql.init.schema-locations=classpath:sql/space_schema_h2.sql",
         "spring.sql.init.data-locations=classpath:sql/space_data_h2.sql"
 }, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(SpaceApiLogIntegrationTest.TestSaTokenConfig.class)
+@Import(SpaceApiLogIntegrationTest.TestAuthConfig.class)
 class SpaceApiLogIntegrationTest {
 
-    /** 测试用权限供给：为登录用户 1 放开场地模块全部权限（生产由 RBAC 查库实现） */
+    /**
+     * 测试专用登录端点（路径在 /api/v1 之外，绕开 SaTokenConfig 的路由级登录校验）。
+     * Sa-Token 1.46.0 的上下文由 HTTP 过滤器在请求线程初始化，
+     * 测试线程直接调用 StpUtil.login() 会抛「上下文尚未初始化」，
+     * 故经由真实 HTTP 请求完成登录并回传 token。
+     */
     @TestConfiguration(proxyBeanMethods = false)
-    static class TestSaTokenConfig {
+    static class TestAuthConfig {
 
-        @Bean
-        StpInterface stpInterface() {
-            return new StpInterface() {
-                @Override
-                public List<String> getPermissionList(Object loginId, String loginType) {
-                    return List.of("space:space:list", "space:space:read", "space:space:create",
-                            "space:space:update", "space:space:delete");
-                }
-
-                @Override
-                public List<String> getRoleList(Object loginId, String loginType) {
-                    return List.of("ADMIN");
-                }
-            };
-        }
-
-        /**
-         * 测试专用登录端点。Sa-Token 1.46.0 的上下文由 HTTP 过滤器在请求线程初始化，
-         * 测试线程直接调用 StpUtil.login() 会抛「上下文尚未初始化」，
-         * 故经由真实 HTTP 请求完成登录并回传 token。
-         */
         @RestController
         static class TestAuthController {
 
-            @SaIgnore
-            @GetMapping("/api/v1/test/login")
+            @GetMapping("/test/login")
             Result<String> login() {
                 StpUtil.login(1L);
                 return Result.success(StpUtil.getTokenValue());
             }
         }
     }
+
+    /**
+     * 以 Mock 替换 roles 模块的 StpInterfaceImpl（生产实现查 RBAC 库表，
+     * H2 测试库无这些表）：为登录用户 1 放开场地模块全部权限。
+     */
+    @MockitoBean
+    private StpInterface stpInterface;
 
     @LocalServerPort
     private int port;
@@ -103,6 +95,11 @@ class SpaceApiLogIntegrationTest {
 
     @BeforeEach
     void login() throws Exception {
+        Mockito.when(stpInterface.getPermissionList(Mockito.any(), Mockito.any()))
+                .thenReturn(List.of("space:space:list", "space:space:read", "space:space:create",
+                        "space:space:update", "space:space:delete"));
+        Mockito.when(stpInterface.getRoleList(Mockito.any(), Mockito.any()))
+                .thenReturn(List.of("ADMIN"));
         // Spring Boot 上下文在测试实例创建阶段才启动，其日志系统初始化会重置
         // logback context，因此捕获器须在上下文就绪后（此时）挂载，不能用 @BeforeAll
         if (logAppender == null) {
@@ -113,7 +110,7 @@ class SpaceApiLogIntegrationTest {
         }
         logAppender.list.clear();
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://127.0.0.1:" + port + "/api/v1/test/login"))
+                .uri(URI.create("http://127.0.0.1:" + port + "/test/login"))
                 .GET()
                 .build();
         HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
@@ -126,7 +123,7 @@ class SpaceApiLogIntegrationTest {
     private JsonNode get(String path) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("http://127.0.0.1:" + port + path))
-                .header("Authorization", token)
+                .header("Authorization", "Bearer " + token)
                 .GET()
                 .build();
         HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
