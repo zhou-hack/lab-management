@@ -120,6 +120,16 @@
                     <release>17</release>
                 </configuration>
             </plugin>
+            <!-- 测试 JVM 统一 UTC（与生产 -Duser.timezone=UTC 一致）：
+                 Instant 字段经 MyBatis 默认 TypeHandler 以 JVM 时区读写 DATETIME(3)，
+                 测试与生产同为 UTC 才能保证时间点语义（预约冲突/可用时段）一致 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>-Duser.timezone=UTC</argLine>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 

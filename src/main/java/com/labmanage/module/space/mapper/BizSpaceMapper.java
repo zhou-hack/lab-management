@@ -38,4 +38,20 @@ public interface BizSpaceMapper extends BaseMapper<BizSpace> {
     @Select("SELECT status AS status, COUNT(*) AS cnt FROM biz_space "
             + "WHERE deleted = 0 GROUP BY status")
     List<Map<String, Object>> countGroupByStatus();
+
+    /**
+     * 按类型分组统计未删除场地块数（统计卡片类型分布）。
+     * 别名用全小写下划线（H2 DATABASE_TO_LOWER 会将别名转小写，
+     * MySQL 保留原样，两者对 space_type 均可命中）。
+     */
+    @Select("SELECT space_type AS space_type, COUNT(*) AS cnt FROM biz_space "
+            + "WHERE deleted = 0 GROUP BY space_type")
+    List<Map<String, Object>> countGroupByType();
+
+    /**
+     * 按主键行锁读取场地（预约审批串行化依据，数据库设计 8.1）：
+     * 审批事务先锁定 biz_space 行再复核冲突，防同场地并发双写 lab_slot。
+     */
+    @Select("SELECT * FROM biz_space WHERE id = #{id} AND deleted = 0 FOR UPDATE")
+    BizSpace selectByIdForUpdate(@Param("id") Long id);
 }
