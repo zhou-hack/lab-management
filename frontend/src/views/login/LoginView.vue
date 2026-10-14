@@ -48,6 +48,13 @@
         >
           登 录
         </el-button>
+        <el-button
+          class="login_admin_fill"
+          size="large"
+          @click="fillAdmin"
+        >
+          管理员账号填充
+        </el-button>
       </el-form>
     </div>
   </div>
@@ -85,6 +92,12 @@ async function submit() {
   } finally {
     loading.value = false
   }
+}
+
+/** 快捷填充管理员账号密码 */
+function fillAdmin() {
+  form.username = 'admin'
+  form.password = 'admin123'
 }
 </script>
 
@@ -135,4 +148,14 @@ async function submit() {
 .login_submit:active {
   transform: scale(.985);
 }
+
+.login_admin_fill {
+  width: 100%;
+  height: 42px;
+  margin-top: 10px;
+  margin-left: 0;
+  border-radius: var(--r-full);
+}
+
+/* el-button 相邻默认 12px 左边距归零，保持整宽 */
 </style>
