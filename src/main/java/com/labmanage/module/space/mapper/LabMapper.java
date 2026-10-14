@@ -14,7 +14,7 @@ public interface LabMapper extends BaseMapper<Lab> {
 
     /**
      * 实验室内未删除设备数（删除校验；equipment_asset 由设备模块维护，
-     * 表已由 sql/equipment_module.sql 建立）
+     * 表已由 sql/固定设备.sql 建立）
      */
     @Select("SELECT COUNT(*) FROM equipment_asset WHERE lab_id = #{labId} AND deleted = 0")
     long countAssets(@Param("labId") Long labId);

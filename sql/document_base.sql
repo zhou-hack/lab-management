@@ -20,8 +20,8 @@
 -- 执行前提：
 --   * MySQL 8.4.11 LTS，InnoDB / utf8mb4 / utf8mb4_0900_ai_ci；
 --   * 必须先执行 sys_rbac.sql（依赖 sys_user / sys_department / sys_role /
---     user_booking_restriction）；空间外键依赖 固定设备.sql 时序上无强制，
---   但建议按 sys_rbac → 固定设备 → document_base 顺序执行；
+--     user_booking_restriction）；空间外键依赖 空间.sql 时序上无强制，
+--   但建议按 sys_rbac → 空间 → document_base 顺序执行；
 --   * 服务端与连接会话时区均为 +00:00；
 --   * 审计字段 create_user_id/update_user_id 统一不建外键；
 --   * policy_id 为跨模块引用（business_policy 表属后续模块），只建列与索引，

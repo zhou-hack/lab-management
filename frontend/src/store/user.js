@@ -5,21 +5,12 @@ import { registerDynamicRoutes, removeDynamicRoutes } from '@/router/dynamic'
 
 /**
  * 开发环境测试账号数据（后端接入后删除）。
- * perms 与 sql/ 固定设备.sql、equipment_module.sql 种子一致（M/C/F 菜单格式）；
+ * perms 与 sql/ 空间.sql、固定设备.sql 种子一致（M/C/F 菜单格式）；
  * 生产菜单走未来 user_menus 接口并映射 DIRECTORY/PAGE/ACTION。
+ * 收权决策 2026-10-14：整个系统仅 ADMIN 可用，STUDENT/TEACHER 不再提供
+ * 测试档案（角色无任何业务权限与菜单）。
  */
-const BOOKING_PERMS_STUDENT = [
-  'my:page',
-  'space:lab:list',
-  'equipment:asset:list',
-  'equipment:booking:create',
-  'equipment:booking:cancel',
-  'equipment:booking:list',
-  'equipment:booking:checkout',
-  'equipment:booking:return'
-]
-
-const FRONT_MENUS = (extra) => ({
+const FRONT_MENUS = () => ({
   menuId: 100,
   menuName: '设备服务',
   menuType: 'M',
@@ -27,31 +18,11 @@ const FRONT_MENUS = (extra) => ({
   children: [
     { menuId: 130, menuName: '首页', menuType: 'C', path: '/home', perms: 'my:page' },
     { menuId: 131, menuName: '发起借用', menuType: 'C', path: '/equipment/booking/create', perms: 'equipment:booking:create' },
-    { menuId: 132, menuName: '我的借用', menuType: 'C', path: '/equipment/bookings/mine', perms: 'equipment:booking:list' },
-    ...(extra || [])
+    { menuId: 132, menuName: '我的借用', menuType: 'C', path: '/equipment/bookings/mine', perms: 'equipment:booking:list' }
   ]
 })
 
 const TEST_PROFILES = {
-  STUDENT: {
-    userInfo: { realName: '测试学生', username: '20230001' },
-    roles: ['STUDENT'],
-    perms: BOOKING_PERMS_STUDENT,
-    menus: [FRONT_MENUS()]
-  },
-  TEACHER: {
-    userInfo: { realName: '测试老师', username: 'T1001' },
-    roles: ['TEACHER'],
-    perms: [
-      ...BOOKING_PERMS_STUDENT,
-      'equipment:booking:teacher_approve'
-    ],
-    menus: [
-      FRONT_MENUS([
-        { menuId: 133, menuName: '借用审批', menuType: 'C', path: '/equipment/approvals', perms: 'equipment:booking:teacher_approve' }
-      ])
-    ]
-  },
   ADMIN: {
     userInfo: { realName: '测试管理员', username: 'admin' },
     roles: ['ADMIN'],
@@ -92,6 +63,7 @@ const TEST_PROFILES = {
       'equipment:booking:return'
     ],
     menus: [
+      FRONT_MENUS(),
       {
         menuId: 300,
         menuName: '管理端',

@@ -42,6 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 覆盖：学生两级全流程、老师一级流程、时段冲突、限制表拦截、
  * 驳回意见必填、撤销状态约束、借出窗口校验、归还状态重算（RESERVED/IDLE）、
  * DAMAGED 转维护、无 token 401、无权限 403、Instant UTC 往返与枚举 name 落库。
+ * 种子已收权（仅 ADMIN），学生/老师角色权限由 setup 临时注入以验证业务链路。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
@@ -57,6 +58,16 @@ class EquipmentBookingFlowTest {
     private static final long STUDENT_ROLE_BINDING_ID = 910000000000000121L;
     private static final long TEACHER_ROLE_BINDING_ID = 910000000000000122L;
     private static final long RESTRICTION_ID = 910000000000000123L;
+
+    /**
+     * 测试临时授权（收权决策 2026-10-14：种子仅 ADMIN，TEACHER/STUDENT 无绑定）。
+     * setup 为角色 2/3 注入流程所需权限以验证业务链路，cleanup 物理删除；
+     * admin_approve(159) 有意不授，供 403 用例验证权限拒绝。
+     */
+    private static final long TEST_GRANT_STUDENT_ID = 910000000000000301L;
+    private static final long TEST_GRANT_TEACHER_ID = 910000000000000311L;
+    private static final long[] STUDENT_GRANT_PERMS = {149, 155, 156, 157, 160, 161};
+    private static final long[] TEACHER_GRANT_PERMS = {149, 155, 156, 157, 158, 160, 161};
     private static final long CAMPUS_ID = 910000000000000110L;
     private static final long BUILDING_ID = 910000000000000111L;
     private static final long LAB_ID = 910000000000000112L;
@@ -426,6 +437,8 @@ class EquipmentBookingFlowTest {
                 STUDENT_ROLE_BINDING_ID, STUDENT_ID);
         jdbcTemplate.update("INSERT INTO sys_user_role (id, user_id, role_id, enabled) VALUES (?, ?, 2, 1)",
                 TEACHER_ROLE_BINDING_ID, TEACHER_ID);
+        grantTestPermissions(TEST_GRANT_STUDENT_ID, 3, STUDENT_GRANT_PERMS);
+        grantTestPermissions(TEST_GRANT_TEACHER_ID, 2, TEACHER_GRANT_PERMS);
         jdbcTemplate.update(
                 "INSERT INTO campus (id, campus_code, campus_name) VALUES (?, 'IT-CAMPUS-001', '集成测试校区')",
                 CAMPUS_ID);
@@ -489,6 +502,21 @@ class EquipmentBookingFlowTest {
         jdbcTemplate.update("DELETE FROM campus WHERE id = ?", CAMPUS_ID);
         jdbcTemplate.update("DELETE FROM sys_user_role WHERE user_id IN (?, ?)", STUDENT_ID, TEACHER_ID);
         jdbcTemplate.update("DELETE FROM sys_user WHERE id IN (?, ?)", STUDENT_ID, TEACHER_ID);
+        jdbcTemplate.update("DELETE FROM sys_role_permission WHERE id BETWEEN ? AND ?",
+                TEST_GRANT_STUDENT_ID, TEST_GRANT_STUDENT_ID + STUDENT_GRANT_PERMS.length - 1);
+        jdbcTemplate.update("DELETE FROM sys_role_permission WHERE id BETWEEN ? AND ?",
+                TEST_GRANT_TEACHER_ID, TEST_GRANT_TEACHER_ID + TEACHER_GRANT_PERMS.length - 1);
+    }
+
+    /** 为指定角色注入测试临时权限（幂等：先清后插） */
+    private void grantTestPermissions(long startId, long roleId, long[] permissionIds) {
+        jdbcTemplate.update("DELETE FROM sys_role_permission WHERE id BETWEEN ? AND ?",
+                startId, startId + permissionIds.length - 1);
+        for (int i = 0; i < permissionIds.length; i++) {
+            jdbcTemplate.update(
+                    "INSERT INTO sys_role_permission (id, role_id, permission_id) VALUES (?, ?, ?)",
+                    startId + i, roleId, permissionIds[i]);
+        }
     }
 
     private String login(long userId) throws Exception {

@@ -98,7 +98,8 @@
           登 录
         </el-button>
 
-        <!-- 开发环境测试入口（后端接入后删除） -->
+        <!-- 开发环境测试入口（后端接入后删除）。
+             收权决策 2026-10-14：系统仅管理员可用，学生/老师测试入口移除 -->
         <div
           v-if="isDev"
           class="login_test"
@@ -107,20 +108,6 @@
             测试账号（仅开发环境）
           </div>
           <div class="login_test__btns">
-            <el-button
-              size="small"
-              round
-              @click="loginTest('STUDENT')"
-            >
-              学生
-            </el-button>
-            <el-button
-              size="small"
-              round
-              @click="loginTest('TEACHER')"
-            >
-              老师
-            </el-button>
             <el-button
               size="small"
               round

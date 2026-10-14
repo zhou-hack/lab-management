@@ -29,14 +29,16 @@
 <script setup>
 import { computed, markRaw } from 'vue'
 import { useRouter } from 'vue-router'
-import { Checked, Promotion, Tickets } from '@element-plus/icons-vue'
+import { Promotion, Tickets } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import { hasPermission } from '@/utils/permission'
 
 const router = useRouter()
 const store = useUserStore()
 
-/** FrontLayout 不渲染菜单，前台各入口由首页卡片导航；按权限过滤显隐 */
+/** FrontLayout 不渲染菜单，前台各入口由首页卡片导航；按权限过滤显隐。
+ *  收权决策 2026-10-14：仅管理员可用；「借用审批」入口随老师角色一并收起，
+ *  管理员审批走后台「借用管理」页面。 */
 const entries = computed(() => {
   const all = [
     {
@@ -52,13 +54,6 @@ const entries = computed(() => {
       desc: '查看借用进度与撤销',
       path: '/equipment/bookings/mine',
       icon: markRaw(Tickets)
-    },
-    {
-      perms: 'equipment:booking:teacher_approve',
-      title: '借用审批',
-      desc: '处理学生的借用申请',
-      path: '/equipment/approvals',
-      icon: markRaw(Checked)
     }
   ]
   return all.filter((entry) => hasPermission(entry.perms, store.perms))
