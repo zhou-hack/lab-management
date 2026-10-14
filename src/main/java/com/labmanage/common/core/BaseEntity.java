@@ -31,6 +31,12 @@ public class BaseEntity implements Serializable {
     @TableField(fill = FieldFill.INSERT)
     private Integer deleted;
 
+    @TableField(fill = FieldFill.INSERT)
+    private Long createUserId;
+
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private Long updateUserId;
+
     public Long getId() {
         return id;
     }
@@ -61,5 +67,21 @@ public class BaseEntity implements Serializable {
 
     public void setDeleted(Integer deleted) {
         this.deleted = deleted;
+    }
+
+    public Long getCreateUserId() {
+        return createUserId;
+    }
+
+    public void setCreateUserId(Long createUserId) {
+        this.createUserId = createUserId;
+    }
+
+    public Long getUpdateUserId() {
+        return updateUserId;
+    }
+
+    public void setUpdateUserId(Long updateUserId) {
+        this.updateUserId = updateUserId;
     }
 }
