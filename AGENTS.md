@@ -80,10 +80,10 @@
 
 ## Git 与审核
 
-- 仓库为 `https://github.com/zhou-hack/lab-manegement`。禁止直接推送 `main` 或他人分支，不得强推或改写他人历史。
+- 仓库为 `https://github.com/zhou-hack/lab-management`。禁止直接推送 `main` 或他人分支，不得强推或改写他人历史。
 - 执行 git 网络操作（clone/fetch/pull/push/ls-remote）及依赖下载前，先探测本地 Clash Verge 代理端口 `127.0.0.1:7897` 是否可连接（如 `Test-NetConnection 127.0.0.1 -Port 7897`）；可用则本次操作走代理：git 用命令级参数 `git -c http.proxy=http://127.0.0.1:7897 <command>`，其他工具用环境变量 `HTTP_PROXY`/`HTTPS_PROXY` 指向 `http://127.0.0.1:7897`。不得修改全局或仓库 git config，端口不可用时直连并在失败时报告，不重试堆积。
 - 个人分支使用 `dev/{desc}`，描述仅包含小写英文字母、数字和下划线，并以字母开头，例如 `dev/item`、`dev/permission`、`dev/user_management`；同模块可用英文姓名或账号后缀，如 `dev/item_someone`。禁止中文或横杠，该规则优先于工具默认分支前缀。
-- 为协作者首次初始化开发环境前，先只读检测 Git 仓库、远端地址和当前分支。目标仓库为 `zhou-hack/lab-manegement`，其 HTTPS 或 SSH 远端地址均可；当前分支须匹配 `^dev/[a-z][a-z0-9_]*$`，且不能是游离 HEAD 或已知属于他人的分支。
+- 为协作者首次初始化开发环境前，先只读检测 Git 仓库、远端地址和当前分支。目标仓库为 `zhou-hack/lab-management`，其 HTTPS 或 SSH 远端地址均可；当前分支须匹配 `^dev/[a-z][a-z0-9_]*$`，且不能是游离 HEAD 或已知属于他人的分支。
 - 检测到仓库和当前分支符合上述要求时，直接沿用当前分支继续初始化，不再询问，不重新克隆、创建或切换分支。若本次会话已明确指定另一分支及新建或复用意图，按用户指示执行，不重复询问。
 - 仅在检测不符合要求且本次会话未明确分支信息时，询问本人要使用的个人分支名，以及新建还是复用已有分支；远端缺失或指向其他仓库时一并确认仓库信息。在回复前只做只读检查，暂停分支创建或切换及后续项目初始化，不自行猜测或分配分支。
 - 确认分支后检查本地与远端同名分支。新分支先 `git fetch origin`，再从最新 `origin/main` 创建；已有分支直接切换或跟踪远端分支，不覆盖、重建或使用他人的分支。切换前保留未提交改动。
