@@ -1,70 +1,75 @@
 <template>
-  <div class="lab_list">
+  <div class="space_list">
+    <!-- 统计卡片区 -->
+    <div class="space_list__stats">
+      <div class="card space_list__stat">
+        <p class="space_list__stat_label">
+          场地总数
+        </p>
+        <p class="space_list__stat_num space_list__stat_num--brand">
+          {{ stats.total }}
+        </p>
+      </div>
+      <div class="card space_list__stat">
+        <p class="space_list__stat_label">
+          可用
+        </p>
+        <p class="space_list__stat_num space_list__stat_num--ok">
+          {{ stats.available }}
+        </p>
+      </div>
+      <div class="card space_list__stat">
+        <p class="space_list__stat_label">
+          维护中
+        </p>
+        <p class="space_list__stat_num space_list__stat_num--warn">
+          {{ stats.maintaining }}
+        </p>
+      </div>
+      <div class="card space_list__stat">
+        <p class="space_list__stat_label">
+          停用
+        </p>
+        <p class="space_list__stat_num space_list__stat_num--muted">
+          {{ stats.closed }}
+        </p>
+      </div>
+    </div>
+
     <!-- 筛选区 -->
-    <div class="card lab_list__filters">
+    <div class="card space_list__filters">
       <el-form
         :inline="true"
         :model="query"
-        class="lab_list__form"
+        class="space_list__form"
       >
         <el-form-item label="关键字">
           <el-input
-            v-model="query.labName"
-            placeholder="场地名称"
+            v-model="query.spaceName"
+            placeholder="场地名称模糊匹配"
             clearable
-            class="lab_list__input"
+            class="space_list__input"
             @keyup.enter="onSearch"
           />
         </el-form-item>
-        <el-form-item label="编码">
+        <el-form-item label="位置">
           <el-input
-            v-model="query.labCode"
-            placeholder="精确匹配"
+            v-model="query.location"
+            placeholder="如 A 楼 / 教学楼"
             clearable
-            class="lab_list__input"
+            class="space_list__input"
             @keyup.enter="onSearch"
           />
-        </el-form-item>
-        <el-form-item label="校区">
-          <el-select
-            v-model="query.campusId"
-            placeholder="全部"
-            clearable
-            class="lab_list__select"
-            @change="onCampusFilterChange"
-          >
-            <el-option
-              v-for="c in campusOptions"
-              :key="c.id"
-              :label="c.label"
-              :value="c.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="楼栋">
-          <el-select
-            v-model="query.buildingId"
-            placeholder="全部"
-            clearable
-            class="lab_list__select"
-          >
-            <el-option
-              v-for="b in filteredBuildingOptions"
-              :key="b.id"
-              :label="b.label"
-              :value="b.id"
-            />
-          </el-select>
         </el-form-item>
         <el-form-item label="类型">
           <el-select
-            v-model="query.labType"
+            v-model="query.spaceType"
             placeholder="全部"
             clearable
-            class="lab_list__select"
+            class="space_list__select"
           >
             <el-option
-              v-for="t in LAB_TYPES"
+              v-for="t in SPACE_TYPES"
               :key="t.value"
               :label="t.label"
               :value="t.value"
@@ -73,20 +78,39 @@
         </el-form-item>
         <el-form-item label="状态">
           <el-select
-            v-model="query.enabled"
+            v-model="query.status"
             placeholder="全部"
             clearable
-            class="lab_list__select_sm"
+            class="space_list__select"
           >
             <el-option
-              label="启用"
-              :value="1"
-            />
-            <el-option
-              label="停用"
-              :value="0"
+              v-for="s in SPACE_STATUS"
+              :key="s.value"
+              :label="s.label"
+              :value="s.value"
             />
           </el-select>
+        </el-form-item>
+        <el-form-item label="容量">
+          <div class="space_list__range">
+            <el-input-number
+              v-model="query.minCapacity"
+              :min="1"
+              :max="9999"
+              :controls="false"
+              placeholder="≥"
+              class="space_list__num"
+            />
+            <span class="space_list__dash">—</span>
+            <el-input-number
+              v-model="query.maxCapacity"
+              :min="1"
+              :max="9999"
+              :controls="false"
+              placeholder="≤"
+              class="space_list__num"
+            />
+          </div>
         </el-form-item>
         <el-form-item>
           <el-button
@@ -103,18 +127,18 @@
     </div>
 
     <!-- 表格区 -->
-    <div class="card lab_list__table_card">
-      <div class="lab_list__toolbar">
+    <div class="card space_list__table_card">
+      <div class="space_list__toolbar">
         <div>
-          <h2 class="t-title lab_list__title">
+          <h2 class="t-title space_list__title">
             场地档案
           </h2>
           <p class="t-sub">
-            实验室/教室建档与启停维护 · 状态为实时派生（不持久化）
+            教室/实训室建档与状态维护 · 开放时段为上海本地时间（不做时区转换）
           </p>
         </div>
         <el-button
-          v-permission="'space:lab:create'"
+          v-permission="'space:space:create'"
           type="primary"
           @click="onCreate"
         >
@@ -129,13 +153,8 @@
         row-key="id"
       >
         <el-table-column
-          prop="labCode"
-          label="编码"
-          width="100"
-        />
-        <el-table-column
           label="场地名称"
-          min-width="150"
+          min-width="170"
         >
           <template #default="{ row }">
             <el-button
@@ -143,34 +162,23 @@
               type="primary"
               @click="onDetail(row)"
             >
-              {{ row.labName }}
+              {{ row.spaceName }}
             </el-button>
           </template>
         </el-table-column>
         <el-table-column
           label="类型"
-          width="130"
+          width="90"
         >
           <template #default="{ row }">
-            {{ LAB_TYPE_MAP[row.labType]?.label || row.labType }}
+            {{ SPACE_TYPE_MAP[row.spaceType]?.label || row.spaceType }}
           </template>
         </el-table-column>
         <el-table-column
-          label="校区 / 楼栋"
-          min-width="130"
-        >
-          <template #default="{ row }">
-            {{ row.campusName }} / {{ row.buildingName }}
-          </template>
-        </el-table-column>
-        <el-table-column
+          prop="location"
           label="位置"
-          width="110"
-        >
-          <template #default="{ row }">
-            {{ row.floorNo }}-{{ row.roomNo }}
-          </template>
-        </el-table-column>
+          min-width="130"
+        />
         <el-table-column
           prop="capacity"
           label="容量"
@@ -178,24 +186,33 @@
           align="right"
         />
         <el-table-column
-          label="面积(㎡)"
-          width="90"
-          align="right"
+          label="开放时段"
+          width="110"
         >
           <template #default="{ row }">
-            {{ row.areaSqm ?? '—' }}
+            {{ row.openStart }} - {{ row.openEnd }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="facilities"
+          label="设备清单"
+          min-width="180"
+          show-overflow-tooltip
+        >
+          <template #default="{ row }">
+            {{ row.facilities || '—' }}
           </template>
         </el-table-column>
         <el-table-column
           label="状态"
-          width="92"
+          width="88"
         >
           <template #default="{ row }">
             <span
               class="pill"
-              :class="LAB_STATUS_MAP[row.status]?.pill"
+              :class="SPACE_STATUS_MAP[row.status]?.pill"
             >
-              {{ LAB_STATUS_MAP[row.status]?.label || row.status }}
+              {{ SPACE_STATUS_MAP[row.status]?.label || row.status }}
             </span>
           </template>
         </el-table-column>
@@ -213,7 +230,7 @@
               详情
             </el-button>
             <el-button
-              v-permission="'space:lab:update'"
+              v-permission="'space:space:update'"
               link
               type="primary"
               @click="onEdit(row)"
@@ -221,8 +238,8 @@
               编辑
             </el-button>
             <el-button
-              v-if="row.enabled === 1"
-              v-permission="'space:lab:update'"
+              v-if="row.status !== 'CLOSED'"
+              v-permission="'space:space:update'"
               link
               type="warning"
               @click="onToggle(row, false)"
@@ -231,7 +248,7 @@
             </el-button>
             <el-button
               v-else
-              v-permission="'space:lab:update'"
+              v-permission="'space:space:update'"
               link
               type="success"
               @click="onToggle(row, true)"
@@ -239,7 +256,7 @@
               启用
             </el-button>
             <el-button
-              v-permission="'space:lab:delete'"
+              v-permission="'space:space:delete'"
               link
               type="danger"
               @click="onDelete(row)"
@@ -253,7 +270,7 @@
         </template>
       </el-table>
 
-      <div class="lab_list__pager">
+      <div class="space_list__pager">
         <el-pagination
           v-model:current-page="query.pageNum"
           v-model:page-size="query.pageSize"
@@ -267,85 +284,68 @@
       </div>
     </div>
 
-    <LabFormDialog
+    <SpaceFormDialog
       v-model="formVisible"
-      :lab="editingLab"
-      :campus-options="campusOptions"
-      :building-options="formBuildingOptions"
-      :department-options="departmentOptions"
+      :space="editingSpace"
       @close="formVisible = false"
       @submit="onSubmitForm"
     />
-    <LabDetailDrawer
+    <SpaceDetailDrawer
       v-model="detailVisible"
-      :lab="detailLab"
+      :space="detailSpace"
       @close="detailVisible = false"
     />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import LabFormDialog from './LabFormDialog.vue'
-import LabDetailDrawer from './LabDetailDrawer.vue'
-import { LAB_TYPES, LAB_TYPE_MAP, LAB_STATUS_MAP } from './space.constants'
+import SpaceFormDialog from './SpaceFormDialog.vue'
+import SpaceDetailDrawer from './SpaceDetailDrawer.vue'
+import { SPACE_TYPES, SPACE_TYPE_MAP, SPACE_STATUS, SPACE_STATUS_MAP } from './space.constants'
 import {
-  fetchCampusOptions,
-  fetchBuildingOptions,
-  fetchDepartmentOptions,
-  fetchLabPage,
-  fetchLabDetail,
-  saveLab,
-  switchLabEnabled,
-  removeLab
+  fetchSpacePage,
+  fetchSpaceStats,
+  fetchSpaceDetail,
+  saveSpace,
+  switchSpaceEnabled,
+  removeSpace
 } from './space.service'
 
 const loading = ref(false)
 const records = ref([])
 const total = ref(0)
+const stats = reactive({ total: 0, available: 0, maintaining: 0, closed: 0 })
 
 const query = reactive({
   pageNum: 1,
   pageSize: 10,
-  labName: '',
-  labCode: '',
-  campusId: null,
-  buildingId: null,
-  labType: null,
-  enabled: null
+  spaceName: '',
+  location: '',
+  spaceType: null,
+  status: null,
+  minCapacity: null,
+  maxCapacity: null
 })
 
-const campusOptions = ref([])
-const allBuildingOptions = ref([])
-const departmentOptions = ref([])
-
 const formVisible = ref(false)
-const editingLab = ref(null)
+const editingSpace = ref(null)
 const detailVisible = ref(false)
-const detailLab = ref(null)
+const detailSpace = ref(null)
 
-const filteredBuildingOptions = computed(() =>
-  query.campusId
-    ? allBuildingOptions.value.filter((b) => b.parentId === String(query.campusId))
-    : allBuildingOptions.value
-)
-
-const formBuildingOptions = computed(() =>
-  editingLab.value?.campusId
-    ? allBuildingOptions.value.filter((b) => b.parentId === String(editingLab.value.campusId))
-    : allBuildingOptions.value
-)
-
-async function loadOptions() {
-  const [campuses, buildings, departments] = await Promise.all([
-    fetchCampusOptions(),
-    fetchBuildingOptions(null),
-    fetchDepartmentOptions()
-  ])
-  campusOptions.value = campuses || []
-  allBuildingOptions.value = buildings || []
-  departmentOptions.value = (departments || []).map((d) => ({ id: String(d.id), name: d.name }))
+async function loadStats() {
+  try {
+    const data = await fetchSpaceStats()
+    Object.assign(stats, {
+      total: Number(data.total) || 0,
+      available: Number(data.available) || 0,
+      maintaining: Number(data.maintaining) || 0,
+      closed: Number(data.closed) || 0
+    })
+  } catch {
+    // 统计卡片失败不阻塞列表展示
+  }
 }
 
 async function loadData() {
@@ -354,14 +354,14 @@ async function loadData() {
     const params = {
       pageNum: query.pageNum,
       pageSize: query.pageSize,
-      labName: query.labName || undefined,
-      labCode: query.labCode || undefined,
-      campusId: query.campusId || undefined,
-      buildingId: query.buildingId || undefined,
-      labType: query.labType || undefined,
-      enabled: query.enabled === null ? undefined : query.enabled
+      spaceName: query.spaceName || undefined,
+      location: query.location || undefined,
+      spaceType: query.spaceType || undefined,
+      status: query.status || undefined,
+      minCapacity: query.minCapacity || undefined,
+      maxCapacity: query.maxCapacity || undefined
     }
-    const data = await fetchLabPage(params)
+    const data = await fetchSpacePage(params)
     records.value = data.records || []
     total.value = Number(data.total) || 0
   } finally {
@@ -375,33 +375,29 @@ function onSearch() {
 }
 
 function onReset() {
-  query.labName = ''
-  query.labCode = ''
-  query.campusId = null
-  query.buildingId = null
-  query.labType = null
-  query.enabled = null
+  query.spaceName = ''
+  query.location = ''
+  query.spaceType = null
+  query.status = null
+  query.minCapacity = null
+  query.maxCapacity = null
   query.pageNum = 1
   loadData()
 }
 
-function onCampusFilterChange() {
-  query.buildingId = null
-}
-
 function onCreate() {
-  editingLab.value = null
+  editingSpace.value = null
   formVisible.value = true
 }
 
 function onEdit(row) {
-  editingLab.value = row
+  editingSpace.value = row
   formVisible.value = true
 }
 
 async function onDetail(row) {
   try {
-    detailLab.value = await fetchLabDetail(row.id)
+    detailSpace.value = await fetchSpaceDetail(row.id)
     detailVisible.value = true
   } catch (e) {
     ElMessage.error(e.message || '详情加载失败')
@@ -409,16 +405,17 @@ async function onDetail(row) {
 }
 
 async function onSubmitForm({ id, payload }) {
-  await saveLab(id, payload)
+  await saveSpace(id, payload)
   ElMessage.success(id ? '场地已更新' : '场地已创建')
   formVisible.value = false
   loadData()
+  loadStats()
 }
 
 async function onToggle(row, enabled) {
   try {
     await ElMessageBox.confirm(
-      `确定${enabled ? '启用' : '停用'}场地「${row.labName}」吗？${
+      `确定${enabled ? '启用' : '停用'}场地「${row.spaceName}」吗？${
         enabled ? '启用后可恢复预约与排课。' : '停用后不可新建预约。'
       }`,
       '操作确认',
@@ -427,65 +424,117 @@ async function onToggle(row, enabled) {
   } catch {
     return
   }
-  await switchLabEnabled(row.id, enabled)
+  await switchSpaceEnabled(row.id, enabled)
   ElMessage.success(enabled ? '已启用' : '已停用')
   loadData()
+  loadStats()
 }
 
 async function onDelete(row) {
   try {
     await ElMessageBox.confirm(
-      `确定删除场地「${row.labName}」吗？存在开放规则或数据范围授权时将被后端拒绝。`,
+      `确定删除场地「${row.spaceName}」吗？逻辑删除且名称不可复用；存在数据范围授权时将被后端拒绝。`,
       '删除确认',
       { type: 'warning' }
     )
   } catch {
     return
   }
-  await removeLab(row.id)
+  await removeSpace(row.id)
   ElMessage.success('已删除')
   if (records.value.length === 1 && query.pageNum > 1) {
     query.pageNum -= 1
   }
   loadData()
+  loadStats()
 }
 
-onMounted(async () => {
-  await loadOptions()
-  await loadData()
+onMounted(() => {
+  loadData()
+  loadStats()
 })
 </script>
 
 <style scoped>
-.lab_list {
+.space_list {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
-.lab_list__form {
+.space_list__stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.space_list__stat {
+  padding: 16px 20px;
+}
+
+.space_list__stat_label {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--g3, #6b7280);
+}
+
+.space_list__stat_num {
+  margin: 0;
+  font-size: 28px;
+  font-weight: var(--fw-semibold, 600);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.space_list__stat_num--brand {
+  color: var(--brand, #3f86ff);
+}
+
+.space_list__stat_num--ok {
+  color: var(--ok, #2e9e5b);
+}
+
+.space_list__stat_num--warn {
+  color: var(--warn, #d97706);
+}
+
+.space_list__stat_num--muted {
+  color: var(--g3, #6b7280);
+}
+
+.space_list__form {
   display: flex;
   flex-wrap: wrap;
   gap: 0;
 }
 
-.lab_list__input {
-  width: 150px;
+.space_list__input {
+  width: 160px;
 }
 
-.lab_list__select {
-  width: 140px;
+.space_list__select {
+  width: 120px;
 }
 
-.lab_list__select_sm {
-  width: 100px;
+.space_list__range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.lab_list__table_card {
+.space_list__num {
+  width: 64px;
+}
+
+.space_list__dash {
+  color: var(--g3, #6b7280);
+}
+
+.space_list__table_card {
   padding: 20px;
 }
 
-.lab_list__toolbar {
+.space_list__toolbar {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -493,26 +542,29 @@ onMounted(async () => {
   margin-bottom: 14px;
 }
 
-.lab_list__title {
+.space_list__title {
   margin: 0 0 4px;
   font-size: 18px;
 }
 
-.lab_list__pager {
+.space_list__pager {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
 }
 
 @media (max-width: 768px) {
-  .lab_list__toolbar {
+  .space_list__stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .space_list__toolbar {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .lab_list__input,
-  .lab_list__select,
-  .lab_list__select_sm {
+  .space_list__input,
+  .space_list__select {
     width: 100%;
   }
 }

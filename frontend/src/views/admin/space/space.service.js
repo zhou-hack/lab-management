@@ -1,68 +1,56 @@
 /**
  * 场地模块服务门面：
  * - 测试登录（token === 'test_token'）：走本地演示数据 space.demo.js，保证无后端时原型可演示；
- * - 真实登录：走 api/space.js（/api/v1/space/*）。
+ * - 真实登录：走 api/space.js（/api/v1/space/spaces/*）。
  * 后端就绪后页面无需改动，仅删除测试登录入口即可。
  */
 import { getToken } from '@/utils/token'
 import {
-  pageLabs,
-  getLabDetail,
-  createLab,
-  updateLab,
-  enableLab,
-  disableLab,
-  deleteLab,
-  getCampusOptions,
-  getBuildingOptions
+  pageSpaces,
+  getSpaceStats,
+  getSpaceDetail,
+  createSpace,
+  updateSpace,
+  enableSpace,
+  disableSpace,
+  deleteSpace
 } from '@/api/space'
 import { demoSpaceApi } from './space.demo'
 
 const isDemo = () => getToken() === 'test_token'
 
-export function fetchCampusOptions() {
-  return isDemo() ? demoSpaceApi.campusOptions() : getCampusOptions(true)
+export function fetchSpacePage(params) {
+  return isDemo() ? demoSpaceApi.pageSpaces(params) : pageSpaces(params)
 }
 
-export function fetchBuildingOptions(campusId) {
-  return isDemo() ? demoSpaceApi.buildingOptions(campusId) : getBuildingOptions(campusId, true)
+export function fetchSpaceStats() {
+  return isDemo() ? demoSpaceApi.spaceStats() : getSpaceStats()
 }
 
-/** 归口部门选项：部门模块未落地，演示期返回固定数据；后端接口落地后替换 */
-export function fetchDepartmentOptions() {
-  return isDemo()
-    ? demoSpaceApi.departmentOptions()
-    : Promise.resolve([{ id: '1', name: '设备处' }])
+export function fetchSpaceDetail(id) {
+  return isDemo() ? demoSpaceApi.getSpaceDetail(id) : getSpaceDetail(id)
 }
 
-export function fetchLabPage(params) {
-  return isDemo() ? demoSpaceApi.pageLabs(params) : pageLabs(params)
-}
-
-export function fetchLabDetail(id) {
-  return isDemo() ? demoSpaceApi.getLabDetail(id) : getLabDetail(id)
-}
-
-export function saveLab(id, data) {
+export function saveSpace(id, data) {
   return isDemo()
     ? id
-      ? demoSpaceApi.updateLab(id, data)
-      : demoSpaceApi.createLab(data)
+      ? demoSpaceApi.updateSpace(id, data)
+      : demoSpaceApi.createSpace(data)
     : id
-      ? updateLab(id, data)
-      : createLab(data)
+      ? updateSpace(id, data)
+      : createSpace(data)
 }
 
-export function switchLabEnabled(id, enabled) {
+export function switchSpaceEnabled(id, enabled) {
   return isDemo()
     ? enabled
-      ? demoSpaceApi.enableLab(id)
-      : demoSpaceApi.disableLab(id)
+      ? demoSpaceApi.enableSpace(id)
+      : demoSpaceApi.disableSpace(id)
     : enabled
-      ? enableLab(id)
-      : disableLab(id)
+      ? enableSpace(id)
+      : disableSpace(id)
 }
 
-export function removeLab(id) {
-  return isDemo() ? demoSpaceApi.deleteLab(id) : deleteLab(id)
+export function removeSpace(id) {
+  return isDemo() ? demoSpaceApi.deleteSpace(id) : deleteSpace(id)
 }

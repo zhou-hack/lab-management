@@ -8,6 +8,7 @@ import com.labmanage.module.space.enums.SpaceType;
 import com.labmanage.module.space.vo.SpaceDetailVO;
 import com.labmanage.module.space.vo.SpaceListVO;
 import com.labmanage.module.space.vo.SpaceOptionVO;
+import com.labmanage.module.space.vo.SpaceStatsVO;
 
 import java.util.List;
 
@@ -26,6 +27,11 @@ public interface SpaceService {
      * 场地详情。
      */
     SpaceDetailVO detail(Long id);
+
+    /**
+     * 场地统计（列表页 KPI 卡片：总块数与各状态块数）。
+     */
+    SpaceStatsVO stats();
 
     /**
      * 场地下拉选项（供预约等下游模块联调）。

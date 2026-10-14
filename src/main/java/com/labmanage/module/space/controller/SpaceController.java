@@ -11,6 +11,7 @@ import com.labmanage.module.space.service.SpaceService;
 import com.labmanage.module.space.vo.SpaceDetailVO;
 import com.labmanage.module.space.vo.SpaceListVO;
 import com.labmanage.module.space.vo.SpaceOptionVO;
+import com.labmanage.module.space.vo.SpaceStatsVO;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -51,6 +52,12 @@ public class SpaceController {
                                                 @RequestParam(required = false) Integer minCapacity,
                                                 @RequestParam(required = false) Boolean availableOnly) {
         return Result.success(spaceService.options(spaceType, minCapacity, availableOnly));
+    }
+
+    @GetMapping("/stats")
+    @SaCheckPermission("space:space:list")
+    public Result<SpaceStatsVO> stats() {
+        return Result.success(spaceService.stats());
     }
 
     @GetMapping("/{id}")

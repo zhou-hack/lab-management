@@ -6,6 +6,9 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.util.List;
+import java.util.Map;
+
 /**
  * 场地 Mapper
  */
@@ -27,4 +30,12 @@ public interface BizSpaceMapper extends BaseMapper<BizSpace> {
     @Select("SELECT COUNT(*) FROM sys_user_data_scope "
             + "WHERE lab_id = #{spaceId} AND enabled = 1 AND deleted = 0")
     long countLabScopeBySpaceId(@Param("spaceId") Long spaceId);
+
+    /**
+     * 按状态分组统计未删除场地块数（列表页统计卡片）。
+     * 显式过滤 deleted=0（原生 SQL 不走 @TableLogic 自动过滤）。
+     */
+    @Select("SELECT status AS status, COUNT(*) AS cnt FROM biz_space "
+            + "WHERE deleted = 0 GROUP BY status")
+    List<Map<String, Object>> countGroupByStatus();
 }

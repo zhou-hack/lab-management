@@ -1,117 +1,47 @@
 /**
  * 场地模块原型演示数据（后端未接入时使用）。
- * 与 sql/sys_space.sql 初始数据保持一致：主校区 / A 楼、C 楼、F 楼 / A703、C703、F220。
+ * 数据结构与 sql/biz_space.sql 初始数据保持一致；为展示状态三态与统计卡片，
+ * C703 演示为维护中（SQL 种子为 AVAILABLE，接入真实后端后以库内数据为准）。
  * 仅当测试登录（token === 'test_token'）时启用；真实登录走 api/space.js。
  */
 
-const campuses = [
-  { id: '1', label: '主校区', parentId: null }
-]
-
-const buildings = [
-  { id: '1', label: 'A 楼', parentId: '1' },
-  { id: '2', label: 'C 楼', parentId: '1' },
-  { id: '3', label: 'F 楼', parentId: '1' }
-]
-
-const departments = [
-  { id: '1', name: '设备处' }
-]
-
-function weekdayRules(labId) {
-  const rules = []
-  let rid = 0
-  for (let day = 1; day <= 5; day += 1) {
-    rules.push(
-      {
-        id: String(++rid),
-        labId: String(labId),
-        weekday: day,
-        openTime: '08:00',
-        closeTime: '12:00',
-        validFrom: '2026-09-01',
-        validTo: '2027-08-31',
-        enabled: 1
-      },
-      {
-        id: String(++rid),
-        labId: String(labId),
-        weekday: day,
-        openTime: '14:00',
-        closeTime: '17:00',
-        validFrom: '2026-09-01',
-        validTo: '2027-08-31',
-        enabled: 1
-      }
-    )
-  }
-  return rules
-}
-
-let labs = [
+let spaces = [
   {
     id: '1',
-    buildingId: '1',
-    buildingName: 'A 楼',
-    campusId: '1',
-    campusName: '主校区',
-    departmentId: '1',
-    departmentName: '设备处',
-    labCode: 'A703',
-    labName: 'A703 网络实训室',
-    labType: 'COMPUTER_ROOM',
-    floorNo: 'F7',
-    roomNo: '703',
+    spaceName: 'A703 网络实训室',
+    spaceType: 'TRAINING_ROOM',
+    location: 'A 楼七层 A703',
     capacity: 50,
-    areaSqm: 120.0,
-    locationNote: 'A 楼七层东侧，网络综合布线实训环境',
-    enabled: 1,
+    facilities: '网络综合布线实训环境：56 口配线架 12 组、路由交换设备 12 套、实训工位 50 个',
+    openStart: '08:00',
+    openEnd: '21:00',
     status: 'AVAILABLE',
-    openRules: weekdayRules(1),
     createTime: '2026-09-01T00:00:00.000Z',
     updateTime: '2026-09-01T00:00:00.000Z'
   },
   {
     id: '2',
-    buildingId: '2',
-    buildingName: 'C 楼',
-    campusId: '1',
-    campusName: '主校区',
-    departmentId: '1',
-    departmentName: '设备处',
-    labCode: 'C703',
-    labName: 'C703 电子电工机房',
-    labType: 'ELECTRONIC_LAB',
-    floorNo: 'F7',
-    roomNo: '703',
+    spaceName: 'C703 电子电工实训室',
+    spaceType: 'TRAINING_ROOM',
+    location: 'C 楼七层 C703',
     capacity: 45,
-    areaSqm: 110.0,
-    locationNote: 'C 楼七层，电子电工一体化教学',
-    enabled: 1,
-    status: 'AVAILABLE',
-    openRules: [],
+    facilities: '示波器 20 台、直流稳压电源 20 台、电工电子实训台 12 位',
+    openStart: '08:00',
+    openEnd: '21:00',
+    status: 'MAINTAINING',
     createTime: '2026-09-01T00:00:00.000Z',
-    updateTime: '2026-09-01T00:00:00.000Z'
+    updateTime: '2026-10-10T00:00:00.000Z'
   },
   {
     id: '3',
-    buildingId: '3',
-    buildingName: 'F 楼',
-    campusId: '1',
-    campusName: '主校区',
-    departmentId: '1',
-    departmentName: '设备处',
-    labCode: 'F220',
-    labName: 'F220 实训室',
-    labType: 'TRAINING_ROOM',
-    floorNo: 'F2',
-    roomNo: '220',
-    capacity: 40,
-    areaSqm: 96.0,
-    locationNote: 'F 楼二层，通用实训场地',
-    enabled: 1,
+    spaceName: '教学楼201多媒体教室',
+    spaceType: 'CLASSROOM',
+    location: '教学楼二层 201',
+    capacity: 60,
+    facilities: '投影仪 1 台、音响系统 1 套、中控讲台 1 位',
+    openStart: '08:00',
+    openEnd: '21:00',
     status: 'AVAILABLE',
-    openRules: [],
     createTime: '2026-09-01T00:00:00.000Z',
     updateTime: '2026-09-01T00:00:00.000Z'
   }
@@ -123,95 +53,80 @@ function delay(data, ms = 200) {
   return new Promise((resolve) => setTimeout(() => resolve(structuredClone(data)), ms))
 }
 
-function deriveStatus(lab) {
-  lab.status = lab.enabled === 1 ? 'AVAILABLE' : 'DISABLED'
+function stats() {
+  const result = { total: spaces.length, available: 0, maintaining: 0, closed: 0 }
+  for (const s of spaces) {
+    if (s.status === 'AVAILABLE') result.available += 1
+    else if (s.status === 'MAINTAINING') result.maintaining += 1
+    else if (s.status === 'CLOSED') result.closed += 1
+  }
+  return result
 }
 
 export const demoSpaceApi = {
-  campusOptions: () => delay(campuses),
-  buildingOptions: (campusId) =>
-    delay(campusId ? buildings.filter((b) => b.parentId === String(campusId)) : buildings),
-  departmentOptions: () => delay(departments),
-
-  pageLabs(params) {
-    let rows = labs.slice()
-    if (params.labName) rows = rows.filter((l) => l.labName.includes(params.labName.trim()))
-    if (params.labCode) rows = rows.filter((l) => l.labCode === params.labCode.trim())
-    if (params.campusId) rows = rows.filter((l) => l.campusId === String(params.campusId))
-    if (params.buildingId) rows = rows.filter((l) => l.buildingId === String(params.buildingId))
-    if (params.enabled !== undefined && params.enabled !== null && params.enabled !== '') {
-      rows = rows.filter((l) => l.enabled === Number(params.enabled))
-    }
-    if (params.labType) {
-      const types = Array.isArray(params.labType) ? params.labType : [params.labType]
-      rows = rows.filter((l) => types.includes(l.labType))
-    }
+  pageSpaces(params) {
+    let rows = spaces.slice()
+    if (params.spaceName) rows = rows.filter((s) => s.spaceName.includes(params.spaceName.trim()))
+    if (params.location) rows = rows.filter((s) => s.location.includes(params.location.trim()))
+    if (params.spaceType) rows = rows.filter((s) => s.spaceType === params.spaceType)
+    if (params.status) rows = rows.filter((s) => s.status === params.status)
+    if (params.minCapacity) rows = rows.filter((s) => s.capacity >= Number(params.minCapacity))
+    if (params.maxCapacity) rows = rows.filter((s) => s.capacity <= Number(params.maxCapacity))
     const pageNum = Number(params.pageNum) || 1
     const pageSize = Number(params.pageSize) || 20
-    const total = rows.length
     const records = rows.slice((pageNum - 1) * pageSize, pageNum * pageSize)
-    return delay({ records, total: Number(total), pageNum, pageSize })
+    return delay({ records, total: Number(rows.length), pageNum, pageSize })
   },
 
-  getLabDetail: (id) => {
-    const lab = labs.find((l) => l.id === String(id))
-    if (!lab) return Promise.reject(new Error('场地不存在'))
-    return delay({ ...lab, statusSource: '由场地实体启用状态派生（占用/维护来源待预约、设备模块接入）' })
+  spaceStats: () => delay(stats()),
+
+  getSpaceDetail: (id) => {
+    const space = spaces.find((s) => s.id === String(id))
+    if (!space) return Promise.reject(new Error('场地不存在'))
+    return delay(space)
   },
 
-  createLab: (data) => {
-    if (labs.some((l) => l.labCode === data.labCode)) {
-      return Promise.reject(new Error(`场地编码已存在：${data.labCode}`))
+  createSpace: (data) => {
+    if (spaces.some((s) => s.spaceName === data.spaceName)) {
+      return Promise.reject(new Error(`场地名称已存在：${data.spaceName}`))
     }
-    const building = buildings.find((b) => b.id === String(data.buildingId))
-    const campus = campuses.find((c) => c.id === building?.parentId)
-    const dept = departments.find((d) => d.id === String(data.departmentId))
-    const lab = {
+    const space = {
       id: String(++seq),
       ...data,
-      buildingId: String(data.buildingId),
-      departmentId: String(data.departmentId),
-      buildingName: building?.label,
-      campusId: campus?.id,
-      campusName: campus?.label,
-      departmentName: dept?.name,
-      openRules: [],
+      openStart: data.openStart || '08:00',
+      openEnd: data.openEnd || '21:00',
+      status: data.status || 'AVAILABLE',
       createTime: new Date().toISOString(),
       updateTime: new Date().toISOString()
     }
-    deriveStatus(lab)
-    labs.unshift(lab)
-    return delay(lab)
+    spaces.unshift(space)
+    return delay(space)
   },
 
-  updateLab: (id, data) => {
-    const lab = labs.find((l) => l.id === String(id))
-    if (!lab) return Promise.reject(new Error('场地不存在'))
-    Object.assign(lab, data, { updateTime: new Date().toISOString() })
-    deriveStatus(lab)
-    return delay(lab)
-  },
-
-  enableLab: (id) => {
-    const lab = labs.find((l) => l.id === String(id))
-    if (lab) {
-      lab.enabled = 1
-      deriveStatus(lab)
+  updateSpace: (id, data) => {
+    const space = spaces.find((s) => s.id === String(id))
+    if (!space) return Promise.reject(new Error('场地不存在'))
+    if (spaces.some((s) => s.id !== String(id) && s.spaceName === data.spaceName)) {
+      return Promise.reject(new Error(`场地名称已被占用：${data.spaceName}`))
     }
+    Object.assign(space, data, { updateTime: new Date().toISOString() })
+    return delay(space)
+  },
+
+  enableSpace: (id) => {
+    const space = spaces.find((s) => s.id === String(id))
+    if (space) space.status = 'AVAILABLE'
     return delay(null)
   },
 
-  disableLab: (id) => {
-    const lab = labs.find((l) => l.id === String(id))
-    if (lab) {
-      lab.enabled = 0
-      deriveStatus(lab)
-    }
+  disableSpace: (id) => {
+    const space = spaces.find((s) => s.id === String(id))
+    if (space) space.status = 'CLOSED'
     return delay(null)
   },
 
-  deleteLab: (id) => {
-    labs = labs.filter((l) => l.id !== String(id))
+  deleteSpace: (id) => {
+    spaces = spaces.filter((s) => s.id !== String(id))
     return delay(null)
   }
 }

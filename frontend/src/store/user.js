@@ -39,13 +39,11 @@ const TEST_PROFILES = {
     perms: [
       'dashboard:view',
       'equipment:edit',
-      'space:campus:list',
-      'space:building:list',
-      'space:lab:list',
-      'space:lab:read',
-      'space:lab:create',
-      'space:lab:update',
-      'space:lab:delete'
+      'space:space:list',
+      'space:space:read',
+      'space:space:create',
+      'space:space:update',
+      'space:space:delete'
     ],
     menus: [
       {
@@ -61,7 +59,7 @@ const TEST_PROFILES = {
             menuType: 'M',
             path: '/admin/space',
             children: [
-              { menuId: 1002, menuName: '场地管理', menuType: 'C', path: '/admin/space/labs', perms: 'space:lab:list' }
+              { menuId: 1002, menuName: '场地管理', menuType: 'C', path: '/admin/space/labs', perms: 'space:space:list' }
             ]
           }
         ]
