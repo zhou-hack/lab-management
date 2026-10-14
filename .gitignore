@@ -25,6 +25,9 @@ dependency-reduced-pom.xml
 buildNumber.properties
 
 # ---------- IDE ----------
+# Trae IDE 状态目录
+.trae/
+
 # IntelliJ IDEA
 .idea/
 *.iml
