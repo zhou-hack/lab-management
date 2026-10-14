@@ -1,10 +1,9 @@
 package com.labmanage.common.serializer;
 
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.databind.JsonSerializer;
-import com.fasterxml.jackson.databind.SerializerProvider;
+import tools.jackson.core.JsonGenerator;
+import tools.jackson.databind.SerializationContext;
+import tools.jackson.databind.ValueSerializer;
 
-import java.io.IOException;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -12,19 +11,17 @@ import java.time.format.DateTimeFormatter;
 /**
  * Instant 统一序列化为 UTC 三位毫秒格式
  * 如：2026-10-13T01:00:00.000Z
+ * <p>
+ * Spring Boot 4 使用 Jackson 3（tools.jackson），基类为 ValueSerializer
  */
-public class InstantSerializer extends JsonSerializer<Instant> {
+public class InstantSerializer extends ValueSerializer<Instant> {
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter
             .ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
             .withZone(ZoneOffset.UTC);
 
     @Override
-    public void serialize(Instant value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
-        if (value == null) {
-            gen.writeNull();
-            return;
-        }
+    public void serialize(Instant value, JsonGenerator gen, SerializationContext serializers) {
         gen.writeString(FORMATTER.format(value));
     }
 }

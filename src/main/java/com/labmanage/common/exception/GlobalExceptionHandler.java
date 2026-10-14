@@ -5,7 +5,9 @@ import cn.dev33.satoken.exception.NotPermissionException;
 import com.labmanage.common.result.Result;
 import com.labmanage.common.result.ResultCode;
 import jakarta.validation.ConstraintViolationException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * 全局异常处理
@@ -24,12 +27,28 @@ import org.springframework.web.servlet.NoHandlerFoundException;
 public class GlobalExceptionHandler {
 
     /**
-     * 业务异常
+     * 业务异常（HTTP 状态随错误码映射：40000→400、40100→401、40300→403、
+     * 40400→404、40900→409、50000→500）
      */
     @ExceptionHandler(BusinessException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    public Result<Void> handleBusinessException(BusinessException e) {
-        return Result.error(e.getCode(), e.getMessage());
+    public ResponseEntity<Result<Void>> handleBusinessException(BusinessException e) {
+        return ResponseEntity.status(resolveHttpStatus(e.getCode()))
+                .body(Result.error(e.getCode(), e.getMessage()));
+    }
+
+    private HttpStatus resolveHttpStatus(Integer code) {
+        if (code == null) {
+            return HttpStatus.CONFLICT;
+        }
+        return switch (code / 100) {
+            case 400 -> HttpStatus.BAD_REQUEST;
+            case 401 -> HttpStatus.UNAUTHORIZED;
+            case 403 -> HttpStatus.FORBIDDEN;
+            case 404 -> HttpStatus.NOT_FOUND;
+            case 409 -> HttpStatus.CONFLICT;
+            case 500 -> HttpStatus.INTERNAL_SERVER_ERROR;
+            default -> HttpStatus.CONFLICT;
+        };
     }
 
     /**
@@ -77,11 +96,11 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 404 - 路径不存在
+     * 404 - 路径不存在（Spring 6.1+ 静态资源链抛 NoResourceFoundException）
      */
-    @ExceptionHandler(NoHandlerFoundException.class)
+    @ExceptionHandler({NoHandlerFoundException.class, NoResourceFoundException.class})
     @ResponseStatus(HttpStatus.NOT_FOUND)
-    public Result<Void> handleNoHandlerFoundException(NoHandlerFoundException e) {
+    public Result<Void> handleNoHandlerFoundException(Exception e) {
         return Result.error(ResultCode.NOT_FOUND.getCode(), ResultCode.NOT_FOUND.getMsg());
     }
 
@@ -101,6 +120,16 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.FORBIDDEN)
     public Result<Void> handleNotPermissionException(NotPermissionException e) {
         return Result.error(ResultCode.FORBIDDEN.getCode(), ResultCode.FORBIDDEN.getMsg());
+    }
+
+    /**
+     * 唯一键冲突（业务层未先行拦截的并发重复提交兜底；
+     * 幂等场景由服务层捕获后查原单返回，不走到这里）
+     */
+    @ExceptionHandler(DuplicateKeyException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public Result<Void> handleDuplicateKeyException(DuplicateKeyException e) {
+        return Result.error(ResultCode.CONFLICT.getCode(), ResultCode.CONFLICT.getMsg());
     }
 
     /**
