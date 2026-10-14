@@ -7,7 +7,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import java.util.Arrays;
 
 /**
- * 场地类型（biz_space.space_type）。
+ * 场地类型（lab.lab_type）。
  * <p>
  * 一期按业务确认定稿为两值：教室 / 实训室；如需扩展（机房、多媒体教室等）
  * 后续在枚举与建表 CHECK 中同步登记。code 落库 VARCHAR(32)，接口以 code 序列化。

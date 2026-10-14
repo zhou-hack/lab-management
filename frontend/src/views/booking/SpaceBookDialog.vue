@@ -27,7 +27,7 @@
           <el-option
             v-for="s in spaceOptions"
             :key="s.id"
-            :label="`${s.spaceName}（${s.capacity} 人）`"
+            :label="`${s.labName}（${s.capacity} 人）`"
             :value="s.id"
           />
         </el-select>

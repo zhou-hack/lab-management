@@ -9,8 +9,8 @@ import com.labmanage.module.space.enums.SpaceType;
  */
 public record SpaceOptionVO(
         String id,
-        String spaceName,
-        SpaceType spaceType,
+        String labName,
+        SpaceType labType,
         Integer capacity,
         SpaceStatus status
 ) {

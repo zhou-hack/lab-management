@@ -16,10 +16,10 @@
     >
       <el-form-item
         label="场地名称"
-        prop="spaceName"
+        prop="labName"
       >
         <el-input
-          v-model="form.spaceName"
+          v-model="form.labName"
           placeholder="如 A703 网络实训室"
           maxlength="128"
         />
@@ -31,10 +31,10 @@
       <div class="space_form__row">
         <el-form-item
           label="场地类型"
-          prop="spaceType"
+          prop="labType"
         >
           <el-select
-            v-model="form.spaceType"
+            v-model="form.labType"
             placeholder="请选择类型"
             class="space_form__select"
           >
@@ -61,10 +61,10 @@
       </div>
       <el-form-item
         label="位置"
-        prop="location"
+        prop="locationDetail"
       >
         <el-input
-          v-model="form.location"
+          v-model="form.locationDetail"
           placeholder="如 A 楼七层 A703"
           maxlength="128"
         />
@@ -161,9 +161,9 @@ const submitting = ref(false)
 const isEdit = computed(() => !!props.space)
 
 const emptyForm = () => ({
-  spaceName: '',
-  spaceType: '',
-  location: '',
+  labName: '',
+  labType: '',
+  locationDetail: '',
   capacity: 40,
   facilities: '',
   openStart: '08:00',
@@ -174,9 +174,9 @@ const emptyForm = () => ({
 const form = reactive(emptyForm())
 
 const rules = {
-  spaceName: [{ required: true, message: '请输入场地名称', trigger: 'blur' }],
-  spaceType: [{ required: true, message: '请选择场地类型', trigger: 'change' }],
-  location: [{ required: true, message: '请输入位置', trigger: 'blur' }],
+  labName: [{ required: true, message: '请输入场地名称', trigger: 'blur' }],
+  labType: [{ required: true, message: '请选择场地类型', trigger: 'change' }],
+  locationDetail: [{ required: true, message: '请输入位置', trigger: 'blur' }],
   capacity: [{ required: true, message: '请输入容纳人数', trigger: 'change' }],
   openStart: [
     { required: true, message: '请选择开放开始时间', trigger: 'change' },
@@ -214,9 +214,9 @@ watch(
     Object.assign(form, emptyForm())
     if (props.space) {
       Object.assign(form, {
-        spaceName: props.space.spaceName,
-        spaceType: props.space.spaceType,
-        location: props.space.location || '',
+        labName: props.space.labName,
+        labType: props.space.labType,
+        locationDetail: props.space.locationDetail || '',
         capacity: props.space.capacity,
         facilities: props.space.facilities || '',
         openStart: props.space.openStart || '08:00',
@@ -234,9 +234,9 @@ async function onSubmit() {
   submitting.value = true
   try {
     const payload = {
-      spaceName: form.spaceName.trim(),
-      spaceType: form.spaceType,
-      location: form.location.trim(),
+      labName: form.labName.trim(),
+      labType: form.labType,
+      locationDetail: form.locationDetail.trim(),
       capacity: form.capacity,
       facilities: form.facilities?.trim() || null,
       openStart: form.openStart,

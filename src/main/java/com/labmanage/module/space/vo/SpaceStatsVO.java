@@ -4,7 +4,7 @@ import java.util.List;
 
 /**
  * 场地统计视图（列表页 KPI 卡片）。
- * 占用为预约模块派生态，不在 biz_space 落库，故不参与统计；
+ * 占用为预约模块派生态，不在 lab 落库，故不参与统计；
  * typeDistribution 为按类型分布（导出/看板辅助）。
  */
 public record SpaceStatsVO(
@@ -17,8 +17,8 @@ public record SpaceStatsVO(
 
     /** 单个类型计数 */
     public record TypeCountVO(
-            String spaceType,
-            String spaceTypeName,
+            String labType,
+            String labTypeName,
             long count
     ) {
     }

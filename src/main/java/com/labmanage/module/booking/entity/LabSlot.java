@@ -14,7 +14,7 @@ import java.time.Instant;
 @TableName("lab_slot")
 public class LabSlot extends BaseEntity {
 
-    /** 场地（→ biz_space.id） */
+    /** 场地（→ lab.id） */
     private Long labId;
 
     /** 占用来源预约单（→ lab_booking.id；课程排课来源待课程模块落地） */

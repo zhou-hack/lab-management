@@ -7,7 +7,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import java.util.Arrays;
 
 /**
- * 场地状态（biz_space.status，落库）。
+ * 场地状态（lab.status，落库）。
  * <p>
  * 单表模式下状态直接持久化（取代旧四表设计的"派生不入库"方案）：
  * AVAILABLE 可正常预约使用；MAINTAINING 维护中禁止新预约；CLOSED 关闭（停用）。

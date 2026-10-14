@@ -16,7 +16,7 @@ import java.time.Instant;
 @TableName("lab_booking")
 public class LabBooking extends BaseEntity {
 
-    /** 场地（→ biz_space.id，单表模式下 lab 即场地） */
+    /** 场地（→ lab.id，单表模式下 lab 即场地） */
     private Long labId;
 
     /** 申请人（→ sys_user.id） */

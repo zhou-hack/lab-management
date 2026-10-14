@@ -11,13 +11,13 @@ import com.labmanage.module.space.enums.SpaceType;
 public class SpacePageQuery extends BasePageQuery {
 
     /** 场地名称（模糊） */
-    private String spaceName;
+    private String labName;
 
     /** 位置（模糊） */
-    private String location;
+    private String locationDetail;
 
     /** 类型筛选 */
-    private SpaceType spaceType;
+    private SpaceType labType;
 
     /** 状态筛选 */
     private SpaceStatus status;
@@ -28,34 +28,34 @@ public class SpacePageQuery extends BasePageQuery {
     /** 最大容纳人数 */
     private Integer maxCapacity;
 
-    /** 排序字段白名单：space_name/capacity/create_time/update_time */
+    /** 排序字段白名单：lab_name/capacity/create_time/update_time */
     private String sortBy;
 
     /** 排序方向：asc/desc */
     private String sortOrder;
 
-    public String getSpaceName() {
-        return spaceName;
+    public String getLabName() {
+        return labName;
     }
 
-    public void setSpaceName(String spaceName) {
-        this.spaceName = spaceName;
+    public void setLabName(String labName) {
+        this.labName = labName;
     }
 
-    public String getLocation() {
-        return location;
+    public String getLocationDetail() {
+        return locationDetail;
     }
 
-    public void setLocation(String location) {
-        this.location = location;
+    public void setLocationDetail(String locationDetail) {
+        this.locationDetail = locationDetail;
     }
 
-    public SpaceType getSpaceType() {
-        return spaceType;
+    public SpaceType getLabType() {
+        return labType;
     }
 
-    public void setSpaceType(SpaceType spaceType) {
-        this.spaceType = spaceType;
+    public void setLabType(SpaceType labType) {
+        this.labType = labType;
     }
 
     public SpaceStatus getStatus() {

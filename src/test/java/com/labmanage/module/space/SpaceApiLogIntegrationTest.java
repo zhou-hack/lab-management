@@ -177,7 +177,7 @@ class SpaceApiLogIntegrationTest {
 
         assertThat(body.path("code").asInt()).isZero();
         assertThat(body.path("data").path("total").asInt()).isEqualTo(1);
-        assertThat(body.path("data").path("records").get(0).path("spaceName").asText())
+        assertThat(body.path("data").path("records").get(0).path("labName").asText())
                 .isEqualTo("C703 电子电工实训室");
         assertThat(body.path("data").path("records").get(0).path("status").asText())
                 .isEqualTo("MAINTAINING");
@@ -192,11 +192,11 @@ class SpaceApiLogIntegrationTest {
     @Test
     @DisplayName("分页（复合条件：类型+容量区间）：条件摘要逐项拼接")
     void pageFilterByTypeAndCapacity_shouldLogCompositeSummary() throws Exception {
-        JsonNode body = get("/api/v1/space/spaces?spaceType=TRAINING_ROOM&minCapacity=46&maxCapacity=60");
+        JsonNode body = get("/api/v1/space/spaces?labType=TRAINING_ROOM&minCapacity=46&maxCapacity=60");
 
         assertThat(body.path("code").asInt()).isZero();
         assertThat(body.path("data").path("total").asInt()).isEqualTo(1);
-        assertThat(body.path("data").path("records").get(0).path("spaceName").asText())
+        assertThat(body.path("data").path("records").get(0).path("labName").asText())
                 .isEqualTo("A703 网络实训室");
 
         assertThat(logs()).anySatisfy(msg -> {
@@ -212,7 +212,7 @@ class SpaceApiLogIntegrationTest {
         JsonNode body = get("/api/v1/space/spaces/1");
 
         assertThat(body.path("code").asInt()).isZero();
-        assertThat(body.path("data").path("spaceName").asText()).isEqualTo("A703 网络实训室");
+        assertThat(body.path("data").path("labName").asText()).isEqualTo("A703 网络实训室");
         assertThat(body.path("data").path("status").asText()).isEqualTo("AVAILABLE");
         assertThat(body.path("data").path("capacity").asInt()).isEqualTo(50);
 

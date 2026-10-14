@@ -8,24 +8,24 @@ import com.labmanage.module.space.enums.SpaceType;
 import java.time.LocalTime;
 
 /**
- * 场地实体（biz_space，单表）。
+ * 场地实体（lab，单表）。
  * <p>
- * 场地名称 space_name 全局唯一（含逻辑删除记录，删除后不复用，由
+ * 场地名称 lab_name 全局唯一（含逻辑删除记录，删除后不复用，由
  * UNIQUE 索引兜底 + 服务层含删除记录的重复校验保证）；
  * open_start/open_end 为上海本地日历时间（TIME(0)，无时区语义），
  * create_time/update_time 为 UTC 时间点（Instant，公共序列化器输出）。
  */
-@TableName("biz_space")
+@TableName("lab")
 public class BizSpace extends BaseEntity {
 
     /** 场地名称（全局唯一，删除后不复用） */
-    private String spaceName;
+    private String labName;
 
     /** 场地类型：CLASSROOM/TRAINING_ROOM */
-    private SpaceType spaceType;
+    private SpaceType labType;
 
     /** 位置（自由文本，如"A 楼七层 A703"） */
-    private String location;
+    private String locationDetail;
 
     /** 容纳人数（>0） */
     private Integer capacity;
@@ -42,28 +42,28 @@ public class BizSpace extends BaseEntity {
     /** 状态：AVAILABLE/MAINTAINING/CLOSED（落库） */
     private SpaceStatus status;
 
-    public String getSpaceName() {
-        return spaceName;
+    public String getLabName() {
+        return labName;
     }
 
-    public void setSpaceName(String spaceName) {
-        this.spaceName = spaceName;
+    public void setLabName(String labName) {
+        this.labName = labName;
     }
 
-    public SpaceType getSpaceType() {
-        return spaceType;
+    public SpaceType getLabType() {
+        return labType;
     }
 
-    public void setSpaceType(SpaceType spaceType) {
-        this.spaceType = spaceType;
+    public void setLabType(SpaceType labType) {
+        this.labType = labType;
     }
 
-    public String getLocation() {
-        return location;
+    public String getLocationDetail() {
+        return locationDetail;
     }
 
-    public void setLocation(String location) {
-        this.location = location;
+    public void setLocationDetail(String locationDetail) {
+        this.locationDetail = locationDetail;
     }
 
     public Integer getCapacity() {

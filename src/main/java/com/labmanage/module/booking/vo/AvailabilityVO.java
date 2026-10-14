@@ -12,7 +12,7 @@ import java.util.List;
  */
 public record AvailabilityVO(
         String spaceId,
-        String spaceName,
+        String labName,
         Integer capacity,
         String openStart,
         String openEnd,

@@ -3,7 +3,7 @@
 -- 三种状态各一条，另含一条逻辑删除记录，供分页筛选与日志埋点验证。
 -- ============================================================================
 
-INSERT INTO biz_space (id, space_name, space_type, location, capacity, facilities,
+INSERT INTO lab (id, lab_name, lab_type, location_detail, capacity, facilities,
                        open_start, open_end, status, create_time, update_time, deleted,
                        create_user_id, update_user_id)
 VALUES

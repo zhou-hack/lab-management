@@ -77,7 +77,7 @@
           min-width="150"
         >
           <template #default="{ row }">
-            <span class="my_booking__space">{{ row.spaceName || row.spaceId }}</span>
+            <span class="my_booking__space">{{ row.labName || row.spaceId }}</span>
           </template>
         </el-table-column>
         <el-table-column
@@ -243,7 +243,7 @@ async function onCancel(row) {
   let reason
   try {
     const res = await ElMessageBox.prompt(
-      `确定取消预约「${row.spaceName}」${formatRange(row.startAt, row.endAt)} 吗？`,
+      `确定取消预约「${row.labName}」${formatRange(row.startAt, row.endAt)} 吗？`,
       '取消预约',
       {
         inputPlaceholder: '取消原因（选填，≤200 字）',

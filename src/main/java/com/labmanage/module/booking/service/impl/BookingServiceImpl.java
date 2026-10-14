@@ -124,7 +124,7 @@ public class BookingServiceImpl implements BookingService {
         bookingMapper.insert(booking);
 
         log.info("[预约提交] 完成：操作人={}, 预约ID={}, 场地={}, 状态=PENDING, 耗时={}ms",
-                operatorId, booking.getId(), space.getSpaceName(), (System.nanoTime() - begin) / 1_000_000);
+                operatorId, booking.getId(), space.getLabName(), (System.nanoTime() - begin) / 1_000_000);
         return detailEntity(booking.getId(), operatorId);
     }
 
@@ -199,7 +199,7 @@ public class BookingServiceImpl implements BookingService {
         }
         if (space.getStatus() != SpaceStatus.AVAILABLE) {
             log.warn("[预约审批] 场地当前状态不可批准：操作人={}, 预约ID={}, 场地={}, 状态={}",
-                    operatorId, id, space.getSpaceName(), space.getStatus());
+                    operatorId, id, space.getLabName(), space.getStatus());
             throw new BusinessException(ResultCode.CONFLICT.getCode(),
                     "场地当前状态为 " + space.getStatus().getDisplayName() + "，无法批准");
         }
@@ -227,7 +227,7 @@ public class BookingServiceImpl implements BookingService {
             throw new BusinessException(ResultCode.NOT_FOUND);
         }
         log.info("[预约审批] 完成：操作人={}, 预约ID={}, 场地={}, 时段=[{} ~ {}], 占用ID={}, 耗时={}ms",
-                operatorId, id, space.getSpaceName(), booking.getStartAt(), booking.getEndAt(),
+                operatorId, id, space.getLabName(), booking.getStartAt(), booking.getEndAt(),
                 slot.getId(), (System.nanoTime() - begin) / 1_000_000);
     }
 
@@ -315,7 +315,7 @@ public class BookingServiceImpl implements BookingService {
                 operatorId, spaceId, date, occupied.size(), space.getOpenStart(), space.getOpenEnd());
         return new AvailabilityVO(
                 String.valueOf(space.getId()),
-                space.getSpaceName(),
+                space.getLabName(),
                 space.getCapacity(),
                 formatTime(space.getOpenStart()),
                 formatTime(space.getOpenEnd()),
@@ -405,7 +405,7 @@ public class BookingServiceImpl implements BookingService {
         return new BookingVO(
                 String.valueOf(b.getId()),
                 String.valueOf(b.getLabId()),
-                space == null ? null : space.getSpaceName(),
+                space == null ? null : space.getLabName(),
                 b.getPurpose(),
                 b.getParticipantCount(),
                 b.getStartAt(),
@@ -426,7 +426,7 @@ public class BookingServiceImpl implements BookingService {
         return new BookingDetailVO(
                 String.valueOf(b.getId()),
                 String.valueOf(b.getLabId()),
-                space == null ? null : space.getSpaceName(),
+                space == null ? null : space.getLabName(),
                 b.getPurpose(),
                 b.getParticipantCount(),
                 b.getStartAt(),

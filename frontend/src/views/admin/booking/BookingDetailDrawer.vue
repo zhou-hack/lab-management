@@ -13,7 +13,7 @@
       <div class="card booking_detail__head">
         <div class="booking_detail__title_row">
           <h3 class="t-title booking_detail__space">
-            {{ booking.spaceName || booking.spaceId }}
+            {{ booking.labName || booking.spaceId }}
           </h3>
           <span
             class="pill"

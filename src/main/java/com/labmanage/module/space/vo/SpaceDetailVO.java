@@ -12,10 +12,10 @@ import java.time.Instant;
  */
 public record SpaceDetailVO(
         String id,
-        String spaceName,
-        SpaceType spaceType,
-        String spaceTypeName,
-        String location,
+        String labName,
+        SpaceType labType,
+        String labTypeName,
+        String locationDetail,
         Integer capacity,
         String facilities,
         String openStart,

@@ -12,7 +12,7 @@ VALUES
 (2, 'TEACHER', 'teacher01', '13800000002', '$2a$10$placeholder', 'T0001', '王建国',     1, 1,
  '2026-09-01 00:00:00', '2026-09-01 00:00:00', 0);
 
-INSERT INTO biz_space (id, space_name, space_type, location, capacity, facilities,
+INSERT INTO lab (id, lab_name, lab_type, location_detail, capacity, facilities,
                        open_start, open_end, status, create_time, update_time, deleted)
 VALUES
 (1, 'A703 网络实训室', 'TRAINING_ROOM', 'A 楼七层 A703', 50,

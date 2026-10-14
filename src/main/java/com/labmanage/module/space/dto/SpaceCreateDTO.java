@@ -19,13 +19,13 @@ public record SpaceCreateDTO(
 
         @NotBlank(message = "场地名称不能为空")
         @Size(max = 128, message = "场地名称长度不能超过 128")
-        String spaceName,
+        String labName,
 
         @NotNull(message = "场地类型不能为空")
-        SpaceType spaceType,
+        SpaceType labType,
 
         @Size(max = 128, message = "位置长度不能超过 128")
-        String location,
+        String locationDetail,
 
         @NotNull(message = "容纳人数不能为空")
         @Min(value = 1, message = "容纳人数必须大于 0")

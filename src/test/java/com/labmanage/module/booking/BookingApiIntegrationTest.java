@@ -176,7 +176,7 @@ class BookingApiIntegrationTest {
         assertThat(body.path("data").path("status").asText()).isEqualTo("PENDING");
         assertThat(body.path("data").path("statusName").asText()).isEqualTo("待审批");
         assertThat(body.path("data").path("applicantName").asText()).isEqualTo("王建国");
-        assertThat(body.path("data").path("spaceName").asText()).isEqualTo("A703 网络实训室");
+        assertThat(body.path("data").path("labName").asText()).isEqualTo("A703 网络实训室");
         assertThat(body.path("data").path("runtimePhase").isNull()
                 || body.path("data").path("runtimePhase").isMissingNode()).isTrue();
         assertThat(body.path("data").path("id").asText()).isNotBlank();

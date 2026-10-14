@@ -39,12 +39,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 场地业务实现（biz_space 单表）。
+ * 场地业务实现（lab 单表）。
  * <p>
  * 授权说明：接口访问由 @SaCheckPermission 按权限标识控制（管理员全量、
  * 师生只读 space:space:list/read）。sys_user_data_scope 的 DEPARTMENT/CAMPUS/BUILDING
  * 行级范围在单表模式下无组织锚点列，一期不做行级过滤；LAB 级范围仍以
- * biz_space.id 为目标，删除前做引用检查。
+ * lab.id 为目标，删除前做引用检查。
  */
 @Service
 public class SpaceServiceImpl implements SpaceService {
@@ -53,7 +53,7 @@ public class SpaceServiceImpl implements SpaceService {
 
     /** 排序字段白名单（防注入）：入参字段 → DB 列 */
     private static final Map<String, String> SORT_COLUMNS = Map.of(
-            "spaceName", "space_name",
+            "labName", "lab_name",
             "capacity", "capacity",
             "createTime", "create_time",
             "updateTime", "update_time"
@@ -101,16 +101,16 @@ public class SpaceServiceImpl implements SpaceService {
         long begin = System.nanoTime();
         BizSpace space = requireSpace(id);
         log.info("[场地详情] 完成：操作人={}, 场地ID={}, 名称={}, 状态={}, 耗时={}ms",
-                SecurityUtils.currentUserId(), id, space.getSpaceName(), space.getStatus(),
+                SecurityUtils.currentUserId(), id, space.getLabName(), space.getStatus(),
                 (System.nanoTime() - begin) / 1_000_000);
         return toDetailVO(space);
     }
 
     @Override
-    public List<SpaceOptionVO> options(SpaceType spaceType, Integer minCapacity, Boolean availableOnly) {
+    public List<SpaceOptionVO> options(SpaceType labType, Integer minCapacity, Boolean availableOnly) {
         LambdaQueryWrapper<BizSpace> wrapper = new LambdaQueryWrapper<>();
-        if (spaceType != null) {
-            wrapper.eq(BizSpace::getSpaceType, spaceType);
+        if (labType != null) {
+            wrapper.eq(BizSpace::getLabType, labType);
         }
         if (minCapacity != null) {
             wrapper.ge(BizSpace::getCapacity, minCapacity);
@@ -118,15 +118,15 @@ public class SpaceServiceImpl implements SpaceService {
         if (Boolean.TRUE.equals(availableOnly)) {
             wrapper.eq(BizSpace::getStatus, SpaceStatus.AVAILABLE);
         }
-        wrapper.orderByAsc(BizSpace::getSpaceName);
+        wrapper.orderByAsc(BizSpace::getLabName);
 
         List<SpaceOptionVO> result = spaceMapper.selectList(wrapper).stream()
                 .map(s -> new SpaceOptionVO(
-                        String.valueOf(s.getId()), s.getSpaceName(), s.getSpaceType(),
+                        String.valueOf(s.getId()), s.getLabName(), s.getLabType(),
                         s.getCapacity(), s.getStatus()))
                 .toList();
         log.info("[场地选项] 完成：操作人={}, 类型={}, 最小容量={}, 仅可用={}, 返回条数={}",
-                SecurityUtils.currentUserId(), spaceType, minCapacity, availableOnly, result.size());
+                SecurityUtils.currentUserId(), labType, minCapacity, availableOnly, result.size());
         return result;
     }
 
@@ -147,10 +147,10 @@ public class SpaceServiceImpl implements SpaceService {
         }
         List<SpaceStatsVO.TypeCountVO> typeDistribution = new ArrayList<>();
         for (Map<String, Object> row : spaceMapper.countGroupByType()) {
-            String type = String.valueOf(row.get("space_type"));
-            SpaceType spaceType = SpaceType.valueOf(type);
+            String type = String.valueOf(row.get("lab_type"));
+            SpaceType labType = SpaceType.valueOf(type);
             typeDistribution.add(new SpaceStatsVO.TypeCountVO(
-                    type, spaceType.getDisplayName(), ((Number) row.get("cnt")).longValue()));
+                    type, labType.getDisplayName(), ((Number) row.get("cnt")).longValue()));
         }
         log.info("[场地统计] 完成：操作人={}, 总数={}, 可用={}, 维护中={}, 停用={}, 类型分布={}",
                 SecurityUtils.currentUserId(), available + maintaining + closed, available, maintaining, closed,
@@ -190,7 +190,7 @@ public class SpaceServiceImpl implements SpaceService {
                 updated++;
                 log.info("[场地批量{}] 单场地完成：操作人={}, 场地ID={}, 名称={}, 原状态={} → 新状态={}",
                         target == SpaceStatus.AVAILABLE ? "启用" : "停用",
-                        operatorId, id, space.getSpaceName(), space.getStatus(), target);
+                        operatorId, id, space.getLabName(), space.getStatus(), target);
             }
         }
         log.info("[场地批量{}] 完成：操作人={}, 目标状态={}, 提交数={}, 成功数={}, 未命中={}",
@@ -211,9 +211,9 @@ public class SpaceServiceImpl implements SpaceService {
         sb.append('\ufeff'); // UTF-8 BOM：Excel 识别中文表头
         sb.append("场地名称,类型,位置,容纳人数,开放时段,状态,配套设备,创建时间(上海),更新时间(上海)\r\n");
         for (BizSpace s : spaces) {
-            sb.append(csv(s.getSpaceName())).append(',')
-                    .append(csv(s.getSpaceType() == null ? null : s.getSpaceType().getDisplayName())).append(',')
-                    .append(csv(s.getLocation())).append(',')
+            sb.append(csv(s.getLabName())).append(',')
+                    .append(csv(s.getLabType() == null ? null : s.getLabType().getDisplayName())).append(',')
+                    .append(csv(s.getLocationDetail())).append(',')
                     .append(s.getCapacity()).append(',')
                     .append(formatTime(s.getOpenStart())).append('~').append(formatTime(s.getOpenEnd())).append(',')
                     .append(csv(s.getStatus() == null ? null : s.getStatus().getDisplayName())).append(',')
@@ -235,7 +235,7 @@ public class SpaceServiceImpl implements SpaceService {
         Long operatorId = SecurityUtils.currentUserId();
         log.info("[场地新增] 开始：操作人={}, 入参={}", operatorId, dto);
 
-        String name = dto.spaceName().trim();
+        String name = dto.labName().trim();
         requireNameUnused(name, null);
 
         LocalTime openStart = hasText(dto.openStart()) ? LocalTime.parse(dto.openStart(), HH_MM) : DEFAULT_OPEN_START;
@@ -243,9 +243,9 @@ public class SpaceServiceImpl implements SpaceService {
         validateOpenWindow(openStart, openEnd);
 
         BizSpace space = new BizSpace();
-        space.setSpaceName(name);
-        space.setSpaceType(dto.spaceType());
-        space.setLocation(trimToNull(dto.location()));
+        space.setLabName(name);
+        space.setLabType(dto.labType());
+        space.setLocationDetail(trimToNull(dto.locationDetail()));
         space.setCapacity(dto.capacity());
         space.setFacilities(trimToNull(dto.facilities()));
         space.setOpenStart(openStart);
@@ -254,7 +254,7 @@ public class SpaceServiceImpl implements SpaceService {
 
         spaceMapper.insert(space);
         log.info("[场地新增] 完成：操作人={}, 场地ID={}, 名称={}, 类型={}, 状态={}, 开放时段={}~{}",
-                operatorId, space.getId(), name, space.getSpaceType(), space.getStatus(), openStart, openEnd);
+                operatorId, space.getId(), name, space.getLabType(), space.getStatus(), openStart, openEnd);
         return toDetailVO(requireSpace(space.getId()));
     }
 
@@ -265,7 +265,7 @@ public class SpaceServiceImpl implements SpaceService {
         log.info("[场地编辑] 开始：操作人={}, 场地ID={}, 入参={}", operatorId, id, dto);
 
         BizSpace space = requireSpace(id);
-        String name = dto.spaceName().trim();
+        String name = dto.labName().trim();
         requireNameUnused(name, id);
 
         // 空值语义：开放时段与状态为空表示保留原值；location/facilities 为空即清空
@@ -276,9 +276,9 @@ public class SpaceServiceImpl implements SpaceService {
 
         int rows = spaceMapper.update(null, new LambdaUpdateWrapper<BizSpace>()
                 .eq(BizSpace::getId, id)
-                .set(BizSpace::getSpaceName, name)
-                .set(BizSpace::getSpaceType, dto.spaceType())
-                .set(BizSpace::getLocation, trimToNull(dto.location()))
+                .set(BizSpace::getLabName, name)
+                .set(BizSpace::getLabType, dto.labType())
+                .set(BizSpace::getLocationDetail, trimToNull(dto.locationDetail()))
                 .set(BizSpace::getCapacity, dto.capacity())
                 .set(BizSpace::getFacilities, trimToNull(dto.facilities()))
                 .set(BizSpace::getOpenStart, openStart)
@@ -310,7 +310,7 @@ public class SpaceServiceImpl implements SpaceService {
             throw new BusinessException(ResultCode.NOT_FOUND);
         }
         log.info("[场地启用] 完成：操作人={}, 场地ID={}, 名称={}, 原状态={} → 新状态=AVAILABLE",
-                operatorId, id, space.getSpaceName(), space.getStatus());
+                operatorId, id, space.getLabName(), space.getStatus());
     }
 
     @Override
@@ -330,7 +330,7 @@ public class SpaceServiceImpl implements SpaceService {
             throw new BusinessException(ResultCode.NOT_FOUND);
         }
         log.info("[场地停用] 完成：操作人={}, 场地ID={}, 名称={}, 原状态={} → 新状态=CLOSED",
-                operatorId, id, space.getSpaceName(), space.getStatus());
+                operatorId, id, space.getLabName(), space.getStatus());
     }
 
     @Override
@@ -358,7 +358,7 @@ public class SpaceServiceImpl implements SpaceService {
         // TODO 资产模块：equipment_asset / stock_location 启用记录
         if (!conflicts.isEmpty()) {
             log.warn("[场地删除] 存在未结业务引用，拒绝删除：操作人={}, 场地ID={}, 名称={}, 冲突项=[{}]",
-                    operatorId, id, space.getSpaceName(), String.join("；", conflicts));
+                    operatorId, id, space.getLabName(), String.join("；", conflicts));
             throw new BusinessException(ResultCode.CONFLICT.getCode(),
                     "场地存在未结业务引用，无法删除：" + String.join("；", conflicts));
         }
@@ -369,7 +369,7 @@ public class SpaceServiceImpl implements SpaceService {
             throw new BusinessException(ResultCode.NOT_FOUND);
         }
         log.info("[场地删除] 完成：操作人={}, 场地ID={}, 名称={}, 原状态={}（逻辑删除，名称不可复用）",
-                operatorId, id, space.getSpaceName(), space.getStatus());
+                operatorId, id, space.getLabName(), space.getStatus());
     }
 
     // ------------------------------------------------------------- 组装/辅助
@@ -377,14 +377,14 @@ public class SpaceServiceImpl implements SpaceService {
     /** 分页/导出共用的查询条件组装 */
     private LambdaQueryWrapper<BizSpace> buildWrapper(SpacePageQuery query) {
         LambdaQueryWrapper<BizSpace> wrapper = new LambdaQueryWrapper<>();
-        if (hasText(query.getSpaceName())) {
-            wrapper.like(BizSpace::getSpaceName, query.getSpaceName().trim());
+        if (hasText(query.getLabName())) {
+            wrapper.like(BizSpace::getLabName, query.getLabName().trim());
         }
-        if (hasText(query.getLocation())) {
-            wrapper.like(BizSpace::getLocation, query.getLocation().trim());
+        if (hasText(query.getLocationDetail())) {
+            wrapper.like(BizSpace::getLocationDetail, query.getLocationDetail().trim());
         }
-        if (query.getSpaceType() != null) {
-            wrapper.eq(BizSpace::getSpaceType, query.getSpaceType());
+        if (query.getLabType() != null) {
+            wrapper.eq(BizSpace::getLabType, query.getLabType());
         }
         if (query.getStatus() != null) {
             wrapper.eq(BizSpace::getStatus, query.getStatus());
@@ -417,10 +417,10 @@ public class SpaceServiceImpl implements SpaceService {
     private SpaceListVO toListVO(BizSpace s) {
         return new SpaceListVO(
                 String.valueOf(s.getId()),
-                s.getSpaceName(),
-                s.getSpaceType(),
-                s.getSpaceType() == null ? null : s.getSpaceType().getDisplayName(),
-                s.getLocation(),
+                s.getLabName(),
+                s.getLabType(),
+                s.getLabType() == null ? null : s.getLabType().getDisplayName(),
+                s.getLocationDetail(),
                 s.getCapacity(),
                 s.getStatus(),
                 s.getStatus() == null ? null : s.getStatus().getDisplayName(),
@@ -433,10 +433,10 @@ public class SpaceServiceImpl implements SpaceService {
     private SpaceDetailVO toDetailVO(BizSpace s) {
         return new SpaceDetailVO(
                 String.valueOf(s.getId()),
-                s.getSpaceName(),
-                s.getSpaceType(),
-                s.getSpaceType() == null ? null : s.getSpaceType().getDisplayName(),
-                s.getLocation(),
+                s.getLabName(),
+                s.getLabType(),
+                s.getLabType() == null ? null : s.getLabType().getDisplayName(),
+                s.getLocationDetail(),
                 s.getCapacity(),
                 s.getFacilities(),
                 formatTime(s.getOpenStart()),
@@ -464,14 +464,14 @@ public class SpaceServiceImpl implements SpaceService {
     /** 分页查询条件摘要（仅拼非空条件，用于日志排查） */
     private String buildFilterSummary(SpacePageQuery query) {
         StringBuilder sb = new StringBuilder();
-        if (hasText(query.getSpaceName())) {
-            sb.append("名称~").append(query.getSpaceName().trim()).append(", ");
+        if (hasText(query.getLabName())) {
+            sb.append("名称~").append(query.getLabName().trim()).append(", ");
         }
-        if (hasText(query.getLocation())) {
-            sb.append("位置~").append(query.getLocation().trim()).append(", ");
+        if (hasText(query.getLocationDetail())) {
+            sb.append("位置~").append(query.getLocationDetail().trim()).append(", ");
         }
-        if (query.getSpaceType() != null) {
-            sb.append("类型=").append(query.getSpaceType()).append(", ");
+        if (query.getLabType() != null) {
+            sb.append("类型=").append(query.getLabType()).append(", ");
         }
         if (query.getStatus() != null) {
             sb.append("状态=").append(query.getStatus()).append(", ");

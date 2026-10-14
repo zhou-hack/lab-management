@@ -48,11 +48,11 @@ public interface SpaceService {
     /**
      * 场地下拉选项（供预约等下游模块联调）。
      *
-     * @param spaceType     类型过滤（可空）
+     * @param labType     类型过滤（可空）
      * @param minCapacity   最小容纳人数（可空）
      * @param availableOnly true 时仅返回状态为 AVAILABLE 的场地
      */
-    List<SpaceOptionVO> options(SpaceType spaceType, Integer minCapacity, Boolean availableOnly);
+    List<SpaceOptionVO> options(SpaceType labType, Integer minCapacity, Boolean availableOnly);
 
     /**
      * 新建场地（状态缺省 AVAILABLE，开放时段缺省 08:00-21:00）。

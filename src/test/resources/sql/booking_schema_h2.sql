@@ -3,12 +3,12 @@
 -- 与 sql/lab_booking.sql 的差异：H2 不支持 UTC_TIMESTAMP(3) 列默认值与
 -- ON UPDATE CURRENT_TIMESTAMP(3)，时间列由 MyBatis-Plus 审计填充保证；
 -- 生产建表仍以 sql/lab_booking.sql（MySQL 8.4）为准。
--- 同时包含最小 sys_user（申请人姓名回填）与 biz_space（预约目标场地）。
+-- 同时包含最小 sys_user（申请人姓名回填）与 lab（预约目标场地）。
 -- ============================================================================
 
 DROP TABLE IF EXISTS lab_slot;
 DROP TABLE IF EXISTS lab_booking;
-DROP TABLE IF EXISTS biz_space;
+DROP TABLE IF EXISTS lab;
 DROP TABLE IF EXISTS sys_user;
 
 -- 最小用户表（仅姓名回填所需列，结构对齐 sys_rbac.sql 的 sys_user）
@@ -33,11 +33,11 @@ CREATE TABLE sys_user (
     PRIMARY KEY (id)
 );
 
-CREATE TABLE biz_space (
+CREATE TABLE lab (
     id             BIGINT        NOT NULL,
-    space_name     VARCHAR(128)  NOT NULL,
-    space_type     VARCHAR(32)   NOT NULL,
-    location       VARCHAR(128)  NULL,
+    lab_name     VARCHAR(128)  NOT NULL,
+    lab_type     VARCHAR(32)   NOT NULL,
+    location_detail       VARCHAR(128)  NULL,
     capacity       INT           NOT NULL,
     facilities     TEXT          NULL,
     open_start     TIME          NOT NULL,
@@ -49,7 +49,7 @@ CREATE TABLE biz_space (
     create_user_id BIGINT        NULL,
     update_user_id BIGINT        NULL,
     PRIMARY KEY (id),
-    CONSTRAINT chk_biz_space_status CHECK (status IN ('AVAILABLE', 'MAINTAINING', 'CLOSED'))
+    CONSTRAINT chk_lab_status CHECK (status IN ('AVAILABLE', 'MAINTAINING', 'CLOSED'))
 );
 
 CREATE TABLE lab_booking (

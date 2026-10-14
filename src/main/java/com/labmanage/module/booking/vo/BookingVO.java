@@ -13,7 +13,7 @@ import java.time.Instant;
 public record BookingVO(
         String id,
         String spaceId,
-        String spaceName,
+        String labName,
         String purpose,
         Integer participantCount,
         Instant startAt,

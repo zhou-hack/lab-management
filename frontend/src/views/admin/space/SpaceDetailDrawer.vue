@@ -12,7 +12,7 @@
       <div class="card space_detail__head">
         <div class="space_detail__title_row">
           <h3 class="t-title space_detail__name">
-            {{ space.spaceName }}
+            {{ space.labName }}
           </h3>
           <span
             class="pill"
@@ -22,7 +22,7 @@
           </span>
         </div>
         <p class="t-sub">
-          {{ space.location || '位置未填写' }} · {{ SPACE_TYPE_MAP[space.spaceType]?.label || space.spaceType }}
+          {{ space.locationDetail || '位置未填写' }} · {{ SPACE_TYPE_MAP[space.labType]?.label || space.labType }}
         </p>
       </div>
 
@@ -35,7 +35,7 @@
           border
         >
           <el-descriptions-item label="场地类型">
-            {{ SPACE_TYPE_MAP[space.spaceType]?.label || space.spaceType }}
+            {{ SPACE_TYPE_MAP[space.labType]?.label || space.labType }}
           </el-descriptions-item>
           <el-descriptions-item label="容纳人数">
             {{ space.capacity }} 人
@@ -44,7 +44,7 @@
             label="位置"
             :span="2"
           >
-            {{ space.location || '—' }}
+            {{ space.locationDetail || '—' }}
           </el-descriptions-item>
           <el-descriptions-item label="开放时段">
             {{ space.openStart }} - {{ space.openEnd }}

@@ -41,7 +41,7 @@
           min-width="140"
         >
           <template #default="{ row }">
-            <span class="bk_approval__space">{{ row.spaceName || row.spaceId }}</span>
+            <span class="bk_approval__space">{{ row.labName || row.spaceId }}</span>
           </template>
         </el-table-column>
         <el-table-column
@@ -154,7 +154,7 @@ async function loadData() {
 async function onApprove(row) {
   try {
     await ElMessageBox.confirm(
-      `批准「${row.applicantName || row.applicantId}」预约 ${row.spaceName} ${formatRange(row.startAt, row.endAt)} 吗？批准后该时段对其他人关闭。`,
+      `批准「${row.applicantName || row.applicantId}」预约 ${row.labName} ${formatRange(row.startAt, row.endAt)} 吗？批准后该时段对其他人关闭。`,
       '批准确认',
       { type: 'warning' }
     )
@@ -175,7 +175,7 @@ async function onReject(row) {
   try {
     const res = await ElMessageBox.prompt(
       '驳回后将通知申请人，原因必填（≤200 字）',
-      `驳回「${row.spaceName}」预约`,
+      `驳回「${row.labName}」预约`,
       {
         inputPlaceholder: '驳回原因（必填）',
         inputValidator: (v) => (v && v.trim() ? (v.length <= 200 ? true : '原因不能超过 200 字') : '请填写驳回原因'),

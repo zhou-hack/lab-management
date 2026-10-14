@@ -45,7 +45,7 @@
       >
         <el-form-item label="关键字">
           <el-input
-            v-model="query.spaceName"
+            v-model="query.labName"
             placeholder="场地名称模糊匹配"
             clearable
             class="space_list__input"
@@ -54,7 +54,7 @@
         </el-form-item>
         <el-form-item label="位置">
           <el-input
-            v-model="query.location"
+            v-model="query.locationDetail"
             placeholder="如 A 楼 / 教学楼"
             clearable
             class="space_list__input"
@@ -63,7 +63,7 @@
         </el-form-item>
         <el-form-item label="类型">
           <el-select
-            v-model="query.spaceType"
+            v-model="query.labType"
             placeholder="全部"
             clearable
             class="space_list__select"
@@ -200,7 +200,7 @@
               type="primary"
               @click="onDetail(row)"
             >
-              {{ row.spaceName }}
+              {{ row.labName }}
             </el-button>
           </template>
         </el-table-column>
@@ -209,11 +209,11 @@
           width="90"
         >
           <template #default="{ row }">
-            {{ SPACE_TYPE_MAP[row.spaceType]?.label || row.spaceType }}
+            {{ SPACE_TYPE_MAP[row.labType]?.label || row.labType }}
           </template>
         </el-table-column>
         <el-table-column
-          prop="location"
+          prop="locationDetail"
           label="位置"
           min-width="130"
         />
@@ -382,9 +382,9 @@ const exporting = ref(false)
 const query = reactive({
   pageNum: 1,
   pageSize: 10,
-  spaceName: '',
-  location: '',
-  spaceType: null,
+  labName: '',
+  locationDetail: '',
+  labType: null,
   status: null,
   minCapacity: null,
   maxCapacity: null
@@ -417,9 +417,9 @@ async function loadData() {
     const params = {
       pageNum: query.pageNum,
       pageSize: query.pageSize,
-      spaceName: query.spaceName || undefined,
-      location: query.location || undefined,
-      spaceType: query.spaceType || undefined,
+      labName: query.labName || undefined,
+      locationDetail: query.locationDetail || undefined,
+      labType: query.labType || undefined,
       status: query.status || undefined,
       minCapacity: query.minCapacity || undefined,
       maxCapacity: query.maxCapacity || undefined
@@ -438,9 +438,9 @@ function onSearch() {
 }
 
 function onReset() {
-  query.spaceName = ''
-  query.location = ''
-  query.spaceType = null
+  query.labName = ''
+  query.locationDetail = ''
+  query.labType = null
   query.status = null
   query.minCapacity = null
   query.maxCapacity = null
@@ -478,7 +478,7 @@ async function onSubmitForm({ id, payload }) {
 async function onToggle(row, enabled) {
   try {
     await ElMessageBox.confirm(
-      `确定${enabled ? '启用' : '停用'}场地「${row.spaceName}」吗？${
+      `确定${enabled ? '启用' : '停用'}场地「${row.labName}」吗？${
         enabled ? '启用后可恢复预约与排课。' : '停用后不可新建预约。'
       }`,
       '操作确认',
@@ -500,7 +500,7 @@ function onSelectionChange(rows) {
 /** 批量启停（target 仅 AVAILABLE/CLOSED；停用需二次确认） */
 async function onBatchStatus(target) {
   const enabled = target === 'AVAILABLE'
-  const names = selectedRows.value.map((r) => r.spaceName).join('、')
+  const names = selectedRows.value.map((r) => r.labName).join('、')
   try {
     await ElMessageBox.confirm(
       `确定批量${enabled ? '启用' : '停用'} ${selectedRows.value.length} 个场地（${names}）吗？${
@@ -527,9 +527,9 @@ async function onExport() {
   exporting.value = true
   try {
     const blob = await exportSpaces({
-      spaceName: query.spaceName || undefined,
-      location: query.location || undefined,
-      spaceType: query.spaceType || undefined,
+      labName: query.labName || undefined,
+      locationDetail: query.locationDetail || undefined,
+      labType: query.labType || undefined,
       status: query.status || undefined,
       minCapacity: query.minCapacity || undefined,
       maxCapacity: query.maxCapacity || undefined
@@ -564,7 +564,7 @@ async function onSubmitBooking(payload) {
 async function onDelete(row) {
   try {
     await ElMessageBox.confirm(
-      `确定删除场地「${row.spaceName}」吗？逻辑删除且名称不可复用；存在未结预约或数据范围授权时将被后端拒绝。`,
+      `确定删除场地「${row.labName}」吗？逻辑删除且名称不可复用；存在未结预约或数据范围授权时将被后端拒绝。`,
       '删除确认',
       { type: 'warning' }
     )
