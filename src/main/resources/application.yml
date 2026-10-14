@@ -1,0 +1,38 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: lab-management
+  profiles:
+    active: dev
+  jackson:
+    time-zone: UTC
+    serialization:
+      write-dates-as-timestamps: false
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+
+sa-token:
+  token-name: Authorization
+  timeout: 86400
+  is-concurrent: true
+  is-share: false
+  token-style: uuid
+  is-log: false
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+  default-produces-media-type: application/json
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
