@@ -12,9 +12,12 @@
 -- 图形客户端不支持 SOURCE 时，按顺序手工执行：
 --   1. 本文件头部的建库语句
 --   2. sql/sys_rbac.sql
---   3. sql/biz_space.sql
+--   3. sql/sys_policy.sql
+--   4. sql/assistant_grant.sql
+--   5. sql/biz_space.sql
+--   6. sql/lab_booking.sql
 -- ----------------------------------------------------------------------------
--- 幂等性：本脚本与两个被引用脚本均为全新环境设计（CREATE TABLE 非
+-- 幂等性：本脚本与各被引用脚本均为全新环境设计（CREATE TABLE 非
 --   IF NOT EXISTS、INSERT 固定小 ID），不可重复执行；重置环境先执行：
 --   DROP DATABASE lab_management;（会清除全部业务数据，慎用）
 -- ----------------------------------------------------------------------------
@@ -39,15 +42,30 @@ USE lab_management;
 --    + 预置部门、4 角色、管理员 admin 及其角色绑定与 ALL+WRITE 数据范围）
 SOURCE sql/sys_rbac.sql;
 
--- 3. 场地模块（biz_space 单表 + 场地 3 条、权限 101-105、菜单 1001-1005、
+-- 3. 业务策略参数（business_policy 单表 + 认证安全策略 9 条）
+SOURCE sql/sys_policy.sql;
+
+-- 4. 助理授权（assistant_grant 两表，ASSISTANT 动态角色依据，无初始数据）
+SOURCE sql/assistant_grant.sql;
+
+-- 5. 场地模块（biz_space 单表 + 场地 3 条、权限 1001-1005、菜单 1001-1005、
 --    角色权限与角色菜单授权、sys_user_data_scope 跨模块外键补充）
 SOURCE sql/biz_space.sql;
 
--- 4. 初始化自检（预期值见行尾注释；任何一列不符说明初始化不完整）
+-- 6. 场地预约（lab_booking + lab_slot 两表 + admin 演示密码重置 + 预约权限 3001-3007、
+--    菜单 3201-3205 与角色绑定；lab_usage 使用台账延后）
+SOURCE sql/lab_booking.sql;
+
+-- 7. 初始化自检（预期值见行尾注释；任何一列不符说明初始化不完整）
 SELECT COUNT(*) AS dept_cnt FROM sys_department;                          -- 预期 1（设备处）
 SELECT COUNT(*) AS role_cnt FROM sys_role;                                -- 预期 4（ADMIN/TEACHER/STUDENT/ASSISTANT）
 SELECT COUNT(*) AS user_cnt FROM sys_user;                                -- 预期 1（admin）
+SELECT COUNT(*) AS policy_cnt FROM business_policy WHERE deleted = 0;     -- 预期 9（认证安全策略）
 SELECT COUNT(*) AS space_cnt FROM biz_space WHERE deleted = 0;            -- 预期 3（两实训室+一教室）
 SELECT COUNT(*) AS space_perm_cnt FROM sys_permission WHERE module_code = 'space'; -- 预期 5
 SELECT COUNT(*) AS space_menu_cnt FROM sys_menu WHERE menu_code LIKE 'space%';      -- 预期 5
-SELECT COUNT(*) AS role_perm_cnt FROM sys_role_permission;                -- 预期 9（管理员 5 + 教师 2 + 学生 2）
+SELECT COUNT(*) AS booking_perm_cnt FROM sys_permission WHERE module_code = 'booking'; -- 预期 7
+SELECT COUNT(*) AS booking_menu_cnt FROM sys_menu WHERE menu_code LIKE 'booking%';    -- 预期 5
+SELECT COUNT(*) AS role_perm_cnt FROM sys_role_permission;                -- 预期 43（RBAC 26 + 场地 9 + 预约 8）
+SELECT COUNT(*) AS booking_cnt FROM lab_booking;                         -- 预期 0（无初始预约）
+SELECT COUNT(*) AS slot_cnt FROM lab_slot;                                -- 预期 0（无初始占用）

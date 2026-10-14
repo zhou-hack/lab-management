@@ -84,15 +84,16 @@ VALUES
     '08:00', '21:00', 'AVAILABLE', 1, 1);
 
 -- ----------------------------------------------------------------------------
--- 权限初始数据（101-105，标识规范 模块:资源:操作，module_code='space'）
+-- 权限初始数据（1001-1005，标识规范 模块:资源:操作，module_code='space'；
+-- ID 段按 docs/RBAC实施清单.md 第一节：space 模块 1000-1999）
 -- ----------------------------------------------------------------------------
 INSERT INTO sys_permission (id, permission_code, permission_name, module_code, enabled)
 VALUES
-(101, 'space:space:list',   '场地列表',       'space', 1),
-(102, 'space:space:read',   '场地详情',       'space', 1),
-(103, 'space:space:create', '新建场地',       'space', 1),
-(104, 'space:space:update', '编辑/启停场地',  'space', 1),
-(105, 'space:space:delete', '删除场地',       'space', 1);
+(1001, 'space:space:list',   '场地列表',       'space', 1),
+(1002, 'space:space:read',   '场地详情',       'space', 1),
+(1003, 'space:space:create', '新建场地',       'space', 1),
+(1004, 'space:space:update', '编辑/启停场地',  'space', 1),
+(1005, 'space:space:delete', '删除场地',       'space', 1);
 
 -- ----------------------------------------------------------------------------
 -- 菜单初始数据（1001-1005，menu_type 取 DIRECTORY/PAGE/ACTION）
@@ -108,16 +109,16 @@ VALUES
 (1004, 1002, 'space_update', '编辑场地', NULL,                NULL,                    104,  'ACTION',    2, 1),
 (1005, 1002, 'space_delete', '删除场地', NULL,                NULL,                    105,  'ACTION',    3, 1);
 
--- 管理员（role_id=1）拥有场地模块全部权限 101-105
+-- 管理员（role_id=1）拥有场地模块全部权限 1001-1005
 INSERT INTO sys_role_permission (id, role_id, permission_id, enabled)
 VALUES
-(101, 1, 101, 1), (102, 1, 102, 1), (103, 1, 103, 1), (104, 1, 104, 1), (105, 1, 105, 1);
+(1001, 1, 1001, 1), (1002, 1, 1002, 1), (1003, 1, 1003, 1), (1004, 1, 1004, 1), (1005, 1, 1005, 1);
 
 -- 教师（role_id=2）/学生（role_id=3）只读：仅列表与详情
 INSERT INTO sys_role_permission (id, role_id, permission_id, enabled)
 VALUES
-(106, 2, 101, 1), (107, 2, 102, 1),
-(108, 3, 101, 1), (109, 3, 102, 1);
+(1006, 2, 1001, 1), (1007, 2, 1002, 1),
+(1008, 3, 1001, 1), (1009, 3, 1002, 1);
 
 -- 管理员可见场地模块全部菜单 1001-1005（师生经预约入口只读访问，无管理菜单）
 INSERT INTO sys_role_menu (id, role_id, menu_id, enabled)
