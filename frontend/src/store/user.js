@@ -36,7 +36,17 @@ const TEST_PROFILES = {
   ADMIN: {
     userInfo: { realName: '测试管理员', username: 'admin' },
     roles: ['ADMIN'],
-    perms: ['dashboard:view', 'equipment:edit'],
+    perms: [
+      'dashboard:view',
+      'equipment:edit',
+      'space:campus:list',
+      'space:building:list',
+      'space:lab:list',
+      'space:lab:read',
+      'space:lab:create',
+      'space:lab:update',
+      'space:lab:delete'
+    ],
     menus: [
       {
         menuId: 300,
@@ -44,7 +54,16 @@ const TEST_PROFILES = {
         menuType: 'M',
         path: '/admin',
         children: [
-          { menuId: 381, menuName: '首页', menuType: 'C', path: '/admin/home', perms: 'dashboard:view' }
+          { menuId: 381, menuName: '首页', menuType: 'C', path: '/admin/home', perms: 'dashboard:view' },
+          {
+            menuId: 1001,
+            menuName: '空间管理',
+            menuType: 'M',
+            path: '/admin/space',
+            children: [
+              { menuId: 1002, menuName: '场地管理', menuType: 'C', path: '/admin/space/labs', perms: 'space:lab:list' }
+            ]
+          }
         ]
       }
     ]
