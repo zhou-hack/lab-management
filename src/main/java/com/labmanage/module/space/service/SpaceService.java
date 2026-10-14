@@ -1,10 +1,12 @@
 package com.labmanage.module.space.service;
 
 import com.labmanage.common.result.PageResult;
+import com.labmanage.module.space.dto.SpaceBatchStatusDTO;
 import com.labmanage.module.space.dto.SpaceCreateDTO;
 import com.labmanage.module.space.dto.SpacePageQuery;
 import com.labmanage.module.space.dto.SpaceUpdateDTO;
 import com.labmanage.module.space.enums.SpaceType;
+import com.labmanage.module.space.vo.SpaceBatchStatusVO;
 import com.labmanage.module.space.vo.SpaceDetailVO;
 import com.labmanage.module.space.vo.SpaceListVO;
 import com.labmanage.module.space.vo.SpaceOptionVO;
@@ -29,9 +31,19 @@ public interface SpaceService {
     SpaceDetailVO detail(Long id);
 
     /**
-     * 场地统计（列表页 KPI 卡片：总块数与各状态块数）。
+     * 场地统计（列表页 KPI 卡片：总块数、各状态块数与类型分布）。
      */
     SpaceStatsVO stats();
+
+    /**
+     * 场地批量启停（target 仅 AVAILABLE/CLOSED）。
+     */
+    SpaceBatchStatusVO batchStatus(SpaceBatchStatusDTO dto);
+
+    /**
+     * 场地 CSV 导出（与分页同条件过滤，UTF-8 BOM，时间按上海时区展示）。
+     */
+    byte[] exportCsv(SpacePageQuery query);
 
     /**
      * 场地下拉选项（供预约等下游模块联调）。

@@ -8,6 +8,9 @@ import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.ResultCode;
 import com.labmanage.common.utils.PageUtils;
 import com.labmanage.common.utils.SecurityUtils;
+import com.labmanage.module.booking.mapper.LabBookingMapper;
+import com.labmanage.module.booking.mapper.LabSlotMapper;
+import com.labmanage.module.space.dto.SpaceBatchStatusDTO;
 import com.labmanage.module.space.dto.SpaceCreateDTO;
 import com.labmanage.module.space.dto.SpacePageQuery;
 import com.labmanage.module.space.dto.SpaceUpdateDTO;
@@ -16,6 +19,7 @@ import com.labmanage.module.space.enums.SpaceStatus;
 import com.labmanage.module.space.enums.SpaceType;
 import com.labmanage.module.space.mapper.BizSpaceMapper;
 import com.labmanage.module.space.service.SpaceService;
+import com.labmanage.module.space.vo.SpaceBatchStatusVO;
 import com.labmanage.module.space.vo.SpaceDetailVO;
 import com.labmanage.module.space.vo.SpaceListVO;
 import com.labmanage.module.space.vo.SpaceOptionVO;
@@ -25,7 +29,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,10 +64,21 @@ public class SpaceServiceImpl implements SpaceService {
     private static final LocalTime DEFAULT_OPEN_END = LocalTime.of(21, 0);
     private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
 
-    private final BizSpaceMapper spaceMapper;
+    /** 导出与展示用业务时区（AGENTS：页面展示按上海本地日历） */
+    private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
+    private static final DateTimeFormatter EXPORT_TIME = DateTimeFormatter
+            .ofPattern("yyyy-MM-dd HH:mm").withZone(SHANGHAI);
 
-    public SpaceServiceImpl(BizSpaceMapper spaceMapper) {
+    private final BizSpaceMapper spaceMapper;
+    private final LabBookingMapper bookingMapper;
+    private final LabSlotMapper slotMapper;
+
+    public SpaceServiceImpl(BizSpaceMapper spaceMapper,
+                            LabBookingMapper bookingMapper,
+                            LabSlotMapper slotMapper) {
         this.spaceMapper = spaceMapper;
+        this.bookingMapper = bookingMapper;
+        this.slotMapper = slotMapper;
     }
 
     // ------------------------------------------------------------------ 查询
@@ -68,27 +86,7 @@ public class SpaceServiceImpl implements SpaceService {
     @Override
     public PageResult<SpaceListVO> page(SpacePageQuery query) {
         long begin = System.nanoTime();
-        LambdaQueryWrapper<BizSpace> wrapper = new LambdaQueryWrapper<>();
-        if (hasText(query.getSpaceName())) {
-            wrapper.like(BizSpace::getSpaceName, query.getSpaceName().trim());
-        }
-        if (hasText(query.getLocation())) {
-            wrapper.like(BizSpace::getLocation, query.getLocation().trim());
-        }
-        if (query.getSpaceType() != null) {
-            wrapper.eq(BizSpace::getSpaceType, query.getSpaceType());
-        }
-        if (query.getStatus() != null) {
-            wrapper.eq(BizSpace::getStatus, query.getStatus());
-        }
-        if (query.getMinCapacity() != null) {
-            wrapper.ge(BizSpace::getCapacity, query.getMinCapacity());
-        }
-        if (query.getMaxCapacity() != null) {
-            wrapper.le(BizSpace::getCapacity, query.getMaxCapacity());
-        }
-        applySort(wrapper, query);
-
+        LambdaQueryWrapper<BizSpace> wrapper = buildWrapper(query);
         Page<BizSpace> page = spaceMapper.selectPage(PageUtils.toPage(query), wrapper);
         List<SpaceListVO> records = page.getRecords().stream().map(this::toListVO).toList();
         log.info("[场地分页] 完成：操作人={}, 页码={}, 页大小={}, 条件=[{}], 命中总数={}, 返回行数={}, 耗时={}ms",
@@ -147,9 +145,86 @@ public class SpaceServiceImpl implements SpaceService {
                 default -> log.warn("[场地统计] 未知状态不参与分档：status={}, cnt={}", status, cnt);
             }
         }
-        log.info("[场地统计] 完成：操作人={}, 总数={}, 可用={}, 维护中={}, 停用={}",
-                SecurityUtils.currentUserId(), available + maintaining + closed, available, maintaining, closed);
-        return new SpaceStatsVO(available + maintaining + closed, available, maintaining, closed);
+        List<SpaceStatsVO.TypeCountVO> typeDistribution = new ArrayList<>();
+        for (Map<String, Object> row : spaceMapper.countGroupByType()) {
+            String type = String.valueOf(row.get("space_type"));
+            SpaceType spaceType = SpaceType.valueOf(type);
+            typeDistribution.add(new SpaceStatsVO.TypeCountVO(
+                    type, spaceType.getDisplayName(), ((Number) row.get("cnt")).longValue()));
+        }
+        log.info("[场地统计] 完成：操作人={}, 总数={}, 可用={}, 维护中={}, 停用={}, 类型分布={}",
+                SecurityUtils.currentUserId(), available + maintaining + closed, available, maintaining, closed,
+                typeDistribution);
+        return new SpaceStatsVO(available + maintaining + closed, available, maintaining, closed, typeDistribution);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SpaceBatchStatusVO batchStatus(SpaceBatchStatusDTO dto) {
+        Long operatorId = SecurityUtils.currentUserId();
+        SpaceStatus target = dto.target();
+        if (target != SpaceStatus.AVAILABLE && target != SpaceStatus.CLOSED) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(),
+                    "批量操作仅支持启用（AVAILABLE）或停用（CLOSED）");
+        }
+        log.info("[场地批量{}] 开始：操作人={}, 目标状态={}, 场地ID={}",
+                target == SpaceStatus.AVAILABLE ? "启用" : "停用", operatorId, target, dto.ids());
+
+        List<String> missing = new ArrayList<>();
+        int updated = 0;
+        for (Long id : dto.ids()) {
+            BizSpace space = spaceMapper.selectById(id);
+            if (space == null) {
+                missing.add(String.valueOf(id));
+                log.warn("[场地批量] 场地不存在或已删除，跳过：操作人={}, 场地ID={}", operatorId, id);
+                continue;
+            }
+            if (space.getStatus() == target) {
+                continue;
+            }
+            int rows = spaceMapper.update(null, new LambdaUpdateWrapper<BizSpace>()
+                    .eq(BizSpace::getId, id)
+                    .set(BizSpace::getStatus, target)
+                    .set(BizSpace::getUpdateUserId, operatorId));
+            if (rows > 0) {
+                updated++;
+                log.info("[场地批量{}] 单场地完成：操作人={}, 场地ID={}, 名称={}, 原状态={} → 新状态={}",
+                        target == SpaceStatus.AVAILABLE ? "启用" : "停用",
+                        operatorId, id, space.getSpaceName(), space.getStatus(), target);
+            }
+        }
+        log.info("[场地批量{}] 完成：操作人={}, 目标状态={}, 提交数={}, 成功数={}, 未命中={}",
+                target == SpaceStatus.AVAILABLE ? "启用" : "停用", operatorId, target,
+                dto.ids().size(), updated, missing);
+        return new SpaceBatchStatusVO(updated, missing);
+    }
+
+    @Override
+    public byte[] exportCsv(SpacePageQuery query) {
+        long begin = System.nanoTime();
+        // 与分页同条件导出；上限保护防全表扫描
+        LambdaQueryWrapper<BizSpace> wrapper = buildWrapper(query);
+        wrapper.last("LIMIT 10000");
+        List<BizSpace> spaces = spaceMapper.selectList(wrapper);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append('\ufeff'); // UTF-8 BOM：Excel 识别中文表头
+        sb.append("场地名称,类型,位置,容纳人数,开放时段,状态,配套设备,创建时间(上海),更新时间(上海)\r\n");
+        for (BizSpace s : spaces) {
+            sb.append(csv(s.getSpaceName())).append(',')
+                    .append(csv(s.getSpaceType() == null ? null : s.getSpaceType().getDisplayName())).append(',')
+                    .append(csv(s.getLocation())).append(',')
+                    .append(s.getCapacity()).append(',')
+                    .append(formatTime(s.getOpenStart())).append('~').append(formatTime(s.getOpenEnd())).append(',')
+                    .append(csv(s.getStatus() == null ? null : s.getStatus().getDisplayName())).append(',')
+                    .append(csv(s.getFacilities())).append(',')
+                    .append(csv(formatDateTime(s.getCreateTime()))).append(',')
+                    .append(csv(formatDateTime(s.getUpdateTime()))).append("\r\n");
+        }
+        log.info("[场地导出] 完成：操作人={}, 条件=[{}], 导出行数={}, 耗时={}ms",
+                SecurityUtils.currentUserId(), buildFilterSummary(query), spaces.size(),
+                (System.nanoTime() - begin) / 1_000_000);
+        return sb.toString().getBytes(StandardCharsets.UTF_8);
     }
 
     // ------------------------------------------------------------------ 写入
@@ -266,13 +341,20 @@ public class SpaceServiceImpl implements SpaceService {
 
         BizSpace space = requireSpace(id);
 
-        // 删除前引用检查：LAB 级数据范围授权；下游模块（预约/资产/物料）落地后在此追加
+        // 删除前引用检查：LAB 级数据范围授权、未结预约与未释放占用；资产模块落地后追加
         List<String> conflicts = new ArrayList<>();
         long scopeCount = spaceMapper.countLabScopeBySpaceId(id);
         if (scopeCount > 0) {
             conflicts.add("存在 " + scopeCount + " 条 LAB 级数据范围授权，请先解除");
         }
-        // TODO 预约模块：lab_booking 未结束预约、lab_slot 未释放占用
+        long activeBookings = bookingMapper.countActiveByLabId(id);
+        if (activeBookings > 0) {
+            conflicts.add("存在 " + activeBookings + " 条未结预约（待审批/已批准），请先处理");
+        }
+        long unreleasedSlots = slotMapper.countUnreleasedByLabId(id);
+        if (unreleasedSlots > 0) {
+            conflicts.add("存在 " + unreleasedSlots + " 条未释放场地占用，请先取消对应预约");
+        }
         // TODO 资产模块：equipment_asset / stock_location 启用记录
         if (!conflicts.isEmpty()) {
             log.warn("[场地删除] 存在未结业务引用，拒绝删除：操作人={}, 场地ID={}, 名称={}, 冲突项=[{}]",
@@ -291,6 +373,46 @@ public class SpaceServiceImpl implements SpaceService {
     }
 
     // ------------------------------------------------------------- 组装/辅助
+
+    /** 分页/导出共用的查询条件组装 */
+    private LambdaQueryWrapper<BizSpace> buildWrapper(SpacePageQuery query) {
+        LambdaQueryWrapper<BizSpace> wrapper = new LambdaQueryWrapper<>();
+        if (hasText(query.getSpaceName())) {
+            wrapper.like(BizSpace::getSpaceName, query.getSpaceName().trim());
+        }
+        if (hasText(query.getLocation())) {
+            wrapper.like(BizSpace::getLocation, query.getLocation().trim());
+        }
+        if (query.getSpaceType() != null) {
+            wrapper.eq(BizSpace::getSpaceType, query.getSpaceType());
+        }
+        if (query.getStatus() != null) {
+            wrapper.eq(BizSpace::getStatus, query.getStatus());
+        }
+        if (query.getMinCapacity() != null) {
+            wrapper.ge(BizSpace::getCapacity, query.getMinCapacity());
+        }
+        if (query.getMaxCapacity() != null) {
+            wrapper.le(BizSpace::getCapacity, query.getMaxCapacity());
+        }
+        applySort(wrapper, query);
+        return wrapper;
+    }
+
+    /** CSV 字段转义：含逗号/引号/换行时整体加引号，内部引号翻倍 */
+    private String csv(String field) {
+        if (field == null) {
+            return "";
+        }
+        if (field.contains(",") || field.contains("\"") || field.contains("\n") || field.contains("\r")) {
+            return "\"" + field.replace("\"", "\"\"") + "\"";
+        }
+        return field;
+    }
+
+    private String formatDateTime(Instant time) {
+        return time == null ? "" : EXPORT_TIME.format(time);
+    }
 
     private SpaceListVO toListVO(BizSpace s) {
         return new SpaceListVO(

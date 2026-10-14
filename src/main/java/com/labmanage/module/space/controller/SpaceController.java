@@ -3,16 +3,21 @@ package com.labmanage.module.space.controller;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
+import com.labmanage.module.space.dto.SpaceBatchStatusDTO;
 import com.labmanage.module.space.dto.SpaceCreateDTO;
 import com.labmanage.module.space.dto.SpacePageQuery;
 import com.labmanage.module.space.dto.SpaceUpdateDTO;
 import com.labmanage.module.space.enums.SpaceType;
 import com.labmanage.module.space.service.SpaceService;
+import com.labmanage.module.space.vo.SpaceBatchStatusVO;
 import com.labmanage.module.space.vo.SpaceDetailVO;
 import com.labmanage.module.space.vo.SpaceListVO;
 import com.labmanage.module.space.vo.SpaceOptionVO;
 import com.labmanage.module.space.vo.SpaceStatsVO;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -24,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -44,6 +50,25 @@ public class SpaceController {
     @SaCheckPermission("space:space:list")
     public Result<PageResult<SpaceListVO>> page(@Valid @ModelAttribute SpacePageQuery query) {
         return Result.success(spaceService.page(query));
+    }
+
+    /** CSV 导出（与分页同条件；UTF-8 BOM，时间按上海时区展示） */
+    @GetMapping("/export")
+    @SaCheckPermission("space:space:list")
+    public ResponseEntity<byte[]> export(@Valid @ModelAttribute SpacePageQuery query) {
+        byte[] csv = spaceService.exportCsv(query);
+        String filename = "spaces_" + LocalDate.now() + ".csv";
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
+                .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                .body(csv);
+    }
+
+    /** 批量启停（target 仅 AVAILABLE/CLOSED；停用为危险操作，前端需二次确认） */
+    @PostMapping("/batch_status")
+    @SaCheckPermission("space:space:update")
+    public Result<SpaceBatchStatusVO> batchStatus(@Valid @RequestBody SpaceBatchStatusDTO dto) {
+        return Result.success(spaceService.batchStatus(dto));
     }
 
     @GetMapping("/options")
