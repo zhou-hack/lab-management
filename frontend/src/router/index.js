@@ -15,7 +15,14 @@ const staticRoutes = [
     component: () => import('@/views/error/NotFound.vue'),
     meta: { title: '页面不存在' }
   },
-  { path: '/:pathMatch(.*)*', redirect: '/404' }
+  // 兜底直接渲染 404 组件并保持原 URL：
+  // 若用 redirect:'/404'，未登录首访的动态路由地址会在守卫前被重写，登录后回不到目标页
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFoundCatchAll',
+    component: () => import('@/views/error/NotFound.vue'),
+    meta: { title: '页面不存在' }
+  }
 ]
 
 const APP_TITLE = '实验室设备管理系统'
@@ -39,7 +46,8 @@ router.beforeEach(async (to) => {
     try {
       await store.fetchUserMenus()
       await store.buildRoutes()
-      return { ...to, replace: true }
+      // 仅按 path+query 重解析：展开 to 会携带刷新前解析到的 catch-all name，导致 404
+      return { path: to.path, query: to.query, hash: to.hash, replace: true }
     } catch {
       // 拉取失败（含 401 已清理场景）：重置状态回登录页
       store.resetState()
