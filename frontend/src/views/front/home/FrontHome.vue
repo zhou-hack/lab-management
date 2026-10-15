@@ -1,126 +1,54 @@
 <template>
   <div class="front_home">
-    <!-- 渐变页头：白字标题 + 一行半透明副标题 + 右上角通知铃铛（规范 7.4） -->
-    <header class="hero">
-      <div class="hero__bar">
-        <div>
-          <div class="hero__hello t-hero-hello">
-            {{ greeting }}，{{ store.user?.realName || '同学' }}
-          </div>
-          <div class="hero__role">
-            {{ roleText }}
-          </div>
-        </div>
-        <button
-          class="hero__bell"
-          aria-label="通知"
-          @click="onNotify"
-        >
-          <el-icon><Bell /></el-icon>
-          <span
-            v-if="unread > 0"
-            class="badge"
-          />
-        </button>
+    <!-- 页头：问候 + 角色（纯排版，无渐变 hero） -->
+    <header class="front_home__header">
+      <div>
+        <h1 class="front_home__hello">
+          {{ greeting }}，{{ store.user?.realName || '同学' }}
+        </h1>
+        <p class="t-sub">
+          {{ roleText }} · 在线预约器材与场地，实时查看办理进度
+        </p>
       </div>
-      <p class="hero__sub">
-        实验室设备管理系统 · 在线预约器材与场地，实时查看办理进度
-      </p>
     </header>
 
-    <div class="front_home__body hero__overlap">
-      <!-- 快捷概览：三格指标，首卡上叠压进渐变区 -->
-      <section class="card overview">
-        <div
-          v-for="item in overview"
-          :key="item.label"
-          class="overview__cell"
+    <!-- 功能入口：桌面网格卡片 -->
+    <section class="front_home__section">
+      <h3 class="sechead">
+        常用功能
+      </h3>
+      <div class="front_home__grid">
+        <button
+          v-for="entry in entries"
+          :key="entry.name"
+          class="entry card"
+          :class="{ 'entry--disabled': !entry.path }"
+          type="button"
+          @click="go(entry)"
         >
-          <div class="overview__num t-num">
-            {{ item.value }}<span class="t-num__unit">{{ item.unit }}</span>
-          </div>
-          <div class="overview__label">
-            {{ item.label }}
-          </div>
-        </div>
-      </section>
-
-      <!-- 功能入口宫格：两列，42×42 图标容器 + 主副文案（规范 7.5） -->
-      <section class="front_home__section">
-        <h3 class="sechead">
-          常用功能
-        </h3>
-        <div class="entry_grid">
-          <button
-            v-for="entry in entries"
-            :key="entry.name"
-            class="entry"
-            type="button"
-            @click="go(entry.path)"
+          <span
+            class="icon_box"
+            :class="`icon_box--${entry.tone}`"
           >
-            <span
-              class="icon_box"
-              :class="`icon_box--${entry.tone}`"
-            >
-              <el-icon><component :is="entry.icon" /></el-icon>
-            </span>
-            <span class="entry__text">
-              <span class="entry__name">{{ entry.name }}</span>
-              <span class="entry__desc">{{ entry.desc }}</span>
-            </span>
-          </button>
-        </div>
-      </section>
+            <el-icon><component :is="entry.icon" /></el-icon>
+          </span>
+          <span class="entry__text">
+            <span class="entry__name">{{ entry.name }}</span>
+            <span class="entry__desc">{{ entry.desc }}</span>
+          </span>
+        </button>
+      </div>
+    </section>
 
-      <!-- 待办列表：白卡 + 0.5px 细线行分隔 -->
+    <div class="front_home__columns">
+      <!-- 待办：空态（接口接入前不展示虚构数据） -->
       <section class="front_home__section">
         <div class="card card--pad0">
           <div class="card__head">
             <span class="card__title">待我处理</span>
-            <span class="pill pill--brand">
-              {{ todos.length }} 项
-            </span>
           </div>
           <div class="card__body">
-            <template v-if="loading">
-              <div
-                v-for="n in 3"
-                :key="n"
-                class="skeleton skeleton__row"
-              />
-            </template>
-            <template v-else-if="todos.length">
-              <div
-                v-for="todo in todos"
-                :key="todo.id"
-                class="list_row"
-              >
-                <span
-                  class="icon_box icon_box--grad icon_box--lg"
-                  :class="`icon_box--${todo.tone}`"
-                >
-                  {{ todo.tag }}
-                </span>
-                <div class="list_row__main">
-                  <div class="list_row__title">
-                    {{ todo.title }}
-                  </div>
-                  <div class="list_row__meta">
-                    {{ todo.meta }}
-                  </div>
-                </div>
-                <span
-                  class="pill"
-                  :class="`pill--${todo.tone}`"
-                >
-                  {{ todo.status }}
-                </span>
-              </div>
-            </template>
-            <div
-              v-else
-              class="empty"
-            >
+            <div class="empty">
               <div class="empty__icon">
                 ✓
               </div>
@@ -132,40 +60,20 @@
         </div>
       </section>
 
-      <!-- 最近使用记录：键值对摘要 -->
+      <!-- 最近使用记录：空态 -->
       <section class="front_home__section">
-        <div class="card">
-          <div class="card__title front_home__cardtitle">
-            最近使用记录
+        <div class="card card--pad0">
+          <div class="card__head">
+            <span class="card__title">最近使用记录</span>
           </div>
-          <div class="list_row">
-            <span class="icon_box icon_box--grad icon_box--lg">A3</span>
-            <div class="list_row__main">
-              <div class="list_row__title">
-                数字示波器
+          <div class="card__body">
+            <div class="empty">
+              <div class="empty__icon">
+                ∅
               </div>
-              <div class="list_row__meta">
-                A3-实验楼 302<span class="dot">·</span>10-12 14:00 – 16:00
+              <div class="empty__text">
+                暂无使用记录
               </div>
-            </div>
-            <span class="pill pill--ok">已归还</span>
-          </div>
-          <div class="kv_row">
-            <div class="kv">
-              <span class="kv__label">借用器材</span>
-              <span class="kv__value">3 件</span>
-            </div>
-            <div class="kv">
-              <span class="kv__label">使用时长</span>
-              <span class="kv__value">2 小时</span>
-            </div>
-            <div class="kv">
-              <span class="kv__label">器材状态</span>
-              <span class="kv__value">完好</span>
-            </div>
-            <div class="kv">
-              <span class="kv__label">经办老师</span>
-              <span class="kv__value">李老师</span>
             </div>
           </div>
         </div>
@@ -175,17 +83,10 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import {
-  Bell,
-  Calendar,
-  Document,
-  Box,
-  Tools,
-  DataLine
-} from '@element-plus/icons-vue'
+import { Bell, Calendar, Document, Box, Tools, DataLine } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 
 const router = useRouter()
@@ -200,142 +101,110 @@ const greeting = computed(() => {
   return '晚上好'
 })
 
-const ROLE_TEXT = {
-  ADMIN: '管理员',
-  TEACHER: '教师',
-  STUDENT: '学生',
-  ASSISTANT: '教师助理'
-}
-const roleText = computed(
-  () => store.roles.map((r) => ROLE_TEXT[r] || r).join(' · ') || '实验室用户'
-)
+const ROLE_TEXT = { ADMIN: '管理员', TEACHER: '教师', STUDENT: '学生', ASSISTANT: '教师助理' }
+const roleText = computed(() => store.roles.map((r) => ROLE_TEXT[r] || r).join(' · ') || '实验室用户')
 
-const unread = ref(2)
-
-const overview = ref([
-  { label: '进行中预约', value: 1, unit: '项' },
-  { label: '待审批', value: 2, unit: '项' },
-  { label: '可用器材', value: 86, unit: '台' }
-])
-
+// 已落地的模块指向真实页面；未落地模块置灰（path 为空）
 const entries = [
-  { name: '器材借用', desc: '浏览并提交器材预约', icon: Tools, tone: 'brand', path: '/home' },
   { name: '场地预约', desc: '申请实验室使用时段', icon: Calendar, tone: 'ok', path: '/booking/labs' },
-  { name: '我的申请', desc: '查看审批进度与单据', icon: Document, tone: 'warn', path: '/booking/labs' },
-  { name: '物料代办', desc: '课前领用与课后回库', icon: Box, tone: 'muted', path: '/home' },
-  { name: '使用记录', desc: '借出归还与拍照留痕', icon: DataLine, tone: 'brand', path: '/home' }
+  { name: '我的申请', desc: '查看审批进度与单据', icon: Document, tone: 'brand', path: '/booking/labs' },
+  { name: '器材借用', desc: '浏览并提交器材预约', icon: Tools, tone: 'brand', path: '' },
+  { name: '物料代办', desc: '课前领用与课后回库', icon: Box, tone: 'muted', path: '' },
+  { name: '使用记录', desc: '借出归还与拍照留痕', icon: DataLine, tone: 'warn', path: '' },
+  { name: '通知消息', desc: '审批与催办提醒', icon: Bell, tone: 'ok', path: '' }
 ]
 
-const loading = ref(true)
-const todos = ref([])
-
-// 首页数据源接入前先用本地占位，接口就绪后替换为真实请求
-onMounted(() => {
-  setTimeout(() => {
-    todos.value = [
-      {
-        id: 1,
-        tag: '审',
-        title: '数字示波器 · 借用申请',
-        meta: 'A3-实验楼 302 · 10-15 09:00 起',
-        status: '待老师审批',
-        tone: 'warn'
-      },
-      {
-        id: 2,
-        tag: '借',
-        title: '万用表 · 已通过，待确认借出',
-        meta: 'A2-实验楼 105 · 请在时段内到场确认',
-        status: '待借出',
-        tone: 'brand'
-      },
-      {
-        id: 3,
-        tag: '还',
-        title: '函数信号发生器 · 待确认归还',
-        meta: 'A3-实验楼 302 · 10-14 16:00 前归还',
-        status: '待归还',
-        tone: 'danger'
-      }
-    ]
-    loading.value = false
-  }, 420)
-})
-
-function go(path) {
-  router.push(path)
-}
-
-function onNotify() {
-  unread.value = 0
-  ElMessage.success('暂无新的通知')
+function go(entry) {
+  if (!entry.path) {
+    ElMessage.info('该功能建设中，敬请期待')
+    return
+  }
+  router.push(entry.path)
 }
 </script>
 
 <style scoped>
-.front_home {
-  min-height: 100vh;
-  background: var(--bg);
-  padding-bottom: 24px;
+.front_home__header {
+  padding: 8px 2px 18px;
 }
 
-.hero__hello {
-  font-size: 19px;
+.front_home__hello {
+  margin: 0 0 4px;
+  font-size: 22px;
   font-weight: var(--fw-semibold);
-  color: #fff;
-}
-.hero__role {
-  margin-top: 3px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, .84);
+  color: var(--g1);
 }
 
-.front_home__body {
-  padding: 0 14px;
+.front_home__section {
+  margin-bottom: 18px;
 }
 
-/* 概览三格：等分 + 单元格间发丝线 */
-.overview {
+/* 功能入口：桌面三列网格，卡片悬浮描边变蓝 */
+.front_home__grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  padding: 16px 6px;
+  gap: 12px;
 }
-.overview__cell {
-  text-align: center;
-  padding: 0 4px;
+
+.entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
 }
-.overview__cell + .overview__cell {
-  border-left: .5px solid var(--hair);
+
+.entry:not(.entry--disabled):hover {
+  border-color: var(--hair-brand);
+  transform: translateY(-2px);
 }
-.overview__num {
-  font-size: 24px;
+
+.entry:not(.entry--disabled):active {
+  transform: scale(.98);
 }
-.overview__label {
-  margin-top: 2px;
+
+.entry--disabled {
+  opacity: .55;
+  cursor: default;
+}
+
+.entry__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.entry__name {
+  font-size: 14.5px;
+  font-weight: var(--fw-medium);
+  color: var(--g1);
+}
+
+.entry__desc {
   font-size: 12px;
   color: var(--g3);
 }
 
-.front_home__section {
-  margin-top: 18px;
+/* 下半区双列 */
+.front_home__columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 
 .card--pad0 {
   padding: 0;
 }
+
 .card--pad0 .card__body {
   padding: 4px 18px 8px;
 }
 
-.front_home__cardtitle {
-  margin-bottom: 12px;
-  font-size: 15px;
-  font-weight: var(--fw-semibold);
-  color: var(--g1);
-}
-
-.skeleton__row {
-  height: 46px;
-  margin: 8px 0;
+@media (max-width: 900px) {
+  .front_home__grid { grid-template-columns: repeat(2, 1fr); }
+  .front_home__columns { grid-template-columns: 1fr; }
 }
 </style>
