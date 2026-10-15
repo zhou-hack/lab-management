@@ -46,7 +46,7 @@
 
 ## 数据库与实体（Final）
 
-- Schema 以 [docs/数据库设计.md](docs/数据库设计.md)（评审稿 v1.0）为准；建表脚本按模块放 `sql/`，RBAC 已定稿为 [sql/sys_rbac.sql](sql/sys_rbac.sql)（11 张表：部门、名单、用户、角色、权限、菜单、三组关联、数据范围、预约限制）。后续模块脚本按实施分组 A→E 补充，不另行设计。
+- Schema 以 [docs/数据库设计.md](docs/数据库设计.md)（评审稿 v1.1）为准；建表脚本按模块放 `sql/`，RBAC 已定稿为 [sql/sys_rbac.sql](sql/sys_rbac.sql)（11 张表：部门、名单、用户、角色、权限、菜单、三组关联、数据范围、预约限制）。后续模块脚本按实施分组 A→E 补充，不另行设计。
 - 主键统一雪花 ID：`BIGINT`（MyBatis-Plus `ASSIGN_ID`），接口序列化为字符串，避免 JavaScript 精度损失；关联字段同类型。初始数据使用固定小 ID（如角色 1-4、管理员 1），与雪花 ID 不冲突。
 - 公共字段：`id/create_time/update_time/deleted/create_user_id/update_user_id`；当前 `BaseEntity` 已覆盖前四项，后续接入数据库时补齐操作者字段。`version` 仅余额等需并发控制的可变表使用，从 0 起条件更新递增。
 - 时间列 `DATETIME(3)` 存 UTC，列默认值 `UTC_TIMESTAMP(3)`；会话 `+00:00` 时 `ON UPDATE CURRENT_TIMESTAMP(3)` 即 UTC。

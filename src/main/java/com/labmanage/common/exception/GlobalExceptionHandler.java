@@ -4,7 +4,10 @@ import cn.dev33.satoken.exception.NotLoginException;
 import cn.dev33.satoken.exception.NotPermissionException;
 import com.labmanage.common.result.Result;
 import com.labmanage.common.result.ResultCode;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ConstraintViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
@@ -24,13 +27,30 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     /**
-     * 业务异常
+     * 业务异常：HTTP 状态按错误码映射（40000→400、40100→401、40300→403、
+     * 40400→404、50000→500，其余/空→409），保证 HTTP 状态反映真实结果。
      */
     @ExceptionHandler(BusinessException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    public Result<Void> handleBusinessException(BusinessException e) {
+    public Result<Void> handleBusinessException(BusinessException e, HttpServletResponse response) {
+        response.setStatus(toHttpStatus(e.getCode()));
         return Result.error(e.getCode(), e.getMessage());
+    }
+
+    private int toHttpStatus(Integer code) {
+        if (code == null) {
+            return HttpStatus.CONFLICT.value();
+        }
+        return switch (code) {
+            case 40000 -> HttpStatus.BAD_REQUEST.value();
+            case 40100 -> HttpStatus.UNAUTHORIZED.value();
+            case 40300 -> HttpStatus.FORBIDDEN.value();
+            case 40400 -> HttpStatus.NOT_FOUND.value();
+            case 50000 -> HttpStatus.INTERNAL_SERVER_ERROR.value();
+            default -> HttpStatus.CONFLICT.value();
+        };
     }
 
     /**
@@ -114,11 +134,12 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 其他未捕获异常
+     * 其他未捕获异常：记录堆栈便于排查，响应不泄露内部实现
      */
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<Void> handleException(Exception e) {
+        log.error("[系统异常] 未捕获异常：{} - {}", e.getClass().getSimpleName(), e.getMessage(), e);
         return Result.error(ResultCode.INTERNAL_ERROR.getCode(), ResultCode.INTERNAL_ERROR.getMsg());
     }
 }

@@ -4,12 +4,11 @@ import router from '@/router'
 /**
  * 本地组件白名单：sys_menu.component_key → 本地视图组件与归属布局（admin/front）。
  * 禁止直接执行后端下发的组件路径或代码；未命中白名单的菜单项跳过并告警。
- *
- * 业务页面落地时在此登记真实组件（布局按页面形态选择）：
- *   SystemUser: { layout: 'admin', load: () => import('@/views/admin/system/UserManage.vue') }
- * 系统管理页面建设中，暂以占位页注册，逐页替换。
+ * component_key 统一大驼峰，与 sql 脚本中 sys_menu.component_key 一一对应；
+ * 业务页面落地时在此登记真实组件（布局按页面形态选择）。
  */
 const viewModules = {
+  // system 模块（用户管理已落地，其余占位页逐页替换）
   SystemUser: { layout: 'admin', load: () => import('@/views/admin/system/SystemUser.vue') },
   SystemRoster: { layout: 'admin', load: PlaceholderView },
   SystemDepartment: { layout: 'admin', load: PlaceholderView },
@@ -19,7 +18,19 @@ const viewModules = {
   SystemLog: { layout: 'admin', load: PlaceholderView },
   SystemPolicy: { layout: 'admin', load: PlaceholderView },
   SystemGrantAudit: { layout: 'admin', load: PlaceholderView },
-  GrantManage: { layout: 'admin', load: PlaceholderView }
+  GrantManage: { layout: 'admin', load: PlaceholderView },
+  // space 模块
+  SpaceLabList: { layout: 'admin', load: () => import('@/views/admin/space/LabList.vue') },
+  // booking 模块
+  BookingAdminList: { layout: 'admin', load: () => import('@/views/admin/booking/BookingList.vue') },
+  BookingApproval: { layout: 'admin', load: () => import('@/views/admin/booking/BookingApproval.vue') },
+  BookingUserList: { layout: 'front', load: () => import('@/views/booking/BookingList.vue') },
+  // equipment 模块
+  EquipmentCategory: { layout: 'admin', load: () => import('@/views/admin/equipment/CategoryManage.vue') },
+  EquipmentModel: { layout: 'admin', load: () => import('@/views/admin/equipment/ModelManage.vue') },
+  EquipmentAsset: { layout: 'admin', load: () => import('@/views/admin/equipment/AssetManage.vue') },
+  // item 模块（单工作台形态，内部分页签）
+  ItemWorkspace: { layout: 'admin', load: () => import('@/views/item/ItemWorkspace.vue') }
 }
 
 const addedRouteNames = []

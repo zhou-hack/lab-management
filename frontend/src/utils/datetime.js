@@ -1,7 +1,10 @@
 /**
  * 时间工具：业务时区 Asia/Shanghai，传输与存储统一 UTC。
- * - formatInstant：后端 UTC 时间点（ISO 字符串 / Date）→ 上海展示 'YYYY-MM-DD HH:mm:ss'
- * - toUtcIso：选择器上海墙钟值（'YYYY-MM-DD HH:mm:ss'）→ UTC ISO 字符串提交后端
+ * - formatInstant：后端 UTC 时间点（ISO 字符串 / Date）→ 上海展示
+ * - formatRange：起止时间点 → 上海展示区间
+ * - formatShanghaiDate：UTC 时间点 → 上海日期 'YYYY-MM-DD'
+ * - toUtcIso：上海墙钟值（'YYYY-MM-DD[ HH:mm[:ss]]'）→ UTC ISO 字符串提交后端
+ * - shanghaiLocalToIso：上海日期 + 时间 → 带 +08:00 偏移 ISO 提交后端
  * - shanghaiDayRange：上海自然日 → { startUtc, endUtc }（[当日零点, 次日零点)，UTC ISO）
  * 禁止把无偏移量字符串直接交给 new Date 解析展示；偏移量通过 Intl 显式计算，不手写 +8。
  */
@@ -39,13 +42,36 @@ function shanghaiOffsetMs(date) {
   return asUtc - floored
 }
 
-/** UTC 时间点 → 上海展示 'YYYY-MM-DD HH:mm:ss'；无效输入返回空串 */
-export function formatInstant(instant) {
-  if (!instant) return ''
-  const date = instant instanceof Date ? instant : new Date(instant)
-  if (Number.isNaN(date.getTime())) return ''
+/** 输入（ISO 字符串 / Date）解析为 Date；非法返回 null */
+function parseInstant(value) {
+  if (!value) return null
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+/**
+ * UTC 时间点 → 上海本地显示串，默认 'YYYY-MM-DD HH:mm'。
+ * @param {string|Date} value ISO 8601（Z 或带偏移）或 Date
+ * @param {{ withDate?: boolean, withSeconds?: boolean }} opts
+ */
+export function formatInstant(value, opts = {}) {
+  const { withDate = true, withSeconds = false } = opts
+  const date = parseInstant(value)
+  if (!date) return ''
   const p = shanghaiParts(date)
-  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`
+  const time = `${p.hour}:${p.minute}${withSeconds ? `:${p.second}` : ''}`
+  return withDate ? `${p.year}-${p.month}-${p.day} ${time}` : time
+}
+
+/** 起止时间点 → 上海本地展示区间（同日省略第二个日期，如「10-14 08:00 ~ 10:00」） */
+export function formatRange(startAt, endAt) {
+  const s = formatInstant(startAt)
+  const e = formatInstant(endAt)
+  if (!s || !e) return `${s} ~ ${e}`.trim()
+  if (s.slice(0, 10) === e.slice(0, 10)) {
+    return `${s} ~ ${e.slice(11)}`
+  }
+  return `${s} ~ ${e}`
 }
 
 /** UTC 时间点 → 上海日期 'YYYY-MM-DD' */
@@ -71,9 +97,18 @@ export function toUtcIso(local) {
 }
 
 /**
- * 上海自然日（'YYYY-MM-DD'）→ { startUtc, endUtc }：[当日零点, 次日零点) 的 UTC ISO。
- * 后端按此做 >= startUtc AND < endUtc 查询。
+ * 上海本地日期（YYYY-MM-DD）+ 时间（HH:mm）→ 带 +08:00 偏移 ISO 8601 提交后端。
+ * 后端 OffsetDateTime 解析后转 UTC 存储；缺参或格式非法返回 null。
  */
+export function shanghaiLocalToIso(date, time) {
+  if (!date || !time) return null
+  const [y, mo, d] = String(date).split('-').map(Number)
+  const [h, mi] = String(time).split(':').map(Number)
+  if ([y, mo, d, h, mi].some((n) => Number.isNaN(n))) return null
+  return `${y}-${pad(mo)}-${pad(d)}T${pad(h)}:${pad(mi)}:00+08:00`
+}
+
+/** 上海自然日（'YYYY-MM-DD'）→ { startUtc, endUtc }：[当日零点, 次日零点) 的 UTC ISO。 */
 export function shanghaiDayRange(dateStr) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((dateStr || '').trim())
   if (!m) {
@@ -85,4 +120,27 @@ export function shanghaiDayRange(dateStr) {
     startUtc: toUtcIso(`${m[1]}-${m[2]}-${m[3]} 00:00:00`),
     endUtc: toUtcIso(`${nextStr} 00:00:00`)
   }
+}
+
+/** 当前上海本地日期（YYYY-MM-DD） */
+export function todayShanghai() {
+  const p = shanghaiParts(new Date())
+  return `${p.year}-${p.month}-${p.day}`
+}
+
+/** 上海本地日期加减天数（YYYY-MM-DD），n 可为负 */
+export function addDaysShanghai(dateStr, n) {
+  const [y, mo, d] = String(dateStr).split('-').map(Number)
+  const ms = Date.UTC(y, mo - 1, d) + n * 86_400_000
+  const t = new Date(ms)
+  return `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}`
+}
+
+/** 两个上海本地 HH:mm 的分钟差（b - a），跨零点按负值处理（仅当日场景）。 */
+export function minutesBetween(timeA, timeB) {
+  const toMin = (t) => {
+    const [h, m] = String(t).split(':').map(Number)
+    return h * 60 + m
+  }
+  return toMin(timeB) - toMin(timeA)
 }
