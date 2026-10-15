@@ -78,31 +78,32 @@
       <template v-else-if="groups.length">
         <div
           v-for="group in groups"
-          :key="group.departmentId"
+          :key="group.modelId"
           class="equip_group"
-          :class="{ 'equip_group--collapsed': !expanded[group.departmentId] }"
+          :class="{ 'equip_group--collapsed': !expanded[group.modelId] }"
         >
           <div
             class="equip_group__head"
             role="button"
             tabindex="0"
-            @click="toggleGroup(group.departmentId)"
-            @keydown.enter.prevent="toggleGroup(group.departmentId)"
-            @keydown.space.prevent="toggleGroup(group.departmentId)"
+            @click="toggleGroup(group.modelId)"
+            @keydown.enter.prevent="toggleGroup(group.modelId)"
+            @keydown.space.prevent="toggleGroup(group.modelId)"
           >
             <el-icon class="equip_group__chevron">
               <ArrowDown />
             </el-icon>
             <span class="equip_group__icon">
               <el-icon :size="14">
-                <OfficeBuilding />
+                <Monitor />
               </el-icon>
             </span>
-            <span class="equip_group__name">{{ group.departmentName }}</span>
+            <span class="equip_group__name">{{ group.equipmentName }}</span>
+            <span class="equip_group__badge">{{ group.modelCode }}</span>
             <span class="equip_group__count">{{ group.assets.length }} 台资产</span>
           </div>
           <div
-            v-show="expanded[group.departmentId]"
+            v-show="expanded[group.modelId]"
             class="equip_group__body"
           >
             <div class="table-scroll-x">
@@ -113,11 +114,6 @@
                   min-width="110"
                 />
                 <el-table-column
-                  prop="equipmentName"
-                  label="设备名称"
-                  min-width="150"
-                />
-                <el-table-column
                   label="序列号"
                   min-width="110"
                 >
@@ -126,9 +122,9 @@
                   </template>
                 </el-table-column>
                 <el-table-column
-                  prop="modelCode"
-                  label="型号码"
-                  min-width="100"
+                  prop="departmentName"
+                  label="归口部门"
+                  min-width="110"
                 />
                 <el-table-column
                   prop="labName"
@@ -257,15 +253,6 @@
         </el-icon>
         暂无台账记录，请从「新增台账」开始登记
       </div>
-      <el-pagination
-        v-model:current-page="query.pageNum"
-        v-model:page-size="query.pageSize"
-        class="asset_manage__pager"
-        :total="total"
-        :page-sizes="[10, 20, 50, 100]"
-        layout="total, sizes, prev, pager, next"
-        @change="load"
-      />
     </div>
 
     <!-- 新增台账 -->
@@ -615,7 +602,7 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, Files, OfficeBuilding } from '@element-plus/icons-vue'
+import { ArrowDown, Files, Monitor } from '@element-plus/icons-vue'
 import {
   classifyAsset,
   createAsset,
@@ -632,7 +619,8 @@ import { EQUIPMENT_STATUS, EQUIPMENT_STATUS_OPTIONS, VALUE_LEVEL, enumMeta } fro
 
 /**
  * 设备台账段（EquipmentManage 折叠面板子组件）。
- * - 当前页记录按归口部门分组折叠展示，支持按部门筛选
+ * - 全量加载后按设备型号（modelId）分组折叠展示，组名显示去掉尾部型号段的设备名称 + 型号码徽章，
+ *   归口部门改为表格列展示；无分页，循环拉取直至收齐全部记录
  * - active 由父级面板展开状态驱动：首次展开才加载数据；收起时 DOM 保留、状态不丢失
  */
 const props = defineProps({
@@ -682,18 +670,15 @@ async function loadDepartmentOptions() {
   }
 }
 
-/* ---------------- 列表（按归口部门分组） ---------------- */
+/* ---------------- 列表（按设备型号分组，全量加载） ---------------- */
 
 const query = reactive({
-  pageNum: 1,
-  pageSize: 20,
   keyword: '',
   departmentId: null,
   labId: '',
   status: ''
 })
 const records = ref([])
-const total = ref(0)
 const loading = ref(false)
 
 function valueLevelMeta(row) {
@@ -702,16 +687,30 @@ function valueLevelMeta(row) {
     : { label: '待分类', pill: 'pill--danger' }
 }
 
-/** 当前页记录按归口部门分组（保持记录出现顺序） */
+/**
+ * 去掉设备名称尾部的 ASCII 型号段，如「企业级路由器 AR6120」→「企业级路由器」、
+ * 「服务器 2288H V5」→「服务器」；中文结尾的名称（如「86 寸触控一体机」「打线刀 110 型」）保持原样。
+ * 自末尾起连续剥离纯 ASCII 令牌，至少保留一个令牌；型号仍由型号码徽章标识。
+ */
+function shortEquipmentName(name) {
+  const tokens = String(name || '').trim().split(/\s+/).filter(Boolean)
+  while (tokens.length > 1 && /^[\x20-\x7e]+$/.test(tokens[tokens.length - 1])) {
+    tokens.pop()
+  }
+  return tokens.join(' ')
+}
+
+/** 记录按设备型号分组：以 modelId 为唯一键严格归类，组名与徽章取同组行内一致的型号信息 */
 const groups = computed(() => {
   const order = []
   const map = new Map()
   for (const row of records.value) {
-    const key = String(row.departmentId ?? 'none')
+    const key = String(row.modelId ?? 'none')
     if (!map.has(key)) {
       map.set(key, {
-        departmentId: key,
-        departmentName: row.departmentName || '未分配',
+        modelId: key,
+        equipmentName: shortEquipmentName(row.equipmentName) || '未知设备',
+        modelCode: row.modelCode || '—',
         assets: []
       })
       order.push(key)
@@ -728,8 +727,8 @@ watch(
   groups,
   (list) => {
     for (const group of list) {
-      if (!(group.departmentId in expanded)) {
-        expanded[group.departmentId] = true
+      if (!(group.modelId in expanded)) {
+        expanded[group.modelId] = true
       }
     }
   },
@@ -740,26 +739,38 @@ function toggleGroup(key) {
   expanded[key] = !expanded[key]
 }
 
+/** 全量加载：后端 pageSize 上限 100，循环翻页直至收齐 total 条 */
 async function load() {
   loading.value = true
   try {
-    const params = { pageNum: query.pageNum, pageSize: query.pageSize }
+    const base = { pageSize: 100 }
     if (query.keyword.trim()) {
-      params.keyword = query.keyword.trim()
+      base.keyword = query.keyword.trim()
     }
     if (query.departmentId) {
-      params.departmentId = query.departmentId
+      base.departmentId = query.departmentId
     }
     if (query.labId) {
-      params.labId = query.labId
+      base.labId = query.labId
     }
     if (query.status) {
-      params.status = query.status
+      base.status = query.status
     }
-    const data = await pageAssets(params)
-    records.value = data.records || []
-    total.value = data.total || 0
-    emit('count', total.value)
+    const all = []
+    let total = Infinity
+    let pageNum = 1
+    while (all.length < total) {
+      const data = await pageAssets({ ...base, pageNum })
+      const batch = data.records || []
+      all.push(...batch)
+      total = data.total || 0
+      pageNum += 1
+      if (!batch.length) {
+        break
+      }
+    }
+    records.value = all
+    emit('count', all.length)
   } catch {
     // 失败提示由请求拦截器统一处理
   } finally {
@@ -768,7 +779,6 @@ async function load() {
 }
 
 function search() {
-  query.pageNum = 1
   load()
 }
 
@@ -1045,11 +1055,6 @@ watch(
 /* 提高选择器特异性以覆盖 .el-button + .el-button 的相邻 margin */
 .asset_manage__toolbar .asset_manage__toolbar_action {
   margin-left: auto;
-}
-
-.asset_manage__pager {
-  margin-top: 14px;
-  justify-content: flex-end;
 }
 
 .asset_manage__alert {
