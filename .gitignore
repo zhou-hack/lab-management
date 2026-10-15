@@ -25,6 +25,9 @@ dependency-reduced-pom.xml
 buildNumber.properties
 
 # ---------- IDE ----------
+# Trae IDE 状态目录
+.trae/
+
 # IntelliJ IDEA
 .idea/
 *.iml
@@ -58,6 +61,7 @@ replay_pid*
 # ---------- 测试与覆盖率 ----------
 coverage/
 *.lcov
+dontUpload/
 
 # ---------- 前端缓存 ----------
 node_modules/.vite/
@@ -77,3 +81,9 @@ $RECYCLE.BIN/
 *.swp
 *.swo
 *~
+
+# ---------- 本地工具链（便携版 JDK/Node/Git，勿提交） ----------
+tools/
+
+# 本地下载的脚本副本（勿提交）
+lab_management_all(*).sql

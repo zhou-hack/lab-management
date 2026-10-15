@@ -8,9 +8,11 @@ import com.labmanage.roles.dto.PasswordUpdateDTO;
 import com.labmanage.roles.dto.SmsLoginDTO;
 import com.labmanage.roles.dto.SmsSendDTO;
 import com.labmanage.roles.service.AuthService;
+import com.labmanage.roles.support.PasswordCryptoService;
 import com.labmanage.roles.vo.ConfirmVO;
 import com.labmanage.roles.vo.LoginVO;
 import com.labmanage.roles.vo.ProfileVO;
+import com.labmanage.roles.vo.PublicKeyVO;
 import com.labmanage.roles.vo.SmsSendVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -32,8 +34,17 @@ public class AuthController {
 
     private final AuthService authService;
 
-    public AuthController(AuthService authService) {
+    private final PasswordCryptoService passwordCryptoService;
+
+    public AuthController(AuthService authService, PasswordCryptoService passwordCryptoService) {
         this.authService = authService;
+        this.passwordCryptoService = passwordCryptoService;
+    }
+
+    @Operation(summary = "口令传输加密公钥（登录/改密前获取，密文上传）")
+    @GetMapping("/public_key")
+    public Result<PublicKeyVO> publicKey() {
+        return Result.success(new PublicKeyVO(passwordCryptoService.publicKeyBase64()));
     }
 
     @Operation(summary = "账号密码登录（管理员）")

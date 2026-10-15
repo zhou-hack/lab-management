@@ -1,0 +1,68 @@
+package com.labmanage.module.equipment.dto;
+
+import com.labmanage.common.core.BasePageQuery;
+import com.labmanage.module.equipment.enums.EquipmentStatus;
+
+/**
+ * 设备台账分页查询参数
+ * <p>
+ * 无台账维护权限的请求由服务端强制收敛为「在架」目录视图
+ * （status = IDLE 且启用）。
+ */
+public class AssetPageQuery extends BasePageQuery {
+
+    /** 关键字（资产编号/序列号/名称模糊匹配） */
+    private String keyword;
+
+    /** 保管实验室过滤 */
+    private Long labId;
+
+    /** 归口部门过滤 */
+    private Long departmentId;
+
+    /** 型号过滤 */
+    private Long modelId;
+
+    /** 状态过滤（仅维护权限者生效） */
+    private EquipmentStatus status;
+
+    public String getKeyword() {
+        return keyword;
+    }
+
+    public void setKeyword(String keyword) {
+        this.keyword = keyword;
+    }
+
+    public Long getLabId() {
+        return labId;
+    }
+
+    public void setLabId(Long labId) {
+        this.labId = labId;
+    }
+
+    public Long getDepartmentId() {
+        return departmentId;
+    }
+
+    public void setDepartmentId(Long departmentId) {
+        this.departmentId = departmentId;
+    }
+
+    public Long getModelId() {
+        return modelId;
+    }
+
+    public void setModelId(Long modelId) {
+        this.modelId = modelId;
+    }
+
+    public EquipmentStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(EquipmentStatus status) {
+        this.status = status;
+    }
+}

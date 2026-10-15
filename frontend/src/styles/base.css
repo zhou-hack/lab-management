@@ -1,6 +1,7 @@
 /* ==========================================================================
-   全局基础样式：reset、原子类、通用组件类、响应式与触摸端规则
-   （断点：sm 480 / md 768 / lg 1024 / xl 1280 / 2xl 1600 / 1920）
+   全局基础样式：reset、原子类、通用组件类、动效与桌面断点规则
+   （断点：md 768 / lg 1024 / xl 1280 / 2xl 1600；桌面端专用，无移动形态）
+   ——《UI设计规范》v2.0 第 4/5/6/7/9/10 节
    ========================================================================== */
 
 #app {
@@ -26,6 +27,13 @@ a {
   color: var(--g1);
   font-variant-numeric: tabular-nums;
 }
+/* 单位跟随数字，不与数字同字号 */
+.t-num__unit {
+  margin-left: 3px;
+  font-size: 13px;
+  font-weight: var(--fw-regular);
+  color: var(--g3);
+}
 
 /* ---------- 卡片（规范 7.1：18px 圆角 + 0.5px 细线，无阴影） ---------- */
 .card {
@@ -34,10 +42,45 @@ a {
   border: .5px solid var(--hair);
   padding: 22px;
 }
+.card--hover {
+  transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
 .card--hover:hover {
   border-color: var(--hair-brand);
   transform: translateY(-2px);
-  transition: all var(--dur) var(--ease);
+}
+/* 卡片头：标题 + 右侧操作，底部 0.5px 细线分隔（规范 7.1） */
+.card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 20px;
+  border-bottom: .5px solid var(--hair);
+}
+.card__head > .card__title {
+  font-size: 15px;
+  font-weight: var(--fw-semibold);
+  color: var(--g1);
+}
+.card__body { padding: 18px 22px; }
+
+/* ---------- 分节标题 .sechead（规范第 4 节：14.5px · 600 · g1） ---------- */
+.sechead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 10px;
+  font-size: 14.5px;
+  font-weight: var(--fw-semibold);
+  color: var(--g1);
+}
+.sechead__more {
+  font-size: 12.5px;
+  font-weight: var(--fw-regular);
+  color: var(--g3);
+  cursor: pointer;
 }
 
 /* ---------- 状态胶囊（规范 7.3） ---------- */
@@ -50,6 +93,7 @@ a {
   border-radius: var(--r-full);
   font-size: 12px;
   line-height: 1;
+  white-space: nowrap;
 }
 .pill::before {
   content: '';
@@ -64,10 +108,76 @@ a {
 .pill--danger { color: var(--danger); background: var(--danger-bg); }
 .pill--muted  { color: var(--muted);  background: var(--muted-bg); }
 
+/* ---------- 语义图标容器（规范第 8 节：42–44px 圆角方块 + 10% 浅底） ---------- */
+.icon_box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: var(--brand-a08);
+  color: var(--brand);
+  font-size: 18px;
+  font-weight: var(--fw-semibold);
+}
+.icon_box--lg { width: 44px; height: 44px; border-radius: 13px; font-size: 15px; }
+.icon_box--ok     { background: var(--ok-bg);     color: var(--ok); }
+.icon_box--warn   { background: var(--warn-bg);   color: var(--warn); }
+.icon_box--danger { background: var(--danger-bg); color: var(--danger); }
+.icon_box--muted  { background: var(--muted-bg);  color: var(--muted); }
+
+/* ---------- 空态（规范 7.8：60px 上下留白，g4 图标 + 13px·g3 文案） ---------- */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 60px 20px;
+  text-align: center;
+}
+.empty__icon { font-size: 44px; line-height: 1; color: var(--g4); }
+.empty__text { font-size: 13px; color: var(--g3); }
+
+/* ---------- 骨架屏（规范 7.8：段落色 surface-sunken） ---------- */
+.skeleton {
+  background: var(--surface-sunken);
+  border-radius: var(--r-xs);
+  position: relative;
+  overflow: hidden;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .72), transparent);
+  transform: translateX(-100%);
+  animation: skeleton_sweep 1.4s var(--ease) infinite;
+}
+@keyframes skeleton_sweep {
+  to { transform: translateX(100%); }
+}
+
+/* ---------- 光泽扫过 .sweep（规范第 9 节：105° 白渐变带 0.7s 横扫） ---------- */
+.sweep { position: relative; overflow: hidden; }
+.sweep::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 45%;
+  height: 100%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, .5), transparent);
+  transform: skewX(-12deg);
+  transition: left .7s var(--ease);
+  pointer-events: none;
+}
+.sweep:hover::after { left: 115%; }
+
 /* ---------- 窄屏表格横向滚动（规范第 10 节） ---------- */
 .table-scroll-x {
   overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
 /* ---------- 通用自适应网格 ---------- */
@@ -77,26 +187,28 @@ a {
   gap: 12px;
 }
 
-/* ---------- 响应式：卡片 padding 与指标数字随断点收缩 ---------- */
+/* ---------- 响应式：卡片 padding 与指标数字随断点收缩（规范第 10 节） ---------- */
+@media (max-width: 1440px) {
+  .t-num { font-size: 27px; }
+}
 @media (max-width: 1280px) {
   .card { padding: 18px; }
+  .card__body { padding: 16px 18px; }
   .t-num { font-size: 24px; }
 }
 @media (max-width: 1024px) {
   .card { padding: 16px; }
+  .card__body { padding: 14px 16px; }
   .t-num { font-size: 22px; }
 }
 @media (max-width: 768px) {
   .card { padding: 14px; }
+  .card__body { padding: 14px; }
   .t-num { font-size: 22px; }
 }
-@media (max-width: 480px) {
-  .t-num { font-size: 19px; }
-}
 
-/* ---------- 触摸设备：移除 hover 上浮，可点区域 ≥36px（规范第 9 节） ---------- */
-@media (hover: none), (pointer: coarse) {
-  .card--hover:hover {
-    transform: none;
-  }
+/* ---------- 减弱动效偏好 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after { animation: none; }
+  * { transition-duration: .01ms !important; }
 }

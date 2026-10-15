@@ -13,7 +13,7 @@ export function hasPermission(value, perms) {
 export const permission = {
   mounted(el, binding) {
     const store = useUserStore()
-    if (!hasPermission(binding.value, store.perms)) {
+    if (!hasPermission(binding.value, store.permissions)) {
       el.parentNode && el.parentNode.removeChild(el)
     }
   }

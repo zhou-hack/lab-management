@@ -2,7 +2,7 @@
 
 > 定位：实施层登记文档，衔接 [权限清单.md](权限清单.md)（PRD 功能矩阵）与各模块建表脚本。
 > 权限标识、菜单与初始数据以本文为准登记；功能范围变化时先改权限清单，再同步本文。
-> 版本：草案 v0.1（待评审）；整理日期：2026-10-14。
+> 版本：v1.1（草案，待评审）；整理日期：2026-10-14。
 
 ---
 
@@ -141,14 +141,17 @@
 
 前缀 `/api/v1`；token 经 `Authorization: Bearer <token>` 传递，前端存 sessionStorage。除标记「公开」的接口外均需登录。
 
+**口令传输加密（v0.1 起）**：登录、设置/修改密码、敏感操作确认的口令字段一律 RSA 密文上传。前端先经 `GET /auth/public_key` 获取公钥（X.509 Base64，RSA/2048 + PKCS#1 v1.5），加密后以 Base64 密文提交，明文不进入报文；后端解密后再做 BCrypt 校验，新密码强度（8-64 位含字母数字）在解密后由服务端校验。密钥对随实例启动生成、仅存内存，重启即轮换；密文无效（含明文直传）返回 40000。传输层安全仍以 HTTPS 为准。
+
 | 接口 | 方法/路径 | 说明 | 关键入参 | 成功 data | 主要错误 |
 | --- | --- | --- | --- | --- | --- |
-| 账号密码登录（公开） | POST /auth/login | 管理员 | accountName, password | token, userId, realName, userType, roles, passwordChangeRequired | 40100 凭据错误/账号锁定（msg 含剩余分钟）；40000 参数校验 |
+| 口令加密公钥（公开） | GET /auth/public_key | 登录/改密前获取，每次取用不缓存 | — | publicKey | — |
+| 账号密码登录（公开） | POST /auth/login | 管理员 | accountName, password（密文） | token, userId, realName, userType, roles, passwordChangeRequired | 40100 凭据错误/账号锁定（msg 含剩余分钟）；40000 参数校验/密文无效 |
 | 发送短信验证码（公开） | POST /auth/sms/send | 学生/老师 | phone | ttlSeconds | 40000 手机号格式；40900 触发限流（60s 重发/日上限） |
 | 验证码登录（公开） | POST /auth/sms/login | 首登匹配 sys_person_roster 自动建档并派生角色 | phone, code | 同登录 + needSetPassword（老师 true） | 40100 验证码错误/失效；40900 名单未匹配或已停用 |
 | 当前身份 | GET /auth/profile | 登录后/刷新时加载 | — | userId, realName, userType, roles, permissions, menus | 40100 未登录 |
-| 设置/修改密码 | PUT /auth/password | 学生/老师首次设置免旧密码；管理员必须旧密码 | oldPassword?, newPassword | null | 40000 密码规则（≥8 位含数字字母）；40100 旧密码错误 |
-| 敏感操作确认 | POST /auth/password/confirm | 审批、报废处置等二次确认，通过后开启 Sa-Token 二级认证 | password | validSeconds（300，期内敏感接口免再确认） | 40100 密码错误 |
+| 设置/修改密码 | PUT /auth/password | 学生/老师首次设置免旧密码；管理员必须旧密码（均为密文） | oldPassword?, newPassword | null | 40000 密码规则（≥8 位含数字字母）/密文无效；40100 旧密码错误 |
+| 敏感操作确认 | POST /auth/password/confirm | 审批、报废处置等二次确认，通过后开启 Sa-Token 二级认证 | password（密文） | validSeconds（300，期内敏感接口免再确认） | 40100 密码错误 |
 | 注销 | POST /auth/logout | 前端移除动态路由并清理状态 | — | null | — |
 
 实施规则：

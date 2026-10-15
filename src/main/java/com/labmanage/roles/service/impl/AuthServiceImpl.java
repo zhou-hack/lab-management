@@ -26,11 +26,13 @@ import com.labmanage.roles.mapper.SysUserRoleMapper;
 import com.labmanage.roles.service.AuthService;
 import com.labmanage.roles.service.PolicyService;
 import com.labmanage.roles.service.SmsCodeService;
+import com.labmanage.roles.support.PasswordCryptoService;
 import com.labmanage.roles.vo.ConfirmVO;
 import com.labmanage.roles.vo.LoginVO;
 import com.labmanage.roles.vo.MenuVO;
 import com.labmanage.roles.vo.ProfileVO;
 import com.labmanage.roles.vo.SmsSendVO;
+import org.springframework.core.env.Environment;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -52,6 +54,10 @@ public class AuthServiceImpl implements AuthService {
     /** 敏感操作二级认证有效期（秒） */
     private static final long SAFE_AUTH_SECONDS = 300;
 
+    /** 密码强度：8-64 位且同时包含字母和数字（解密后的明文校验） */
+    private static final java.util.regex.Pattern PASSWORD_RULE =
+            java.util.regex.Pattern.compile("^(?=.*[A-Za-z])(?=.*\\d).{8,64}$");
+
     private final SysUserMapper userMapper;
 
     private final SysPersonRosterMapper rosterMapper;
@@ -72,11 +78,16 @@ public class AuthServiceImpl implements AuthService {
 
     private final BCryptPasswordEncoder passwordEncoder;
 
+    private final PasswordCryptoService passwordCryptoService;
+
+    private final Environment environment;
+
     public AuthServiceImpl(SysUserMapper userMapper, SysPersonRosterMapper rosterMapper,
                            SysUserRoleMapper userRoleMapper, SysRoleMapper roleMapper,
                            SysPermissionMapper permissionMapper, SysMenuMapper menuMapper,
                            AssistantGrantMapper grantMapper, SmsCodeService smsCodeService,
-                           PolicyService policyService, BCryptPasswordEncoder passwordEncoder) {
+                           PolicyService policyService, BCryptPasswordEncoder passwordEncoder,
+                           PasswordCryptoService passwordCryptoService, Environment environment) {
         this.userMapper = userMapper;
         this.rosterMapper = rosterMapper;
         this.userRoleMapper = userRoleMapper;
@@ -87,6 +98,8 @@ public class AuthServiceImpl implements AuthService {
         this.smsCodeService = smsCodeService;
         this.policyService = policyService;
         this.passwordEncoder = passwordEncoder;
+        this.passwordCryptoService = passwordCryptoService;
+        this.environment = environment;
     }
 
     @Override
@@ -100,7 +113,7 @@ public class AuthServiceImpl implements AuthService {
         if (user.getPasswordHash() == null) {
             throw new BusinessException(40100, "该账号未设置密码，请使用验证码登录");
         }
-        if (!passwordEncoder.matches(dto.password(), user.getPasswordHash())) {
+        if (!passwordEncoder.matches(passwordCryptoService.decrypt(dto.password()), user.getPasswordHash())) {
             onPasswordFail(user);
         }
         resetPasswordFail(user);
@@ -109,7 +122,10 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public SmsSendVO sendSmsCode(SmsSendDTO dto) {
-        return new SmsSendVO(smsCodeService.send(dto.phone()));
+        SmsCodeService.SendResult result = smsCodeService.send(dto.phone());
+        // 模拟通道联调：仅 dev 环境回显验证码，其他环境置空
+        boolean devProfile = List.of(environment.getActiveProfiles()).contains("dev");
+        return new SmsSendVO(result.ttlSeconds(), devProfile ? result.code() : null);
     }
 
     @Override
@@ -122,8 +138,7 @@ public class AuthServiceImpl implements AuthService {
             user = registerFromRoster(dto.phone());
         }
         checkUsable(user);
-        boolean needSetPassword = user.getPasswordHash() == null
-                && UserType.TEACHER.name().equals(user.getUserType());
+        boolean needSetPassword = needSetPassword(user);
         return doLogin(user, needSetPassword);
     }
 
@@ -139,18 +154,29 @@ public class AuthServiceImpl implements AuthService {
         StpUtil.getSession().set(SESSION_ROLES, roles);
         StpUtil.getSession().set(SESSION_PERMS, permissions);
         return new ProfileVO(String.valueOf(user.getId()), user.getRealName(), user.getUserType(),
-                roles, permissions, buildMenuTree(menuMapper.selectMenusByUserId(userId)));
+                roles, permissions, buildMenuTree(menuMapper.selectMenusByUserId(userId)),
+                passwordChangeRequired(user), needSetPassword(user));
+    }
+
+    /** 老师首登尚未设置敏感操作密码时须强制设置 */
+    private boolean needSetPassword(SysUser user) {
+        return user.getPasswordHash() == null && UserType.TEACHER.name().equals(user.getUserType());
     }
 
     @Override
     public void updatePassword(PasswordUpdateDTO dto) {
         SysUser user = currentUser();
+        String newPassword = passwordCryptoService.decrypt(dto.newPassword());
+        if (!PASSWORD_RULE.matcher(newPassword).matches()) {
+            throw new BusinessException(40000, "新密码需 8-64 位且同时包含字母和数字");
+        }
         if (user.getPasswordHash() != null) {
-            if (dto.oldPassword() == null || !passwordEncoder.matches(dto.oldPassword(), user.getPasswordHash())) {
+            String oldPassword = dto.oldPassword() == null ? null : passwordCryptoService.decrypt(dto.oldPassword());
+            if (oldPassword == null || !passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
                 throw new BusinessException(40100, "旧密码错误");
             }
         }
-        user.setPasswordHash(passwordEncoder.encode(dto.newPassword()));
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
         user.setPasswordChangedAt(Instant.now());
         userMapper.updateById(user);
     }
@@ -161,7 +187,7 @@ public class AuthServiceImpl implements AuthService {
         if (user.getPasswordHash() == null) {
             throw new BusinessException(40100, "尚未设置密码，请先设置后再进行敏感操作确认");
         }
-        if (!passwordEncoder.matches(dto.password(), user.getPasswordHash())) {
+        if (!passwordEncoder.matches(passwordCryptoService.decrypt(dto.password()), user.getPasswordHash())) {
             throw new BusinessException(40100, "密码错误");
         }
         StpUtil.openSafe(SAFE_AUTH_SECONDS);

@@ -1,0 +1,37 @@
+package com.labmanage.module.equipment.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
+import java.math.BigDecimal;
+
+/**
+ * 设备型号修改请求（型号码不可改，删除后不复用）
+ */
+public record ModelUpdateRequest(
+        @NotBlank(message = "设备名称不能为空")
+        @Size(max = 128, message = "设备名称长度不能超过 128")
+        String equipmentName,
+
+        @Size(max = 128, message = "品牌长度不能超过 128")
+        String brand,
+
+        @NotBlank(message = "规格说明不能为空")
+        @Size(max = 500, message = "规格说明长度不能超过 500")
+        String specification,
+
+        @NotBlank(message = "计量单位不能为空")
+        @Size(max = 16, message = "计量单位长度不能超过 16")
+        String unitName,
+
+        BigDecimal referencePrice,
+
+        Integer expectedLifeMonths,
+
+        Boolean requiresDataErasure,
+
+        @NotNull(message = "启用状态不能为空")
+        Integer enabled
+) {
+}

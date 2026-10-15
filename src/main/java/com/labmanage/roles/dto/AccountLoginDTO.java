@@ -13,7 +13,7 @@ public record AccountLoginDTO(
         String accountName,
 
         @NotBlank(message = "密码不能为空")
-        @Size(max = 64, message = "密码长度不能超过 64")
+        @Size(max = 512, message = "密码密文长度异常")
         String password
 ) {
 }
