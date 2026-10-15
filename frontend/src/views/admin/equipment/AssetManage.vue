@@ -1,5 +1,15 @@
 <template>
-  <div class="asset_manage">
+  <div class="page asset_manage">
+    <div class="page_header">
+      <div>
+        <h2 class="t-title">
+          设备台账
+        </h2>
+        <p class="t-sub">
+          设备资产全量登记；仅空闲状态可迁移实验室，贵重设备须留存定级依据
+        </p>
+      </div>
+    </div>
     <div class="card">
       <div class="asset_manage__toolbar">
         <el-input
@@ -51,6 +61,8 @@
           新增台账
         </el-button>
       </div>
+    </div>
+    <div class="card">
       <div class="table-scroll-x">
         <el-table
           v-loading="loading"
@@ -899,8 +911,8 @@ onMounted(() => {
 .asset_manage__toolbar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
-  margin-bottom: 14px;
 }
 
 .asset_manage__filter {

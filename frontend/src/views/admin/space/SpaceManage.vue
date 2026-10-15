@@ -1,5 +1,15 @@
 <template>
-  <div class="space_manage">
+  <div class="page space_manage">
+    <div class="page_header">
+      <div>
+        <h2 class="t-title">
+          空间管理
+        </h2>
+        <p class="t-sub">
+          校区 → 楼栋 → 实验室三级空间台账；编码创建后不可修改、删除后不可复用
+        </p>
+      </div>
+    </div>
     <el-tabs
       v-model="activeTab"
       @tab-change="onTabChange"
@@ -9,100 +19,104 @@
         label="校区"
         name="campus"
       >
-        <div class="card">
-          <div class="space_manage__toolbar">
-            <el-input
-              v-model="campusQuery.keyword"
-              class="space_manage__filter"
-              placeholder="校区编码 / 名称"
-              clearable
-              @keyup.enter="searchCampuses"
-              @clear="searchCampuses"
+        <div class="page">
+          <div class="card">
+            <div class="space_manage__toolbar">
+              <el-input
+                v-model="campusQuery.keyword"
+                class="space_manage__filter"
+                placeholder="校区编码 / 名称"
+                clearable
+                @keyup.enter="searchCampuses"
+                @clear="searchCampuses"
+              />
+              <el-button @click="searchCampuses">
+                查询
+              </el-button>
+              <el-button
+                v-permission="'space:campus:create'"
+                type="primary"
+                class="space_manage__toolbar_action"
+                @click="openCampusCreate"
+              >
+                新增校区
+              </el-button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="table-scroll-x">
+              <el-table
+                v-loading="campusLoading"
+                :data="campusRecords"
+              >
+                <el-table-column
+                  prop="campusCode"
+                  label="校区编码"
+                  min-width="120"
+                />
+                <el-table-column
+                  prop="campusName"
+                  label="校区名称"
+                  min-width="150"
+                />
+                <el-table-column
+                  label="地址"
+                  min-width="200"
+                  show-overflow-tooltip
+                >
+                  <template #default="{ row }">
+                    {{ row.address || '—' }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="状态"
+                  width="90"
+                >
+                  <template #default="{ row }">
+                    <span
+                      class="pill"
+                      :class="row.enabled === 1 ? 'pill--ok' : 'pill--muted'"
+                    >
+                      {{ row.enabled === 1 ? '启用' : '停用' }}
+                    </span>
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="操作"
+                  width="120"
+                  fixed="right"
+                >
+                  <template #default="{ row }">
+                    <el-button
+                      v-permission="'space:campus:update'"
+                      link
+                      type="primary"
+                      @click="openCampusEdit(row)"
+                    >
+                      编辑
+                    </el-button>
+                    <el-button
+                      v-permission="'space:campus:delete'"
+                      link
+                      type="danger"
+                      @click="removeCampus(row)"
+                    >
+                      删除
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+            <el-pagination
+              v-model:current-page="campusQuery.pageNum"
+              v-model:page-size="campusQuery.pageSize"
+              class="space_manage__pager"
+              :total="campusTotal"
+              :page-sizes="[10, 20, 50, 100]"
+              layout="total, sizes, prev, pager, next"
+              @change="loadCampuses"
             />
-            <el-button @click="searchCampuses">
-              查询
-            </el-button>
-            <el-button
-              v-permission="'space:campus:create'"
-              type="primary"
-              class="space_manage__toolbar_action"
-              @click="openCampusCreate"
-            >
-              新增校区
-            </el-button>
           </div>
-          <div class="table-scroll-x">
-            <el-table
-              v-loading="campusLoading"
-              :data="campusRecords"
-            >
-              <el-table-column
-                prop="campusCode"
-                label="校区编码"
-                min-width="120"
-              />
-              <el-table-column
-                prop="campusName"
-                label="校区名称"
-                min-width="150"
-              />
-              <el-table-column
-                label="地址"
-                min-width="200"
-                show-overflow-tooltip
-              >
-                <template #default="{ row }">
-                  {{ row.address || '—' }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="状态"
-                width="90"
-              >
-                <template #default="{ row }">
-                  <span
-                    class="pill"
-                    :class="row.enabled === 1 ? 'pill--ok' : 'pill--muted'"
-                  >
-                    {{ row.enabled === 1 ? '启用' : '停用' }}
-                  </span>
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="操作"
-                width="120"
-                fixed="right"
-              >
-                <template #default="{ row }">
-                  <el-button
-                    v-permission="'space:campus:update'"
-                    link
-                    type="primary"
-                    @click="openCampusEdit(row)"
-                  >
-                    编辑
-                  </el-button>
-                  <el-button
-                    v-permission="'space:campus:delete'"
-                    link
-                    type="danger"
-                    @click="removeCampus(row)"
-                  >
-                    删除
-                  </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-          </div>
-          <el-pagination
-            v-model:current-page="campusQuery.pageNum"
-            v-model:page-size="campusQuery.pageSize"
-            class="space_manage__pager"
-            :total="campusTotal"
-            :page-sizes="[10, 20, 50, 100]"
-            layout="total, sizes, prev, pager, next"
-            @change="loadCampuses"
-          />
         </div>
       </el-tab-pane>
 
@@ -111,110 +125,112 @@
         label="楼栋"
         name="building"
       >
-        <div class="card">
-          <div class="space_manage__toolbar">
-            <el-input
-              v-model="buildingQuery.keyword"
-              class="space_manage__filter"
-              placeholder="楼栋编码 / 名称"
-              clearable
-              @keyup.enter="searchBuildings"
-              @clear="searchBuildings"
+        <div class="page">
+          <div class="card">
+            <div class="space_manage__toolbar">
+              <el-input
+                v-model="buildingQuery.keyword"
+                class="space_manage__filter"
+                placeholder="楼栋编码 / 名称"
+                clearable
+                @keyup.enter="searchBuildings"
+                @clear="searchBuildings"
+              />
+              <el-select
+                v-model="buildingQuery.campusId"
+                class="space_manage__filter"
+                placeholder="全部校区"
+                clearable
+                @change="searchBuildings"
+              >
+                <el-option
+                  v-for="campus in campusOptions"
+                  :key="campus.id"
+                  :label="campus.campusName"
+                  :value="campus.id"
+                />
+              </el-select>
+              <el-button @click="searchBuildings">
+                查询
+              </el-button>
+              <el-button
+                v-permission="'space:building:create'"
+                type="primary"
+                class="space_manage__toolbar_action"
+                @click="openBuildingCreate"
+              >
+                新增楼栋
+              </el-button>
+            </div>
+            <div class="table-scroll-x">
+              <el-table
+                v-loading="buildingLoading"
+                :data="buildingRecords"
+              >
+                <el-table-column
+                  prop="buildingCode"
+                  label="楼栋编码"
+                  min-width="120"
+                />
+                <el-table-column
+                  prop="buildingName"
+                  label="楼栋名称"
+                  min-width="150"
+                />
+                <el-table-column
+                  prop="campusName"
+                  label="所属校区"
+                  min-width="140"
+                />
+                <el-table-column
+                  label="状态"
+                  width="90"
+                >
+                  <template #default="{ row }">
+                    <span
+                      class="pill"
+                      :class="row.enabled === 1 ? 'pill--ok' : 'pill--muted'"
+                    >
+                      {{ row.enabled === 1 ? '启用' : '停用' }}
+                    </span>
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="操作"
+                  width="120"
+                  fixed="right"
+                >
+                  <template #default="{ row }">
+                    <el-button
+                      v-permission="'space:building:update'"
+                      link
+                      type="primary"
+                      @click="openBuildingEdit(row)"
+                    >
+                      编辑
+                    </el-button>
+                    <el-button
+                      v-permission="'space:building:delete'"
+                      link
+                      type="danger"
+                      @click="removeBuilding(row)"
+                    >
+                      删除
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+            <el-pagination
+              v-model:current-page="buildingQuery.pageNum"
+              v-model:page-size="buildingQuery.pageSize"
+              class="space_manage__pager"
+              :total="buildingTotal"
+              :page-sizes="[10, 20, 50, 100]"
+              layout="total, sizes, prev, pager, next"
+              @change="loadBuildings"
             />
-            <el-select
-              v-model="buildingQuery.campusId"
-              class="space_manage__filter"
-              placeholder="全部校区"
-              clearable
-              @change="searchBuildings"
-            >
-              <el-option
-                v-for="campus in campusOptions"
-                :key="campus.id"
-                :label="campus.campusName"
-                :value="campus.id"
-              />
-            </el-select>
-            <el-button @click="searchBuildings">
-              查询
-            </el-button>
-            <el-button
-              v-permission="'space:building:create'"
-              type="primary"
-              class="space_manage__toolbar_action"
-              @click="openBuildingCreate"
-            >
-              新增楼栋
-            </el-button>
           </div>
-          <div class="table-scroll-x">
-            <el-table
-              v-loading="buildingLoading"
-              :data="buildingRecords"
-            >
-              <el-table-column
-                prop="buildingCode"
-                label="楼栋编码"
-                min-width="120"
-              />
-              <el-table-column
-                prop="buildingName"
-                label="楼栋名称"
-                min-width="150"
-              />
-              <el-table-column
-                prop="campusName"
-                label="所属校区"
-                min-width="140"
-              />
-              <el-table-column
-                label="状态"
-                width="90"
-              >
-                <template #default="{ row }">
-                  <span
-                    class="pill"
-                    :class="row.enabled === 1 ? 'pill--ok' : 'pill--muted'"
-                  >
-                    {{ row.enabled === 1 ? '启用' : '停用' }}
-                  </span>
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="操作"
-                width="120"
-                fixed="right"
-              >
-                <template #default="{ row }">
-                  <el-button
-                    v-permission="'space:building:update'"
-                    link
-                    type="primary"
-                    @click="openBuildingEdit(row)"
-                  >
-                    编辑
-                  </el-button>
-                  <el-button
-                    v-permission="'space:building:delete'"
-                    link
-                    type="danger"
-                    @click="removeBuilding(row)"
-                  >
-                    删除
-                  </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-          </div>
-          <el-pagination
-            v-model:current-page="buildingQuery.pageNum"
-            v-model:page-size="buildingQuery.pageSize"
-            class="space_manage__pager"
-            :total="buildingTotal"
-            :page-sizes="[10, 20, 50, 100]"
-            layout="total, sizes, prev, pager, next"
-            @change="loadBuildings"
-          />
         </div>
       </el-tab-pane>
 
@@ -223,163 +239,165 @@
         label="实验室"
         name="lab"
       >
-        <div class="card">
-          <div class="space_manage__toolbar">
-            <el-input
-              v-model="labQuery.keyword"
-              class="space_manage__filter"
-              placeholder="实验室编码 / 名称"
-              clearable
-              @keyup.enter="searchLabs"
-              @clear="searchLabs"
+        <div class="page">
+          <div class="card">
+            <div class="space_manage__toolbar">
+              <el-input
+                v-model="labQuery.keyword"
+                class="space_manage__filter"
+                placeholder="实验室编码 / 名称"
+                clearable
+                @keyup.enter="searchLabs"
+                @clear="searchLabs"
+              />
+              <el-select
+                v-model="labQuery.campusId"
+                class="space_manage__filter"
+                placeholder="全部校区"
+                clearable
+                @change="onLabCampusChange"
+              >
+                <el-option
+                  v-for="campus in campusOptions"
+                  :key="campus.id"
+                  :label="campus.campusName"
+                  :value="campus.id"
+                />
+              </el-select>
+              <el-select
+                v-model="labQuery.buildingId"
+                class="space_manage__filter"
+                placeholder="全部楼栋"
+                clearable
+                @change="searchLabs"
+              >
+                <el-option
+                  v-for="building in labBuildingOptions"
+                  :key="building.id"
+                  :label="building.buildingName"
+                  :value="building.id"
+                />
+              </el-select>
+              <el-button @click="searchLabs">
+                查询
+              </el-button>
+              <el-button
+                v-permission="'space:lab:create'"
+                type="primary"
+                class="space_manage__toolbar_action"
+                @click="openLabCreate"
+              >
+                新增实验室
+              </el-button>
+            </div>
+            <div class="table-scroll-x">
+              <el-table
+                v-loading="labLoading"
+                :data="labRecords"
+              >
+                <el-table-column
+                  prop="labCode"
+                  label="实验室编码"
+                  min-width="110"
+                />
+                <el-table-column
+                  prop="labName"
+                  label="实验室名称"
+                  min-width="140"
+                />
+                <el-table-column
+                  prop="labType"
+                  label="类型"
+                  min-width="80"
+                />
+                <el-table-column
+                  prop="buildingName"
+                  label="楼栋"
+                  min-width="110"
+                />
+                <el-table-column
+                  prop="campusName"
+                  label="校区"
+                  min-width="100"
+                />
+                <el-table-column
+                  prop="departmentName"
+                  label="归口部门"
+                  min-width="110"
+                />
+                <el-table-column
+                  label="楼层 / 房号"
+                  min-width="110"
+                >
+                  <template #default="{ row }">
+                    {{ row.floorNo }} · {{ row.roomNo }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="容纳人数"
+                  width="90"
+                >
+                  <template #default="{ row }">
+                    {{ row.capacity }} 人
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="面积（㎡）"
+                  width="100"
+                >
+                  <template #default="{ row }">
+                    {{ row.areaSqm ?? '—' }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="状态"
+                  width="90"
+                >
+                  <template #default="{ row }">
+                    <span
+                      class="pill"
+                      :class="row.enabled === 1 ? 'pill--ok' : 'pill--muted'"
+                    >
+                      {{ row.enabled === 1 ? '启用' : '停用' }}
+                    </span>
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="操作"
+                  width="120"
+                  fixed="right"
+                >
+                  <template #default="{ row }">
+                    <el-button
+                      v-permission="'space:lab:update'"
+                      link
+                      type="primary"
+                      @click="openLabEdit(row)"
+                    >
+                      编辑
+                    </el-button>
+                    <el-button
+                      v-permission="'space:lab:delete'"
+                      link
+                      type="danger"
+                      @click="removeLab(row)"
+                    >
+                      删除
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+            <el-pagination
+              v-model:current-page="labQuery.pageNum"
+              v-model:page-size="labQuery.pageSize"
+              class="space_manage__pager"
+              :total="labTotal"
+              :page-sizes="[10, 20, 50, 100]"
+              layout="total, sizes, prev, pager, next"
+              @change="loadLabs"
             />
-            <el-select
-              v-model="labQuery.campusId"
-              class="space_manage__filter"
-              placeholder="全部校区"
-              clearable
-              @change="onLabCampusChange"
-            >
-              <el-option
-                v-for="campus in campusOptions"
-                :key="campus.id"
-                :label="campus.campusName"
-                :value="campus.id"
-              />
-            </el-select>
-            <el-select
-              v-model="labQuery.buildingId"
-              class="space_manage__filter"
-              placeholder="全部楼栋"
-              clearable
-              @change="searchLabs"
-            >
-              <el-option
-                v-for="building in labBuildingOptions"
-                :key="building.id"
-                :label="building.buildingName"
-                :value="building.id"
-              />
-            </el-select>
-            <el-button @click="searchLabs">
-              查询
-            </el-button>
-            <el-button
-              v-permission="'space:lab:create'"
-              type="primary"
-              class="space_manage__toolbar_action"
-              @click="openLabCreate"
-            >
-              新增实验室
-            </el-button>
           </div>
-          <div class="table-scroll-x">
-            <el-table
-              v-loading="labLoading"
-              :data="labRecords"
-            >
-              <el-table-column
-                prop="labCode"
-                label="实验室编码"
-                min-width="110"
-              />
-              <el-table-column
-                prop="labName"
-                label="实验室名称"
-                min-width="140"
-              />
-              <el-table-column
-                prop="labType"
-                label="类型"
-                min-width="80"
-              />
-              <el-table-column
-                prop="buildingName"
-                label="楼栋"
-                min-width="110"
-              />
-              <el-table-column
-                prop="campusName"
-                label="校区"
-                min-width="100"
-              />
-              <el-table-column
-                prop="departmentName"
-                label="归口部门"
-                min-width="110"
-              />
-              <el-table-column
-                label="楼层 / 房号"
-                min-width="110"
-              >
-                <template #default="{ row }">
-                  {{ row.floorNo }} · {{ row.roomNo }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="容纳人数"
-                width="90"
-              >
-                <template #default="{ row }">
-                  {{ row.capacity }} 人
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="面积（㎡）"
-                width="100"
-              >
-                <template #default="{ row }">
-                  {{ row.areaSqm ?? '—' }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="状态"
-                width="90"
-              >
-                <template #default="{ row }">
-                  <span
-                    class="pill"
-                    :class="row.enabled === 1 ? 'pill--ok' : 'pill--muted'"
-                  >
-                    {{ row.enabled === 1 ? '启用' : '停用' }}
-                  </span>
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="操作"
-                width="120"
-                fixed="right"
-              >
-                <template #default="{ row }">
-                  <el-button
-                    v-permission="'space:lab:update'"
-                    link
-                    type="primary"
-                    @click="openLabEdit(row)"
-                  >
-                    编辑
-                  </el-button>
-                  <el-button
-                    v-permission="'space:lab:delete'"
-                    link
-                    type="danger"
-                    @click="removeLab(row)"
-                  >
-                    删除
-                  </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-          </div>
-          <el-pagination
-            v-model:current-page="labQuery.pageNum"
-            v-model:page-size="labQuery.pageSize"
-            class="space_manage__pager"
-            :total="labTotal"
-            :page-sizes="[10, 20, 50, 100]"
-            layout="total, sizes, prev, pager, next"
-            @change="loadLabs"
-          />
         </div>
       </el-tab-pane>
     </el-tabs>
@@ -1138,8 +1156,8 @@ onMounted(() => {
 .space_manage__toolbar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
-  margin-bottom: 14px;
 }
 
 .space_manage__filter {

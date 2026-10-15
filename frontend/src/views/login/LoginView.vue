@@ -1,6 +1,6 @@
 <template>
   <div class="login_page">
-    <div class="login_card">
+    <div class="login_card sweep">
       <h1 class="login_card__title">
         实验室设备管理系统
       </h1>
@@ -23,6 +23,7 @@
             v-model="form.username"
             placeholder="请输入账号"
             size="large"
+            :prefix-icon="User"
           />
         </el-form-item>
         <el-form-item
@@ -35,6 +36,7 @@
             placeholder="请输入密码"
             size="large"
             show-password
+            :prefix-icon="Lock"
             @keyup.enter="submit"
           />
         </el-form-item>
@@ -63,6 +65,7 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { Lock, User } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 
 const route = useRoute()
@@ -158,4 +161,11 @@ function fillAdmin() {
 }
 
 /* el-button 相邻默认 12px 左边距归零，保持整宽 */
+
+/* 表单标签：12.5px · 500 · g3（规范 7.6） */
+.login_card :deep(.el-form-item__label) {
+  font-size: 12.5px;
+  font-weight: var(--fw-medium);
+  color: var(--g3);
+}
 </style>

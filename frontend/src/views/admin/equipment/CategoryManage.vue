@@ -1,17 +1,23 @@
 <template>
-  <div class="category_manage">
-    <div class="card">
-      <div class="category_manage__toolbar">
-        <span class="t-sub">多级设备分类树，设备型号按分类挂靠；编码创建后不可修改、删除后不可复用</span>
-        <el-button
-          v-permission="'equipment:category:create'"
-          type="primary"
-          class="category_manage__toolbar_action"
-          @click="openCreate(null)"
-        >
-          新增根分类
-        </el-button>
+  <div class="page category_manage">
+    <div class="page_header">
+      <div>
+        <h2 class="t-title">
+          设备分类
+        </h2>
+        <p class="t-sub">
+          多级设备分类树，设备型号按分类挂靠；编码创建后不可修改、删除后不可复用
+        </p>
       </div>
+      <el-button
+        v-permission="'equipment:category:create'"
+        type="primary"
+        @click="openCreate(null)"
+      >
+        新增根分类
+      </el-button>
+    </div>
+    <div class="card">
       <div
         v-loading="loading"
         class="table-scroll-x"
@@ -272,20 +278,6 @@ onMounted(loadTree)
 </script>
 
 <style scoped>
-.category_manage__toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-/* 提高选择器特异性以覆盖 .el-button + .el-button 的相邻 margin */
-.category_manage__toolbar .category_manage__toolbar_action {
-  margin-left: auto;
-  flex-shrink: 0;
-}
-
 .category_manage__node {
   display: flex;
   flex: 1;
@@ -310,12 +302,5 @@ onMounted(loadTree)
 
 .category_manage__node:hover .category_manage__node_actions {
   display: inline-flex;
-}
-
-/* 触摸设备无 hover，操作常驻显示 */
-@media (hover: none), (pointer: coarse) {
-  .category_manage__node_actions {
-    display: inline-flex;
-  }
 }
 </style>

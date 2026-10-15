@@ -1,6 +1,6 @@
 /* ==========================================================================
-   全局基础样式：reset、原子类、通用组件类、响应式与触摸端规则
-   （断点：sm 480 / md 768 / lg 1024 / xl 1280 / 2xl 1600 / 1920）
+   全局基础样式：原子类、通用组件类（桌面端统一，规范 v2.0）
+   断点：md 768 / lg 1024 / xl 1280 / 2xl 1600
    ========================================================================== */
 
 #app {
@@ -27,6 +27,36 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
+/* ---------- 页面骨架（规范第 12 节：页头 / 工具卡 / 数据卡） ---------- */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.page_header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.page_header .t-title { margin: 0; }
+.page_header .t-sub { margin: 2px 0 0; }
+
+/* ---------- 区块标题（规范 7.1 卡片头） ---------- */
+.sechead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: .5px solid var(--hair);
+  font-size: 15px;
+  font-weight: var(--fw-semibold);
+  color: var(--g1);
+}
+
 /* ---------- 卡片（规范 7.1：18px 圆角 + 0.5px 细线，无阴影） ---------- */
 .card {
   background: var(--surface);
@@ -34,11 +64,56 @@ a {
   border: .5px solid var(--hair);
   padding: 22px;
 }
+.card--hover {
+  transition: all var(--dur) var(--ease);
+}
 .card--hover:hover {
   border-color: var(--hair-brand);
   transform: translateY(-2px);
+}
+
+/* ---------- 按钮（规范 7.2 三级体系，自定义按钮场景用） ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 18px;
+  border: none;
+  border-radius: var(--r-full);
+  font-size: 14px;
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  cursor: pointer;
   transition: all var(--dur) var(--ease);
 }
+.btn--sm { height: 30px; padding: 0 14px; font-size: 13px; }
+.btn--lg { height: 46px; padding: 0 22px; font-size: 15px; }
+.btn--primary {
+  background: var(--brand-grad);
+  color: #fff;
+  box-shadow: var(--brand-shadow);
+}
+.btn--primary:hover {
+  background: var(--brand-grad-hover);
+  box-shadow: var(--brand-shadow-lg);
+  transform: translateY(-1.5px);
+}
+.btn--primary:active { transform: scale(.985); }
+.btn--ghost {
+  background: transparent;
+  border: .5px solid var(--brand-a32);
+  color: var(--brand);
+}
+.btn--ghost:hover { background: var(--brand-a08); transform: translateY(-1.5px); }
+.btn--ghost:active { transform: scale(.985); }
+.btn--text {
+  background: transparent;
+  color: var(--brand);
+  padding: 0 10px;
+}
+.btn--text:hover { background: var(--brand-a08); }
 
 /* ---------- 状态胶囊（规范 7.3） ---------- */
 .pill {
@@ -64,10 +139,85 @@ a {
 .pill--danger { color: var(--danger); background: var(--danger-bg); }
 .pill--muted  { color: var(--muted);  background: var(--muted-bg); }
 
+/* ---------- 语义图标容器（规范第 8 节） ---------- */
+.icon_box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  font-size: 19px;
+  flex-shrink: 0;
+  background: var(--brand-a08);
+  color: var(--brand);
+}
+.icon_box--ok     { background: var(--ok-bg);     color: var(--ok); }
+.icon_box--warn   { background: var(--warn-bg);   color: var(--warn); }
+.icon_box--danger { background: var(--danger-bg); color: var(--danger); }
+.icon_box--muted  { background: var(--muted-bg);  color: var(--muted); }
+
+/* ---------- 空态（规范 7.8：60px 上下留白，禁止虚构数据） ---------- */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 60px 20px;
+  color: var(--g3);
+  font-size: 13px;
+}
+.empty .empty__icon {
+  font-size: 40px;
+  color: var(--g4);
+}
+
+/* ---------- 骨架屏（规范 7.8：sunken 底 + 扫光） ---------- */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-sunken);
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, .75) 50%, transparent 60%);
+  animation: skeleton-shimmer 1.4s var(--ease) infinite;
+}
+@keyframes skeleton-shimmer {
+  to { transform: translateX(100%); }
+}
+
+/* ---------- 光泽扫过（规范第 9 节：hover 0.7s 横扫，每屏至多一处） ---------- */
+.sweep {
+  position: relative;
+  overflow: hidden;
+}
+.sweep::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -80px;
+  width: 56px;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, .5), transparent);
+  transform: skewX(-18deg);
+  opacity: 0;
+  pointer-events: none;
+}
+.sweep:hover::before {
+  animation: sweep-move .7s var(--ease) forwards;
+}
+@keyframes sweep-move {
+  from { left: -80px; opacity: 1; }
+  to   { left: 110%;  opacity: 1; }
+}
+
 /* ---------- 窄屏表格横向滚动（规范第 10 节） ---------- */
 .table-scroll-x {
   overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
 /* ---------- 通用自适应网格 ---------- */
@@ -77,7 +227,10 @@ a {
   gap: 12px;
 }
 
-/* ---------- 响应式：卡片 padding 与指标数字随断点收缩 ---------- */
+/* ---------- 响应式：卡片 padding 与指标数字随断点收缩（规范第 10 节） ---------- */
+@media (max-width: 1440px) {
+  .t-num { font-size: 27px; }
+}
 @media (max-width: 1280px) {
   .card { padding: 18px; }
   .t-num { font-size: 24px; }
@@ -90,13 +243,13 @@ a {
   .card { padding: 14px; }
   .t-num { font-size: 22px; }
 }
-@media (max-width: 480px) {
-  .t-num { font-size: 19px; }
-}
 
-/* ---------- 触摸设备：移除 hover 上浮，可点区域 ≥36px（规范第 9 节） ---------- */
-@media (hover: none), (pointer: coarse) {
-  .card--hover:hover {
-    transform: none;
+/* ---------- 动效可达性（规范第 9 节：尊重 prefers-reduced-motion） ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
   }
 }

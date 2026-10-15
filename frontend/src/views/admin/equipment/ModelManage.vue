@@ -1,5 +1,15 @@
 <template>
-  <div class="model_manage">
+  <div class="page model_manage">
+    <div class="page_header">
+      <div>
+        <h2 class="t-title">
+          设备型号
+        </h2>
+        <p class="t-sub">
+          型号码创建后不可修改、删除后不可复用；归还须数据擦除的型号在台账退役时须执行擦除
+        </p>
+      </div>
+    </div>
     <div class="card">
       <div class="model_manage__toolbar">
         <el-input
@@ -32,6 +42,8 @@
           新增型号
         </el-button>
       </div>
+    </div>
+    <div class="card">
       <div class="table-scroll-x">
         <el-table
           v-loading="loading"
@@ -472,8 +484,8 @@ onMounted(() => {
 .model_manage__toolbar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
-  margin-bottom: 14px;
 }
 
 .model_manage__filter {
