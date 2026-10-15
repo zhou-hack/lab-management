@@ -115,6 +115,38 @@
           登 录
         </el-button>
       </el-form>
+
+      <!-- 开发环境：测试账号一键登录（生产构建不含此区块） -->
+      <div
+        v-if="isDev"
+        class="login_quick"
+      >
+        <span class="login_quick__label">测试账号</span>
+        <button
+          type="button"
+          class="login_quick__chip"
+          :disabled="loading"
+          @click="quickLoginAdmin"
+        >
+          管理员 admin
+        </button>
+        <button
+          type="button"
+          class="login_quick__chip"
+          :disabled="loading"
+          @click="quickLoginPhone('13800000001')"
+        >
+          王老师（老师）
+        </button>
+        <button
+          type="button"
+          class="login_quick__chip"
+          :disabled="loading"
+          @click="quickLoginPhone('13800000002')"
+        >
+          张同学（学生）
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -140,6 +172,9 @@ const mode = ref('password')
 const loading = ref(false)
 const formRef = ref()
 const form = reactive({ accountName: '', password: '', phone: '', code: '' })
+
+/** 开发环境标识：测试账号一键登录区块仅在 dev 构建出现 */
+const isDev = import.meta.env.DEV
 
 const rules = {
   accountName: [{ required: true, message: '请输入账号', trigger: 'blur' }],
@@ -210,6 +245,25 @@ async function submit() {
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer)
 })
+
+/** 一键登录（仅 dev）：管理员账密填充后直接提交 */
+async function quickLoginAdmin() {
+  mode.value = 'password'
+  form.accountName = 'admin'
+  form.password = 'Admin123'
+  await submit()
+}
+
+/** 一键登录（仅 dev）：填充手机号 → 模拟通道自动回填验证码 → 提交 */
+async function quickLoginPhone(phone) {
+  mode.value = 'phone'
+  form.phone = phone
+  form.code = ''
+  await sendCode()
+  if (form.code) {
+    await submit()
+  }
+}
 </script>
 
 <style scoped>
@@ -331,5 +385,47 @@ onBeforeUnmount(() => {
 
 .login_submit:active {
   transform: scale(.985);
+}
+
+/* 测试账号一键登录（仅 dev）：细线分隔 + 全圆角小胶囊 */
+.login_quick {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: .5px solid var(--hair);
+}
+
+.login_quick__label {
+  font-size: 12px;
+  color: var(--g3);
+}
+
+.login_quick__chip {
+  height: 28px;
+  padding: 0 12px;
+  border: .5px solid var(--hair-brand);
+  border-radius: var(--r-full);
+  background: var(--brand-a04);
+  color: var(--brand);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.login_quick__chip:hover:not(:disabled) {
+  background: var(--brand-a08);
+  transform: translateY(-1px);
+}
+
+.login_quick__chip:active:not(:disabled) {
+  transform: scale(.97);
+}
+
+.login_quick__chip:disabled {
+  opacity: .5;
+  cursor: not-allowed;
 }
 </style>
