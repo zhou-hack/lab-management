@@ -127,9 +127,11 @@ const avatarChar = computed(() => {
 
 // 后台菜单：取菜单树中 path 以 /admin 开头的子树（目录 M / 页面 C）
 const adminMenus = computed(() => {
+  // 固定首页由布局自身渲染，后端下发的 /admin/home 节点去重（规范 7.4）
   const filterTree = (nodes) =>
     (nodes || [])
       .filter((n) => n.menuType !== 'F' && n.visible !== '1')
+      .filter((n) => (n.path || n.componentKey) !== '/admin/home')
       .map((n) => ({ ...n, children: filterTree(n.children) }))
       .filter((n) => n.menuType === 'C' || n.children.length)
   const adminRoot = (store.menus || []).find((m) => (m.path || '').startsWith('/admin'))
@@ -181,7 +183,6 @@ async function onUserCommand(command) {
   height: 28px;
   border-radius: 9px;
   background: var(--brand-grad);
-  box-shadow: var(--brand-shadow);
   flex-shrink: 0;
 }
 

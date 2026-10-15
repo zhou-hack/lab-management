@@ -105,15 +105,14 @@ function fillAdmin() {
 </script>
 
 <style scoped>
+/* 页面底保持极浅灰纯色（规范第 13 节：禁止给页面背景用渐变） */
 .login_page {
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
   padding: 20px;
-  background:
-    radial-gradient(900px 500px at 80% 10%, var(--brand-a12), transparent 60%),
-    var(--bg);
+  background: var(--bg);
 }
 
 /* 登录卡：特大容器 r-xl 22px（规范第 5 节） */
@@ -161,11 +160,5 @@ function fillAdmin() {
 }
 
 /* el-button 相邻默认 12px 左边距归零，保持整宽 */
-
-/* 表单标签：12.5px · 500 · g3（规范 7.6） */
-.login_card :deep(.el-form-item__label) {
-  font-size: 12.5px;
-  font-weight: var(--fw-medium);
-  color: var(--g3);
-}
+/* 表单标签样式由 element.css 全局统一（规范 7.6） */
 </style>

@@ -62,6 +62,13 @@
   box-shadow: 0 6px 18px -6px rgba(23, 178, 106, .48);
 }
 
+/* ---------- 表单标签：12.5px · 500 · g3（规范 7.6） ---------- */
+.el-form-item__label {
+  font-size: 12.5px;
+  font-weight: var(--fw-medium);
+  color: var(--g3);
+}
+
 /* ---------- 表单：输入框 r-md 圆角；focus 底色 a04 + 图标变蓝（规范 7.6） ---------- */
 .el-input__wrapper,
 .el-textarea__inner,
@@ -92,6 +99,13 @@
   --el-table-border-color: var(--hair);
   --el-table-row-hover-bg-color: var(--brand-a04);
   border-radius: var(--r-md);
+}
+
+/* 表格窄屏：字号收缩（规范第 10 节，横向滚动由 .table-scroll-x 承担） */
+@media (max-width: 1024px) {
+  .el-table {
+    font-size: 12.5px;
+  }
 }
 
 /* ---------- Tag：全圆角 + 语义浅底 ---------- */
