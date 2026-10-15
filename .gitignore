@@ -61,6 +61,7 @@ replay_pid*
 # ---------- 测试与覆盖率 ----------
 coverage/
 *.lcov
+dontUpload/
 
 # ---------- 前端缓存 ----------
 node_modules/.vite/

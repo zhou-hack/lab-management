@@ -311,11 +311,4 @@ onMounted(loadTree)
 .category_manage__node:hover .category_manage__node_actions {
   display: inline-flex;
 }
-
-/* 触摸设备无 hover，操作常驻显示 */
-@media (hover: none), (pointer: coarse) {
-  .category_manage__node_actions {
-    display: inline-flex;
-  }
-}
 </style>
