@@ -1,5 +1,6 @@
 package com.labmanage.module.item.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.labmanage.common.core.BaseEntity;
 import com.labmanage.module.item.enums.SettlementType;
@@ -19,7 +20,8 @@ public class MaterialSettlement extends BaseEntity {
     /** 结算类型 */
     private SettlementType settlementType;
 
-    /** 本次结算量（> 0） */
+    /** 本次结算量（> 0；列名 qty，接口契约沿用 quantity） */
+    @TableField("qty")
     private BigDecimal quantity;
 
     /** 经办人 ID（登录模块接入后由会话写入） */

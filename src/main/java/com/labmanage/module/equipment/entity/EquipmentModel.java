@@ -1,5 +1,6 @@
 package com.labmanage.module.equipment.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.labmanage.common.core.BaseEntity;
 
@@ -26,7 +27,8 @@ public class EquipmentModel extends BaseEntity {
     /** 规格说明 */
     private String specification;
 
-    /** 计量单位（台/套等） */
+    /** 计量单位（台/套等；列名 base_unit，接口契约沿用 unitName） */
+    @TableField("base_unit")
     private String unitName;
 
     /** 参考单价（实际采购价见 equipment_asset.purchase_price） */

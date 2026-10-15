@@ -1,5 +1,6 @@
 package com.labmanage.module.item.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.labmanage.common.core.BaseEntity;
 
@@ -26,7 +27,8 @@ public class StockDocumentLine extends BaseEntity {
     /** 入库位 ID（OPENING/PURCHASE_IN/RETURN_IN 必填） */
     private Long toLocationId;
 
-    /** 数量（> 0，精度不超过 SKU.quantity_scale） */
+    /** 数量（> 0，精度不超过 SKU.quantity_scale；列名 qty，接口契约沿用 quantity） */
+    @TableField("qty")
     private BigDecimal quantity;
 
     /** 单价快照（入库登记价格 / 过账时成本） */
