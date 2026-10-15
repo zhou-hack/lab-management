@@ -18,7 +18,8 @@ export default defineConfig(({ mode }) => {
     server: {
       // 监听全部网卡（0.0.0.0），允许局域网设备访问开发服务
       host: '0.0.0.0',
-      port: 5173,
+      // 固定 5174（5173 留给本机其他项目）
+      port: 5174,
       proxy: {
         '/api/v1': {
           target: apiTarget,
