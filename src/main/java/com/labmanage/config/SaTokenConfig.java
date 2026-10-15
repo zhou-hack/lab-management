@@ -18,7 +18,8 @@ public class SaTokenConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(new SaInterceptor(handler -> SaRouter
                         .match("/api/v1/**")
-                        .notMatch("/api/v1/auth/login", "/api/v1/auth/sms/send", "/api/v1/auth/sms/login")
+                        .notMatch("/api/v1/auth/login", "/api/v1/auth/sms/send", "/api/v1/auth/sms/login",
+                                "/api/v1/auth/public_key")
                         .check(route -> StpUtil.checkLogin())))
                 .addPathPatterns("/**");
     }
