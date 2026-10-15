@@ -1,0 +1,32 @@
+/**
+ * 业务枚举展示映射（取值与后端 enums 包一致）：
+ * label 为中文文案，pill 为 base.css 状态胶囊修饰类。
+ * 前后端契约约定枚举以 name 传输，这里只做展示层映射。
+ */
+
+/** 设备物理状态 */
+export const EQUIPMENT_STATUS = {
+  IDLE: { label: '空闲', pill: 'pill--ok' },
+  MAINTAINING: { label: '维护中', pill: 'pill--warn' },
+  SCRAPPED: { label: '已报废', pill: 'pill--muted' }
+}
+
+/** 设备状态筛选项 */
+export const EQUIPMENT_STATUS_OPTIONS = Object.entries(EQUIPMENT_STATUS).map(([value, meta]) => ({
+  value,
+  label: meta.label
+}))
+
+/** 设备价值分级（NULL = 待分类，由调用方自行处理空值） */
+export const VALUE_LEVEL = {
+  NORMAL: { label: '普通', pill: 'pill--muted' },
+  VALUABLE: { label: '贵重', pill: 'pill--warn' }
+}
+
+/**
+ * 取枚举展示元数据：{ label, pill }
+ * 未登记或空值回退 muted，fallbackLabel 用于「待分类」等业务空值文案
+ */
+export function enumMeta(value, map, fallbackLabel = '—') {
+  return map[value] || { label: fallbackLabel, pill: 'pill--muted' }
+}

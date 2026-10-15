@@ -13,7 +13,7 @@ describe('v-permission 权限判断', () => {
   })
 
   it('数组任一命中即通过', () => {
-    expect(hasPermission(['booking:audit', 'equipment:list'], perms)).toBe(true)
+    expect(hasPermission(['equipment:audit', 'equipment:list'], perms)).toBe(true)
   })
 
   it('空值与空数组放行', () => {
