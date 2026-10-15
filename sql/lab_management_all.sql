@@ -503,14 +503,13 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code) V
 (154, 'equipment:asset:classify',  '设备价值定级', 'equipment');
 
 -- ----------------------------------------------------------------------------
--- 3.8 equipment 菜单（200-204；原 161-170 与物料 151-179 冲突，移至 200 段；
---     借用菜单按产品定稿不登记）
+-- 3.8 equipment 菜单（200、202-204；原 161-170 与物料 151-179 冲突，移至 200 段；
+--     分类目录并入型号管理页抽屉，原独立菜单 201 移除；借用菜单按产品定稿不登记）
 -- ----------------------------------------------------------------------------
 INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order) VALUES
 (200, NULL, 'M_EQUIPMENT_ADMIN',    '设备管理', '/admin',                    NULL,                         NULL, 'DIRECTORY', 20),
-(201, 200,  'C_EQUIPMENT_CATEGORY', '分类管理', '/admin/equipment/category', '/admin/equipment/category', 141,  'PAGE',      1),
-(202, 200,  'C_EQUIPMENT_MODEL',    '型号管理', '/admin/equipment/model',    '/admin/equipment/model',    145,  'PAGE',      2),
-(203, 200,  'C_EQUIPMENT_ASSET',    '设备台账', '/admin/equipment/asset',    '/admin/equipment/asset',    149,  'PAGE',      3),
+(202, 200,  'C_EQUIPMENT_MODEL',    '型号管理', '/admin/equipment/model',    '/admin/equipment/model',    145,  'PAGE',      1),
+(203, 200,  'C_EQUIPMENT_ASSET',    '设备台账', '/admin/equipment/asset',    '/admin/equipment/asset',    149,  'PAGE',      2),
 (204, 203,  'F_EQUIPMENT_ASSET_CREATE', '设备登记', NULL, NULL, 150, 'ACTION', 1);
 
 -- ----------------------------------------------------------------------------
@@ -534,7 +533,6 @@ INSERT INTO sys_role_permission (id, role_id, permission_id) VALUES
 
 INSERT INTO sys_role_menu (id, role_id, menu_id) VALUES
 (606, 1, 200),
-(607, 1, 201),
 (608, 1, 202),
 (609, 1, 203),
 (610, 1, 204);

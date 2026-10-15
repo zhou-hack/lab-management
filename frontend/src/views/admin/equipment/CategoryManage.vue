@@ -1,83 +1,102 @@
 <template>
-  <div class="page category_manage">
-    <div class="page_header">
-      <div>
-        <h2 class="t-title">
-          设备分类
-        </h2>
-        <p class="t-sub">
-          多级设备分类树，设备型号按分类挂靠；编码创建后不可修改、删除后不可复用
-        </p>
+  <div class="equip_section category_manage">
+    <div class="sechead">
+      <div class="category_manage__sechead_text">
+        分类目录
+        <span class="t-hint">共 {{ totalCount }} 个分类</span>
       </div>
       <el-button
         v-permission="'equipment:category:create'"
         type="primary"
+        size="small"
         @click="openCreate(null)"
       >
         新增根分类
       </el-button>
     </div>
-    <div class="card">
-      <div
-        v-loading="loading"
-        class="table-scroll-x"
-      >
-        <el-tree
-          v-if="tree.length"
-          :data="tree"
-          node-key="id"
-          default-expand-all
-          :expand-on-click-node="false"
+    <!-- 加载骨架（规范 7.8）：模拟树形行位，避免白屏与纯 spinner -->
+    <div
+      v-if="loading"
+      class="category_manage__skeleton"
+    >
+      <span class="skeleton category_manage__sk_row" />
+      <span class="skeleton category_manage__sk_row category_manage__sk_row--indent" />
+      <span class="skeleton category_manage__sk_row category_manage__sk_row--indent" />
+      <span class="skeleton category_manage__sk_row" />
+      <span class="skeleton category_manage__sk_row" />
+    </div>
+    <el-tree
+      v-else-if="tree.length"
+      :data="tree"
+      node-key="id"
+      default-expand-all
+      :expand-on-click-node="false"
+    >
+      <template #default="{ data }">
+        <div
+          class="category_manage__node"
+          :class="{ 'category_manage__node--off': data.enabled !== 1 }"
         >
-          <template #default="{ data }">
-            <div class="category_manage__node">
-              <span class="t-body category_manage__node_label">
-                <span class="t-hint">{{ data.categoryCode }}</span>
-                {{ data.categoryName }}
-              </span>
-              <span
-                v-if="data.enabled !== 1"
-                class="pill pill--muted"
-              >
-                已停用
-              </span>
-              <span class="category_manage__node_actions">
-                <el-button
-                  v-permission="'equipment:category:create'"
-                  link
-                  type="primary"
-                  size="small"
-                  @click.stop="openCreate(data)"
-                >
-                  新增子级
-                </el-button>
-                <el-button
-                  v-permission="'equipment:category:update'"
-                  link
-                  type="primary"
-                  size="small"
-                  @click.stop="openEdit(data)"
-                >
-                  编辑
-                </el-button>
-                <el-button
-                  v-permission="'equipment:category:delete'"
-                  link
-                  type="danger"
-                  size="small"
-                  @click.stop="removeCategory(data)"
-                >
-                  删除
-                </el-button>
-              </span>
-            </div>
-          </template>
-        </el-tree>
-        <el-empty
-          v-if="!loading && !tree.length"
-          description="暂无分类，请从根分类开始建立"
-        />
-      </div>
+          <span class="category_manage__node_icon">
+            <el-icon :size="15">
+              <Collection />
+            </el-icon>
+          </span>
+          <span class="category_manage__node_name">{{ data.categoryName }}</span>
+          <span class="category_manage__node_code">{{ data.categoryCode }}</span>
+          <span
+            v-if="childCount(data)"
+            class="category_manage__node_children"
+          >{{ childCount(data) }} 个子级</span>
+          <span
+            v-if="data.enabled !== 1"
+            class="pill pill--muted"
+          >
+            已停用
+          </span>
+          <span class="category_manage__node_actions">
+            <el-button
+              v-permission="'equipment:category:create'"
+              link
+              type="primary"
+              size="small"
+              @click.stop="openCreate(data)"
+            >
+              新增子级
+            </el-button>
+            <el-button
+              v-permission="'equipment:category:update'"
+              link
+              type="primary"
+              size="small"
+              @click.stop="openEdit(data)"
+            >
+              编辑
+            </el-button>
+            <el-button
+              v-permission="'equipment:category:delete'"
+              link
+              type="danger"
+              size="small"
+              @click.stop="removeCategory(data)"
+            >
+              删除
+            </el-button>
+          </span>
+        </div>
+      </template>
+    </el-tree>
+    <div
+      v-if="!loading && !tree.length"
+      class="empty"
+    >
+      <el-icon
+        class="empty__icon"
+        :size="40"
+      >
+        <Files />
+      </el-icon>
+      暂无分类，请从根分类开始建立
     </div>
 
     <el-dialog
@@ -153,10 +172,36 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Collection, Files } from '@element-plus/icons-vue'
 import { categoryTree, createCategory, deleteCategory, updateCategory } from '@/api/equipment'
+
+/**
+ * 分类目录抽屉内容（嵌于设备型号面板的「管理分类」抽屉内）。
+ * 挂载即加载全树（抽屉 destroy-on-close，每次打开重新拉取）；
+ * 任何变更成功后 emit('changed') 通知父级刷新分类筛选与型号分组。
+ */
+const emit = defineEmits(['changed'])
 
 const loading = ref(false)
 const tree = ref([])
+
+/** 全树节点总数（递归） */
+const totalCount = computed(() => {
+  let count = 0
+  const walk = (nodes) => {
+    for (const node of nodes || []) {
+      count += 1
+      walk(node.children)
+    }
+  }
+  walk(tree.value)
+  return count
+})
+
+/** 直接子级数量（仅统计启用子级，与视觉强调一致） */
+function childCount(data) {
+  return (data.children || []).filter((c) => c.enabled === 1).length
+}
 
 async function loadTree() {
   loading.value = true
@@ -168,6 +213,8 @@ async function loadTree() {
     loading.value = false
   }
 }
+
+onMounted(loadTree)
 
 /**
  * 克隆分类树为 el-tree-select 数据（{ id, label, children }）。
@@ -248,6 +295,7 @@ async function save() {
     ElMessage.success('保存成功')
     dialog.visible = false
     loadTree()
+    emit('changed')
   } catch {
     // 失败提示由请求拦截器统一处理
   } finally {
@@ -269,29 +317,118 @@ async function removeCategory(data) {
     await deleteCategory(data.id)
     ElMessage.success('删除成功')
     loadTree()
+    emit('changed')
   } catch {
     // 失败提示由请求拦截器统一处理
   }
 }
-
-onMounted(loadTree)
 </script>
 
 <style scoped>
+.category_manage__sechead_text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 加载骨架：模拟树形行位（规范 7.8） */
+.category_manage__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 6px 2px 10px;
+}
+
+.category_manage__sk_row {
+  height: 36px;
+  border-radius: var(--r-sm);
+}
+
+.category_manage__sk_row--indent {
+  width: 86%;
+  margin-left: 24px;
+}
+
+/* 树行：44px 行高 + 圆角 hover 底（行级交互反馈） */
+.category_manage :deep(.el-tree) {
+  --el-tree-node-content-height: 44px;
+}
+
+.category_manage :deep(.el-tree-node__content) {
+  border-radius: var(--r-sm);
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+.category_manage :deep(.el-tree-node__content:hover) {
+  background: var(--brand-a04);
+}
+
+/* 节点内容：图标容器 + 名称 + 编码徽章 + 子级数 + 状态/操作 */
 .category_manage__node {
   display: flex;
   flex: 1;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
-  padding-right: 8px;
+  height: 100%;
+  padding-right: 10px;
 }
 
-.category_manage__node_label {
-  flex: 1;
+.category_manage__node_icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--brand-a08);
+  color: var(--brand);
+  flex-shrink: 0;
+}
+
+.category_manage__node--off .category_manage__node_icon {
+  background: var(--muted-bg);
+  color: var(--muted);
+}
+
+.category_manage__node--off .category_manage__node_name {
+  color: var(--g3);
+}
+
+.category_manage__node_name {
+  font-size: 14px;
+  font-weight: var(--fw-medium);
+  color: var(--g1);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 编码徽章：sunken 底 + 发丝线 + 等宽数字 */
+.category_manage__node_code {
+  font-family: var(--font-num);
+  font-size: 11px;
+  color: var(--g3);
+  background: var(--surface-sunken);
+  border: .5px solid var(--hair);
+  border-radius: var(--r-xs);
+  padding: 1px 7px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.category_manage__node--off .category_manage__node_code {
+  color: var(--g4);
+}
+
+/* 子级计数：弱化元数据，等宽数字 */
+.category_manage__node_children {
+  font-size: 11.5px;
+  color: var(--g3);
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .category_manage__node_actions {
@@ -300,7 +437,7 @@ onMounted(loadTree)
   white-space: nowrap;
 }
 
-.category_manage__node:hover .category_manage__node_actions {
+.category_manage :deep(.el-tree-node__content:hover) .category_manage__node_actions {
   display: inline-flex;
 }
 </style>

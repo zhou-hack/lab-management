@@ -1,15 +1,5 @@
 <template>
-  <div class="page asset_manage">
-    <div class="page_header">
-      <div>
-        <h2 class="t-title">
-          设备台账
-        </h2>
-        <p class="t-sub">
-          设备资产全量登记；仅空闲状态可迁移实验室，贵重设备须留存定级依据
-        </p>
-      </div>
-    </div>
+  <div class="equip_section asset_manage">
     <div class="card">
       <div class="asset_manage__toolbar">
         <el-input
@@ -19,6 +9,16 @@
           clearable
           @keyup.enter="search"
           @clear="search"
+        />
+        <el-tree-select
+          v-model="query.departmentId"
+          class="asset_manage__filter"
+          :data="departmentOptions"
+          node-key="id"
+          check-strictly
+          clearable
+          placeholder="全部部门"
+          @change="search"
         />
         <el-select
           v-model="query.labId"
@@ -62,151 +62,200 @@
         </el-button>
       </div>
     </div>
+
     <div class="card">
-      <div class="table-scroll-x">
-        <el-table
-          v-loading="loading"
-          :data="records"
+      <!-- 加载骨架（规范 7.8）：模拟分组行位 -->
+      <div
+        v-if="loading"
+        class="asset_manage__skeleton"
+      >
+        <span class="skeleton asset_manage__sk_row" />
+        <span class="skeleton asset_manage__sk_row asset_manage__sk_row--indent" />
+        <span class="skeleton asset_manage__sk_row asset_manage__sk_row--indent" />
+        <span class="skeleton asset_manage__sk_row" />
+        <span class="skeleton asset_manage__sk_row" />
+      </div>
+      <template v-else-if="groups.length">
+        <div
+          v-for="group in groups"
+          :key="group.departmentId"
+          class="equip_group"
+          :class="{ 'equip_group--collapsed': !expanded[group.departmentId] }"
         >
-          <el-table-column
-            prop="assetCode"
-            label="资产编号"
-            min-width="110"
-          />
-          <el-table-column
-            prop="equipmentName"
-            label="设备名称"
-            min-width="150"
-          />
-          <el-table-column
-            label="序列号"
-            min-width="110"
+          <div
+            class="equip_group__head"
+            role="button"
+            tabindex="0"
+            @click="toggleGroup(group.departmentId)"
+            @keydown.enter.prevent="toggleGroup(group.departmentId)"
+            @keydown.space.prevent="toggleGroup(group.departmentId)"
           >
-            <template #default="{ row }">
-              {{ row.serialNo || '—' }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            prop="modelCode"
-            label="型号码"
-            min-width="100"
-          />
-          <el-table-column
-            prop="labName"
-            label="保管实验室"
-            min-width="130"
-          />
-          <el-table-column
-            prop="departmentName"
-            label="归口部门"
-            min-width="110"
-          />
-          <el-table-column
-            label="存放位置"
-            min-width="130"
-            show-overflow-tooltip
+            <el-icon class="equip_group__chevron">
+              <ArrowDown />
+            </el-icon>
+            <span class="equip_group__icon">
+              <el-icon :size="14">
+                <OfficeBuilding />
+              </el-icon>
+            </span>
+            <span class="equip_group__name">{{ group.departmentName }}</span>
+            <span class="equip_group__count">{{ group.assets.length }} 台资产</span>
+          </div>
+          <div
+            v-show="expanded[group.departmentId]"
+            class="equip_group__body"
           >
-            <template #default="{ row }">
-              {{ row.locationDetail || '—' }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            label="保管人"
-            width="90"
-          >
-            <template #default="{ row }">
-              {{ row.custodianName || '—' }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            label="购置日期"
-            width="110"
-          >
-            <template #default="{ row }">
-              {{ row.purchaseDate || '—' }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            label="价值分级"
-            width="90"
-          >
-            <template #default="{ row }">
-              <span
-                class="pill"
-                :class="valueLevelMeta(row).pill"
-              >
-                {{ valueLevelMeta(row).label }}
-              </span>
-            </template>
-          </el-table-column>
-          <el-table-column
-            label="状态"
-            width="90"
-          >
-            <template #default="{ row }">
-              <span
-                class="pill"
-                :class="enumMeta(row.status, EQUIPMENT_STATUS).pill"
-              >
-                {{ enumMeta(row.status, EQUIPMENT_STATUS).label }}
-              </span>
-            </template>
-          </el-table-column>
-          <el-table-column
-            label="启用"
-            width="80"
-          >
-            <template #default="{ row }">
-              <span
-                class="pill"
-                :class="row.enabled === 1 ? 'pill--ok' : 'pill--muted'"
-              >
-                {{ row.enabled === 1 ? '启用' : '停用' }}
-              </span>
-            </template>
-          </el-table-column>
-          <el-table-column
-            label="操作"
-            width="210"
-            fixed="right"
-          >
-            <template #default="{ row }">
-              <el-button
-                v-permission="'equipment:asset:update'"
-                link
-                type="primary"
-                @click="openEdit(row)"
-              >
-                编辑
-              </el-button>
-              <el-button
-                v-permission="'equipment:asset:transfer'"
-                link
-                type="primary"
-                :disabled="row.status !== 'IDLE'"
-                @click="openTransfer(row)"
-              >
-                迁移
-              </el-button>
-              <el-button
-                v-permission="'equipment:asset:classify'"
-                link
-                type="primary"
-                @click="openClassify(row)"
-              >
-                定级
-              </el-button>
-              <el-button
-                v-permission="'equipment:asset:delete'"
-                link
-                type="danger"
-                @click="removeAsset(row)"
-              >
-                删除
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+            <div class="table-scroll-x">
+              <el-table :data="group.assets">
+                <el-table-column
+                  prop="assetCode"
+                  label="资产编号"
+                  min-width="110"
+                />
+                <el-table-column
+                  prop="equipmentName"
+                  label="设备名称"
+                  min-width="150"
+                />
+                <el-table-column
+                  label="序列号"
+                  min-width="110"
+                >
+                  <template #default="{ row }">
+                    {{ row.serialNo || '—' }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  prop="modelCode"
+                  label="型号码"
+                  min-width="100"
+                />
+                <el-table-column
+                  prop="labName"
+                  label="保管实验室"
+                  min-width="130"
+                />
+                <el-table-column
+                  label="存放位置"
+                  min-width="130"
+                  show-overflow-tooltip
+                >
+                  <template #default="{ row }">
+                    {{ row.locationDetail || '—' }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="保管人"
+                  width="90"
+                >
+                  <template #default="{ row }">
+                    {{ row.custodianName || '—' }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="购置日期"
+                  width="110"
+                >
+                  <template #default="{ row }">
+                    {{ row.purchaseDate || '—' }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="价值分级"
+                  width="90"
+                >
+                  <template #default="{ row }">
+                    <span
+                      class="pill"
+                      :class="valueLevelMeta(row).pill"
+                    >
+                      {{ valueLevelMeta(row).label }}
+                    </span>
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="状态"
+                  width="90"
+                >
+                  <template #default="{ row }">
+                    <span
+                      class="pill"
+                      :class="enumMeta(row.status, EQUIPMENT_STATUS).pill"
+                    >
+                      {{ enumMeta(row.status, EQUIPMENT_STATUS).label }}
+                    </span>
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="启用"
+                  width="80"
+                >
+                  <template #default="{ row }">
+                    <span
+                      class="pill"
+                      :class="row.enabled === 1 ? 'pill--ok' : 'pill--muted'"
+                    >
+                      {{ row.enabled === 1 ? '启用' : '停用' }}
+                    </span>
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="操作"
+                  width="210"
+                  fixed="right"
+                >
+                  <template #default="{ row }">
+                    <el-button
+                      v-permission="'equipment:asset:update'"
+                      link
+                      type="primary"
+                      @click="openEdit(row)"
+                    >
+                      编辑
+                    </el-button>
+                    <el-button
+                      v-permission="'equipment:asset:transfer'"
+                      link
+                      type="primary"
+                      :disabled="row.status !== 'IDLE'"
+                      @click="openTransfer(row)"
+                    >
+                      迁移
+                    </el-button>
+                    <el-button
+                      v-permission="'equipment:asset:classify'"
+                      link
+                      type="primary"
+                      @click="openClassify(row)"
+                    >
+                      定级
+                    </el-button>
+                    <el-button
+                      v-permission="'equipment:asset:delete'"
+                      link
+                      type="danger"
+                      @click="removeAsset(row)"
+                    >
+                      删除
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </div>
+        </div>
+      </template>
+      <div
+        v-else
+        class="empty"
+      >
+        <el-icon
+          class="empty__icon"
+          :size="40"
+        >
+          <Files />
+        </el-icon>
+        暂无台账记录，请从「新增台账」开始登记
       </div>
       <el-pagination
         v-model:current-page="query.pageNum"
@@ -564,8 +613,9 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowDown, Files, OfficeBuilding } from '@element-plus/icons-vue'
 import {
   classifyAsset,
   createAsset,
@@ -579,6 +629,17 @@ import {
 import { pageLabs } from '@/api/space'
 import { departmentTreeOptions } from '@/api/department'
 import { EQUIPMENT_STATUS, EQUIPMENT_STATUS_OPTIONS, VALUE_LEVEL, enumMeta } from '@/utils/enums'
+
+/**
+ * 设备台账段（EquipmentManage 折叠面板子组件）。
+ * - 当前页记录按归口部门分组折叠展示，支持按部门筛选
+ * - active 由父级面板展开状态驱动：首次展开才加载数据；收起时 DOM 保留、状态不丢失
+ */
+const props = defineProps({
+  active: { type: Boolean, default: false }
+})
+
+const emit = defineEmits(['count'])
 
 /* ---------------- 下拉选项 ---------------- */
 
@@ -621,9 +682,16 @@ async function loadDepartmentOptions() {
   }
 }
 
-/* ---------------- 列表 ---------------- */
+/* ---------------- 列表（按归口部门分组） ---------------- */
 
-const query = reactive({ pageNum: 1, pageSize: 20, keyword: '', labId: '', status: '' })
+const query = reactive({
+  pageNum: 1,
+  pageSize: 20,
+  keyword: '',
+  departmentId: null,
+  labId: '',
+  status: ''
+})
 const records = ref([])
 const total = ref(0)
 const loading = ref(false)
@@ -634,12 +702,53 @@ function valueLevelMeta(row) {
     : { label: '待分类', pill: 'pill--danger' }
 }
 
+/** 当前页记录按归口部门分组（保持记录出现顺序） */
+const groups = computed(() => {
+  const order = []
+  const map = new Map()
+  for (const row of records.value) {
+    const key = String(row.departmentId ?? 'none')
+    if (!map.has(key)) {
+      map.set(key, {
+        departmentId: key,
+        departmentName: row.departmentName || '未分配',
+        assets: []
+      })
+      order.push(key)
+    }
+    map.get(key).assets.push(row)
+  }
+  return order.map((key) => map.get(key))
+})
+
+/* 分组折叠状态：新分组默认展开 */
+const expanded = reactive({})
+
+watch(
+  groups,
+  (list) => {
+    for (const group of list) {
+      if (!(group.departmentId in expanded)) {
+        expanded[group.departmentId] = true
+      }
+    }
+  },
+  { immediate: true }
+)
+
+function toggleGroup(key) {
+  expanded[key] = !expanded[key]
+}
+
 async function load() {
   loading.value = true
   try {
     const params = { pageNum: query.pageNum, pageSize: query.pageSize }
     if (query.keyword.trim()) {
       params.keyword = query.keyword.trim()
+    }
+    if (query.departmentId) {
+      params.departmentId = query.departmentId
     }
     if (query.labId) {
       params.labId = query.labId
@@ -650,6 +759,7 @@ async function load() {
     const data = await pageAssets(params)
     records.value = data.records || []
     total.value = data.total || 0
+    emit('count', total.value)
   } catch {
     // 失败提示由请求拦截器统一处理
   } finally {
@@ -898,13 +1008,22 @@ async function removeAsset(row) {
   }
 }
 
-onMounted(() => {
-  load()
-  loadLabOptions()
-  loadModelOptions()
-  loadCustodianList()
-  loadDepartmentOptions()
-})
+const loaded = ref(false)
+
+watch(
+  () => props.active,
+  (active) => {
+    if (active && !loaded.value) {
+      loaded.value = true
+      load()
+      loadLabOptions()
+      loadModelOptions()
+      loadCustodianList()
+      loadDepartmentOptions()
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>
@@ -935,5 +1054,23 @@ onMounted(() => {
 
 .asset_manage__alert {
   margin-bottom: 16px;
+}
+
+/* 加载骨架：模拟分组行位（规范 7.8） */
+.asset_manage__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 6px 2px 10px;
+}
+
+.asset_manage__sk_row {
+  height: 36px;
+  border-radius: var(--r-sm);
+}
+
+.asset_manage__sk_row--indent {
+  width: 86%;
+  margin-left: 38px;
 }
 </style>

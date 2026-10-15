@@ -64,7 +64,6 @@ const ICON_BY_KEY = {
   '/admin/space': OfficeBuilding,
   '/admin/space/labs': Location,
   '/admin/equipment': Monitor,
-  '/admin/equipment/category': Collection,
   '/admin/equipment/model': Grid,
   '/admin/equipment/asset': Notebook
 }

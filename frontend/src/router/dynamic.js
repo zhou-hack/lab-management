@@ -9,9 +9,10 @@ import AdminLayout from '@/layout/admin/AdminLayout.vue'
 const viewModules = {
   '/admin/home': () => import('@/views/admin/home/AdminHome.vue'),
   '/admin/space': () => import('@/views/admin/space/SpaceManage.vue'),
-  '/admin/equipment/category': () => import('@/views/admin/equipment/CategoryManage.vue'),
-  '/admin/equipment/model': () => import('@/views/admin/equipment/ModelManage.vue'),
-  '/admin/equipment/asset': () => import('@/views/admin/equipment/AssetManage.vue')
+  // 设备管理两菜单共用整合页（型号/台账折叠面板，进入时按路由展开对应面板；
+  // 分类目录已并入型号面板的「管理分类」抽屉，不再单独成页）
+  '/admin/equipment/model': () => import('@/views/admin/equipment/EquipmentManage.vue'),
+  '/admin/equipment/asset': () => import('@/views/admin/equipment/EquipmentManage.vue')
 }
 
 const addedRouteNames = []
@@ -48,6 +49,16 @@ export function registerDynamicRoutes(menus) {
       console.warn(`[router] 菜单「${menu.menuName}」(${menu.path}) 不属于管理端子树，已跳过`)
     }
   })
+
+  // 固定首页：不依赖后端菜单下发（规范 7.4「固定首页」），菜单树未含时补注册
+  if (!adminChildren.some((r) => r.path === '/admin/home')) {
+    adminChildren.unshift({
+      path: '/admin/home',
+      name: 'dyn_home_fixed',
+      component: viewModules['/admin/home'],
+      meta: { title: '首页', icon: null, perms: null, menuId: 'fixed_home' }
+    })
+  }
 
   if (adminChildren.length) {
     router.addRoute({
