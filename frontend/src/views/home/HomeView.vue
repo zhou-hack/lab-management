@@ -1,23 +1,23 @@
 <template>
-  <div class="front_home">
-    <!-- 页头：问候 + 角色（纯排版，无渐变 hero） -->
-    <header class="front_home__header">
+  <div class="home_view">
+    <!-- 页头：问候 + 角色 -->
+    <header class="home_view__header">
       <div>
-        <h1 class="front_home__hello">
-          {{ greeting }}，{{ store.user?.realName || '同学' }}
+        <h1 class="home_view__hello">
+          {{ greeting }}，{{ store.user?.realName || '用户' }}
         </h1>
         <p class="t-sub">
-          {{ roleText }} · 在线预约器材与场地，实时查看办理进度
+          {{ roleText }} · {{ todayText }}
         </p>
       </div>
     </header>
 
-    <!-- 功能入口：桌面网格卡片 -->
-    <section class="front_home__section">
+    <!-- 功能入口：按当前账号可用菜单动态启用 -->
+    <section class="home_view__section">
       <h3 class="sechead">
         常用功能
       </h3>
-      <div class="front_home__grid">
+      <div class="home_view__grid">
         <button
           v-for="entry in entries"
           :key="entry.name"
@@ -40,9 +40,9 @@
       </div>
     </section>
 
-    <div class="front_home__columns">
+    <div class="home_view__columns">
       <!-- 待办：空态（接口接入前不展示虚构数据） -->
-      <section class="front_home__section">
+      <section class="home_view__section">
         <div class="card card--pad0">
           <div class="card__head">
             <span class="card__title">待我处理</span>
@@ -61,7 +61,7 @@
       </section>
 
       <!-- 最近使用记录：空态 -->
-      <section class="front_home__section">
+      <section class="home_view__section">
         <div class="card card--pad0">
           <div class="card__head">
             <span class="card__title">最近使用记录</span>
@@ -86,7 +86,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Bell, Calendar, Document, Box, Tools, DataLine } from '@element-plus/icons-vue'
+import { Bell, Box, Calendar, DataLine, Document, Tools } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 
 const router = useRouter()
@@ -101,18 +101,53 @@ const greeting = computed(() => {
   return '晚上好'
 })
 
+const todayText = computed(() =>
+  new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long'
+  }).format(new Date())
+)
+
 const ROLE_TEXT = { ADMIN: '管理员', TEACHER: '教师', STUDENT: '学生', ASSISTANT: '教师助理' }
 const roleText = computed(() => store.roles.map((r) => ROLE_TEXT[r] || r).join(' · ') || '实验室用户')
 
-// 已落地的模块指向真实页面；未落地模块置灰（path 为空）
-const entries = [
-  { name: '场地预约', desc: '申请实验室使用时段', icon: Calendar, tone: 'ok', path: '/booking/labs' },
-  { name: '我的申请', desc: '查看审批进度与单据', icon: Document, tone: 'brand', path: '/booking/labs' },
+/** 当前账号菜单树中已开放的页面路径集合（入口可用性以此为准） */
+const openPaths = computed(() => {
+  const paths = new Set()
+  const walk = (nodes) => {
+    for (const node of nodes || []) {
+      if (node.menuType === 'PAGE' && node.routePath) paths.add(node.routePath)
+      if (node.children && node.children.length) walk(node.children)
+    }
+  }
+  walk(store.menus)
+  return paths
+})
+
+// 已开放入口指向菜单中的真实页面；未开放模块置灰（path 为空）
+const entries = computed(() => [
+  {
+    name: '场地预约',
+    desc: '申请实验室使用时段',
+    icon: Calendar,
+    tone: 'ok',
+    path: openPaths.value.has('/booking/labs') ? '/booking/labs' : ''
+  },
+  {
+    name: '我的申请',
+    desc: '查看审批进度与单据',
+    icon: Document,
+    tone: 'brand',
+    path: openPaths.value.has('/booking/labs') ? '/booking/labs' : ''
+  },
   { name: '器材借用', desc: '浏览并提交器材预约', icon: Tools, tone: 'brand', path: '' },
   { name: '物料代办', desc: '课前领用与课后回库', icon: Box, tone: 'muted', path: '' },
   { name: '使用记录', desc: '借出归还与拍照留痕', icon: DataLine, tone: 'warn', path: '' },
   { name: '通知消息', desc: '审批与催办提醒', icon: Bell, tone: 'ok', path: '' }
-]
+])
 
 function go(entry) {
   if (!entry.path) {
@@ -124,23 +159,23 @@ function go(entry) {
 </script>
 
 <style scoped>
-.front_home__header {
+.home_view__header {
   padding: 8px 2px 18px;
 }
 
-.front_home__hello {
+.home_view__hello {
   margin: 0 0 4px;
   font-size: 22px;
   font-weight: var(--fw-semibold);
   color: var(--g1);
 }
 
-.front_home__section {
+.home_view__section {
   margin-bottom: 18px;
 }
 
 /* 功能入口：桌面三列网格，卡片悬浮描边变蓝 */
-.front_home__grid {
+.home_view__grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
@@ -189,7 +224,7 @@ function go(entry) {
 }
 
 /* 下半区双列 */
-.front_home__columns {
+.home_view__columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
@@ -204,7 +239,7 @@ function go(entry) {
 }
 
 @media (max-width: 900px) {
-  .front_home__grid { grid-template-columns: repeat(2, 1fr); }
-  .front_home__columns { grid-template-columns: 1fr; }
+  .home_view__grid { grid-template-columns: repeat(2, 1fr); }
+  .home_view__columns { grid-template-columns: 1fr; }
 }
 </style>

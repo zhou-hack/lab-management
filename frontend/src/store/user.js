@@ -15,23 +15,10 @@ export const useUserStore = defineStore('user', {
     passwordChangeRequired: false
   }),
   getters: {
-    isAdmin: (state) => state.roles.includes('ADMIN'),
     /** 任一强制改密标志命中即拦截到设置密码页 */
     mustSetPassword: (state) => state.needSetPassword || state.passwordChangeRequired,
-    /** 落地点：菜单树中第一个页面；无菜单时按身份回退到静态首页 */
-    homePath: (state) => {
-      const queue = [...state.menus]
-      while (queue.length) {
-        const node = queue.shift()
-        if (node.menuType === 'PAGE' && node.routePath) {
-          return node.routePath
-        }
-        if (node.children && node.children.length) {
-          queue.push(...node.children)
-        }
-      }
-      return state.roles.includes('ADMIN') ? '/admin/home' : '/home'
-    }
+    /** 全部账号统一直落到管理端首页（同一布局与设计风格） */
+    homePath: () => '/admin/home'
   },
   actions: {
     /**

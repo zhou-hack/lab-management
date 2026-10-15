@@ -8,7 +8,7 @@
         <span class="admin_layout__logo_mark">
           <el-icon><Tools /></el-icon>
         </span>
-        <span v-show="!collapsed">实验室设备管理</span>
+        <span v-show="!collapsed">实验室设备管理系统</span>
       </div>
       <el-menu
         class="admin_layout__menu"
@@ -16,6 +16,12 @@
         :collapse="collapsed"
         router
       >
+        <el-menu-item index="/admin/home">
+          <el-icon><HomeFilled /></el-icon>
+          <template #title>
+            首页
+          </template>
+        </el-menu-item>
         <sidebar-item
           v-for="menu in menuTree"
           :key="menu.id"
@@ -78,7 +84,7 @@
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import { ArrowDown, Expand, Fold, Tools } from '@element-plus/icons-vue'
+import { ArrowDown, Expand, Fold, HomeFilled, Tools } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import SidebarItem from './SidebarItem.vue'
 
@@ -86,7 +92,7 @@ const route = useRoute()
 const router = useRouter()
 const store = useUserStore()
 
-// 窄屏（<1024）默认收起侧边栏，移动自适应（规范第 10 节）
+// 窗口 <1024 默认收起侧边栏（规范第 10 节，桌面断点）
 const collapsed = ref(window.innerWidth < 1024)
 
 // 侧边菜单：角色菜单树过滤动作（ACTION）节点；目录无有效子页时隐藏

@@ -1,12 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { getToken } from '@/utils/token'
 import { useUserStore } from '@/store/user'
-import FrontLayout from '@/layout/front/FrontLayout.vue'
 import AdminLayout from '@/layout/admin/AdminLayout.vue'
 
 /**
- * 布局与首页为静态路由，始终注册；
- * 业务页面由 router/dynamic.js 按菜单 componentKey 白名单挂到对应布局下。
+ * 布局与首页为静态路由，始终注册；全部账号共用同一套管理端布局与设计风格。
+ * 业务页面由 router/dynamic.js 按菜单 componentKey 白名单挂到 AdminLayout 下。
  */
 const staticRoutes = [
   {
@@ -23,28 +22,14 @@ const staticRoutes = [
   },
   {
     path: '/',
-    name: 'FrontLayout',
-    component: FrontLayout,
-    // 不设记录级 redirect：记录级重定向先于守卫执行，会绕过守卫中 '/' 按身份分流的逻辑
-    children: [
-      {
-        path: 'home',
-        name: 'FrontHome',
-        component: () => import('@/views/front/home/FrontHome.vue'),
-        meta: { title: '首页' }
-      }
-    ]
-  },
-  {
-    path: '/admin',
     name: 'AdminLayout',
     component: AdminLayout,
     redirect: '/admin/home',
     children: [
       {
-        path: 'home',
-        name: 'AdminHome',
-        component: () => import('@/views/admin/home/AdminHome.vue'),
+        path: 'admin/home',
+        name: 'HomeView',
+        component: () => import('@/views/home/HomeView.vue'),
         meta: { title: '首页' }
       }
     ]
@@ -96,17 +81,7 @@ router.beforeEach(async (to) => {
     return { path: '/set_password' }
   }
 
-  // 根路径按菜单/身份分流
-  if (to.path === '/') {
-    return store.homePath
-  }
-
   if (to.path === '/login') {
-    return store.homePath
-  }
-
-  // 管理端静态首页仅管理员可见；动态业务页由菜单注册与否天然隔离
-  if ((to.path === '/admin' || to.path.startsWith('/admin/')) && !store.isAdmin) {
     return store.homePath
   }
 
