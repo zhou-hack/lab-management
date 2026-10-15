@@ -78,6 +78,18 @@
           确 定
         </el-button>
       </el-form>
+
+      <!-- 强制改密期间允许放弃并退回登录页，避免被困在本页 -->
+      <div class="pwd_footer">
+        <button
+          type="button"
+          class="pwd_logout"
+          :disabled="loading"
+          @click="quit"
+        >
+          退出登录
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -135,6 +147,17 @@ async function submit() {
     store.clearPasswordFlags()
     ElMessage.success('密码已更新')
     router.push('/')
+  } finally {
+    loading.value = false
+  }
+}
+
+/** 放弃本次强制改密：注销会话回登录页 */
+async function quit() {
+  loading.value = true
+  try {
+    await store.logout()
+    router.push('/login')
   } finally {
     loading.value = false
   }
@@ -209,5 +232,31 @@ async function submit() {
 
 .pwd_submit:active {
   transform: scale(.985);
+}
+
+.pwd_footer {
+  margin-top: 14px;
+  text-align: center;
+}
+
+.pwd_logout {
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--g3);
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: var(--r-full);
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.pwd_logout:hover:not(:disabled) {
+  color: var(--g1);
+  background: var(--brand-a04);
+}
+
+.pwd_logout:disabled {
+  opacity: .5;
+  cursor: not-allowed;
 }
 </style>

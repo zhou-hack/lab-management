@@ -220,8 +220,8 @@ const overview = ref([
 
 const entries = [
   { name: '器材借用', desc: '浏览并提交器材预约', icon: Tools, tone: 'brand', path: '/home' },
-  { name: '场地预约', desc: '申请实验室使用时段', icon: Calendar, tone: 'ok', path: '/home' },
-  { name: '我的申请', desc: '查看审批进度与单据', icon: Document, tone: 'warn', path: '/home' },
+  { name: '场地预约', desc: '申请实验室使用时段', icon: Calendar, tone: 'ok', path: '/booking/labs' },
+  { name: '我的申请', desc: '查看审批进度与单据', icon: Document, tone: 'warn', path: '/booking/labs' },
   { name: '物料代办', desc: '课前领用与课后回库', icon: Box, tone: 'muted', path: '/home' },
   { name: '使用记录', desc: '借出归还与拍照留痕', icon: DataLine, tone: 'brand', path: '/home' }
 ]
