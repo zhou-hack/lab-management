@@ -65,6 +65,9 @@ function goBack() {
 }
 
 .front_nav__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 30px;
   height: 30px;
   border: none;
@@ -74,6 +77,11 @@ function goBack() {
   color: var(--g2);
   cursor: pointer;
   border-radius: var(--r-full);
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.front_nav__back:not(.front_nav__back--placeholder):hover {
+  background: var(--brand-a04);
 }
 
 .front_nav__back:not(.front_nav__back--placeholder):active {

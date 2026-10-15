@@ -5,6 +5,9 @@
       class="admin_layout__aside"
     >
       <div class="admin_layout__logo">
+        <span class="admin_layout__logo_mark">
+          <el-icon><Tools /></el-icon>
+        </span>
         <span v-show="!collapsed">实验室设备管理</span>
       </div>
       <el-menu
@@ -14,15 +17,15 @@
         router
       >
         <sidebar-item
-          v-for="menu in adminMenus"
-          :key="menu.menuId"
+          v-for="menu in menuTree"
+          :key="menu.id"
           :item="menu"
         />
         <div
-          v-if="!adminMenus.length && !collapsed"
+          v-if="!menuTree.length && !collapsed"
           class="admin_layout__menu_empty t-hint"
         >
-          暂无菜单（后端接入后按角色下发）
+          暂无可用菜单
         </div>
       </el-menu>
     </el-aside>
@@ -43,11 +46,19 @@
         </div>
         <el-dropdown @command="onUserCommand">
           <span class="admin_layout__user">
-            {{ store.userInfo?.realName || '用户' }}
+            <span class="admin_layout__avatar">
+              {{ (store.user?.realName || '用').slice(0, 1) }}
+            </span>
+            <span class="admin_layout__username">
+              {{ store.user?.realName || '用户' }}
+            </span>
             <el-icon><ArrowDown /></el-icon>
           </span>
           <template #dropdown>
             <el-dropdown-menu>
+              <el-dropdown-item command="setPassword">
+                修改密码
+              </el-dropdown-item>
               <el-dropdown-item command="logout">
                 退出登录
               </el-dropdown-item>
@@ -67,7 +78,7 @@
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import { ArrowDown, Expand, Fold } from '@element-plus/icons-vue'
+import { ArrowDown, Expand, Fold, Tools } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import SidebarItem from './SidebarItem.vue'
 
@@ -78,18 +89,21 @@ const store = useUserStore()
 // 窄屏（<1024）默认收起侧边栏，移动自适应（规范第 10 节）
 const collapsed = ref(window.innerWidth < 1024)
 
-// 后台菜单：取菜单树中 path 以 /admin 开头的子树（目录 M / 页面 C）
-const adminMenus = computed(() => {
+// 侧边菜单：角色菜单树过滤动作（ACTION）节点；目录无有效子页时隐藏
+const menuTree = computed(() => {
   const filterTree = (nodes) =>
     (nodes || [])
-      .filter((n) => n.menuType !== 'F' && n.visible !== '1')
+      .filter((n) => n.menuType !== 'ACTION')
       .map((n) => ({ ...n, children: filterTree(n.children) }))
-      .filter((n) => n.menuType === 'C' || n.children.length)
-  const adminRoot = (store.menus || []).find((m) => (m.path || '').startsWith('/admin'))
-  return adminRoot ? filterTree(adminRoot.children) : filterTree(store.menus)
+      .filter((n) => n.menuType === 'PAGE' || n.children.length)
+  return filterTree(store.menus)
 })
 
 async function onUserCommand(command) {
+  if (command === 'setPassword') {
+    router.push('/set_password')
+    return
+  }
   if (command !== 'logout') return
   try {
     await ElMessageBox.confirm('确定退出登录吗？', '提示', { type: 'warning' })
@@ -116,7 +130,9 @@ async function onUserCommand(command) {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   height: 56px;
+  padding: 0 12px;
   font-size: 15px;
   font-weight: var(--fw-semibold);
   color: var(--g1);
@@ -125,8 +141,23 @@ async function onUserCommand(command) {
   overflow: hidden;
 }
 
+.admin_layout__logo_mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--brand-grad);
+  color: #fff;
+  font-size: 15px;
+  box-shadow: var(--brand-shadow);
+}
+
 .admin_layout__menu {
   border-right: none;
+  padding: 6px 0;
 }
 
 .admin_layout__menu_empty {
@@ -134,6 +165,7 @@ async function onUserCommand(command) {
   text-align: center;
 }
 
+/* 头部：56px、白底、0.5px 底线 */
 .admin_layout__header {
   display: flex;
   align-items: center;
@@ -152,13 +184,40 @@ async function onUserCommand(command) {
 
 .admin_layout__collapse_btn {
   padding: 6px;
+  color: var(--g2);
+}
+.admin_layout__collapse_btn:hover {
+  background: var(--brand-a08);
+  color: var(--brand);
 }
 
 .admin_layout__user {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 7px;
+  padding: 5px 10px 5px 5px;
+  border-radius: var(--r-full);
   cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+.admin_layout__user:hover {
+  background: var(--brand-a08);
+}
+
+.admin_layout__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--brand-grad);
+  color: #fff;
+  font-size: 13px;
+  font-weight: var(--fw-medium);
+}
+
+.admin_layout__username {
   font-weight: var(--fw-medium);
   color: var(--g1);
 }
@@ -166,5 +225,11 @@ async function onUserCommand(command) {
 .admin_layout__main {
   background: var(--bg);
   padding: 20px;
+}
+
+@media (max-width: 768px) {
+  .admin_layout__header { padding: 0 12px; }
+  .admin_layout__main { padding: 14px; }
+  .admin_layout__username { display: none; }
 }
 </style>

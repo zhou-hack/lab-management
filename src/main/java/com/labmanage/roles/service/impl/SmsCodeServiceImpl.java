@@ -38,7 +38,7 @@ public class SmsCodeServiceImpl implements SmsCodeService {
     }
 
     @Override
-    public int send(String phone) {
+    public SendResult send(String phone) {
         int ttl = policyService.getInt("SMS_CODE_TTL_SECONDS", "ttlSeconds", 300);
         int interval = policyService.getInt("SMS_RESEND_INTERVAL_SECONDS", "intervalSeconds", 60);
         int dailyLimit = policyService.getInt("SMS_DAILY_LIMIT", "dailyLimit", 10);
@@ -58,7 +58,7 @@ public class SmsCodeServiceImpl implements SmsCodeService {
         });
 
         log.info("【模拟短信通道】手机号 {} 验证码：{}（{} 秒内有效）", phone, code, ttl);
-        return ttl;
+        return new SendResult(ttl, code);
     }
 
     @Override
