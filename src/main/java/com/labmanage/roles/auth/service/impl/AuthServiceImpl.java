@@ -165,6 +165,7 @@ public class AuthServiceImpl implements AuthService {
                     menu.getMenuName(),
                     mapMenuType(menu.getMenuType()),
                     menu.getRoutePath(),
+                    menu.getComponentKey(),
                     menu.getPermissionCode(),
                     buildChildren(byParent, menu.getId())
             ));
