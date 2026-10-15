@@ -8,17 +8,17 @@ spring:
     active: dev
   jackson:
     time-zone: UTC
+    serialization:
+      write-dates-as-timestamps: false
 
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
   global-config:
     banner: false
-  type-handlers-package: com.labmanage.common.handler
 
 sa-token:
   token-name: Authorization
-  token-prefix: Bearer
   timeout: 86400
   is-concurrent: true
   is-share: false
@@ -28,10 +28,9 @@ sa-token:
 springdoc:
   api-docs:
     enabled: true
-    version: OPENAPI_3_0
   swagger-ui:
     enabled: true
-    default-produces-media-type: application/json
+  default-produces-media-type: application/json
 
 knife4j:
   enable: true
