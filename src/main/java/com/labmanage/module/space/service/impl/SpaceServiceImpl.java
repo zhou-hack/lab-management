@@ -202,9 +202,12 @@ public class SpaceServiceImpl implements SpaceService {
     @Override
     public byte[] exportCsv(SpacePageQuery query) {
         long begin = System.nanoTime();
-        // 与分页同条件导出；上限保护防全表扫描
+        // 与分页同条件导出；上限保护防全表扫描。
+        // 注意 last() 多次调用以最后一次为准：显式排序占用 last 段时，
+        // 必须把 ORDER BY 与 LIMIT 合并为同一片段，否则排序会被 LIMIT 覆盖。
         LambdaQueryWrapper<BizSpace> wrapper = buildWrapper(query);
-        wrapper.last("LIMIT 10000");
+        String orderBy = explicitOrderBy(query);
+        wrapper.last(orderBy == null ? "LIMIT 10000" : orderBy + " LIMIT 10000");
         List<BizSpace> spaces = spaceMapper.selectList(wrapper);
 
         StringBuilder sb = new StringBuilder();
@@ -511,15 +514,27 @@ public class SpaceServiceImpl implements SpaceService {
     }
 
     private void applySort(LambdaQueryWrapper<BizSpace> wrapper, SpacePageQuery query) {
-        String sortBy = query.getSortBy();
-        String column = sortBy == null ? null : SORT_COLUMNS.get(sortBy);
-        if (column == null) {
+        String orderBy = explicitOrderBy(query);
+        if (orderBy == null) {
             wrapper.orderByDesc(BizSpace::getCreateTime);
             return;
         }
+        wrapper.last(orderBy);
+    }
+
+    /**
+     * 显式排序子句（sortBy 命中白名单时返回完整 ORDER BY 片段，否则返回 null 走默认排序）。
+     * 列名来自白名单映射，不存在注入风险；抽出共用以避免与导出 LIMIT 片段拼接时重复逻辑。
+     */
+    private String explicitOrderBy(SpacePageQuery query) {
+        String sortBy = query.getSortBy();
+        String column = sortBy == null ? null : SORT_COLUMNS.get(sortBy);
+        if (column == null) {
+            return null;
+        }
         boolean asc = "asc".equalsIgnoreCase(query.getSortOrder());
-        wrapper.last("ORDER BY " + column + (asc ? " ASC" : " DESC")
-                + (column.equals("create_time") ? "" : ", create_time DESC"));
+        return "ORDER BY " + column + (asc ? " ASC" : " DESC")
+                + (column.equals("create_time") ? "" : ", create_time DESC");
     }
 
     private boolean hasText(String s) {

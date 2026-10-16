@@ -30,9 +30,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 场地接口日志埋点验证（H2 内存库 + 真实 HTTP 全链路）。
@@ -136,6 +136,18 @@ class SpaceApiLogIntegrationTest {
                 .GET()
                 .build();
         return HTTP.send(request, HttpResponse.BodyHandlers.ofString()).statusCode();
+    }
+
+    /** 以 UTF-8 取回 CSV 导出全文（带登录态），调用方负责去除 BOM 后断言 */
+    private String getCsv(String path) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://127.0.0.1:" + port + path))
+                .header("Authorization", "Bearer " + token)
+                .GET()
+                .build();
+        HttpResponse<byte[]> response = HTTP.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        assertThat(response.statusCode()).isEqualTo(200);
+        return new String(response.body(), StandardCharsets.UTF_8);
     }
 
     private List<String> logs() {
@@ -258,5 +270,22 @@ class SpaceApiLogIntegrationTest {
             assertThat(msg).contains("[场地统计] 完成");
             assertThat(msg).contains("总数=3, 可用=1, 维护中=1, 停用=1");
         });
+    }
+
+    @Test
+    @DisplayName("导出 CSV（容量升序）：ORDER BY 不被导出 LIMIT 片段覆盖，数据行按容量 45→50→60")
+    void exportCsv_withSortByCapacity_keepsOrdering() throws Exception {
+        String csv = getCsv("/api/v1/space/spaces/export?sortBy=capacity&sortOrder=asc");
+
+        String[] lines = csv.replace("\uFEFF", "").split("\r\n");
+        assertThat(lines[0]).startsWith("场地名称,");
+        List<String> names = new ArrayList<>();
+        for (int i = 1; i < lines.length && !lines[i].isBlank(); i++) {
+            names.add(lines[i].split(",", 2)[0]);
+        }
+        assertThat(names).containsExactly(
+                "C703 电子电工实训室",
+                "A703 网络实训室",
+                "教学楼201多媒体教室");
     }
 }
