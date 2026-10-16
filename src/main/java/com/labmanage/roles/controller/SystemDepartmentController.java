@@ -1,19 +1,30 @@
 package com.labmanage.roles.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.log.OperationLog;
 import com.labmanage.common.result.Result;
+import com.labmanage.roles.dto.DepartmentCreateDTO;
+import com.labmanage.roles.dto.DepartmentEnabledDTO;
+import com.labmanage.roles.dto.DepartmentUpdateDTO;
+import com.labmanage.roles.service.SysDepartmentService;
 import com.labmanage.roles.service.SysUserService;
 import com.labmanage.roles.vo.DepartmentOptionVO;
+import com.labmanage.roles.vo.DepartmentTreeVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 /**
- * 系统管理-组织部门（当前仅用户管理表单所需的下拉选项；完整 CRUD 随组织管理页补充）
+ * 系统管理-组织部门
  */
 @Tag(name = "系统-组织部门")
 @RestController
@@ -22,14 +33,51 @@ public class SystemDepartmentController {
 
     private final SysUserService sysUserService;
 
-    public SystemDepartmentController(SysUserService sysUserService) {
+    private final SysDepartmentService departmentService;
+
+    public SystemDepartmentController(SysUserService sysUserService, SysDepartmentService departmentService) {
         this.sysUserService = sysUserService;
+        this.departmentService = departmentService;
     }
 
-    @Operation(summary = "启用部门下拉选项（用户管理表单用）")
+    @Operation(summary = "启用部门下拉选项（用户/名单表单用）")
     @SaCheckPermission("system:user:list")
     @GetMapping("/options")
     public Result<List<DepartmentOptionVO>> options() {
         return Result.success(sysUserService.departmentOptions());
+    }
+
+    @Operation(summary = "部门树（含停用节点）")
+    @SaCheckPermission("system:department:list")
+    @GetMapping
+    public Result<List<DepartmentTreeVO>> tree() {
+        return Result.success(departmentService.tree());
+    }
+
+    @Operation(summary = "新增部门")
+    @SaCheckPermission("system:department:create")
+    @OperationLog(moduleCode = "system", actionCode = "system:department:create", targetTable = "sys_department")
+    @PostMapping
+    public Result<Void> create(@Valid @RequestBody DepartmentCreateDTO dto) {
+        departmentService.create(dto);
+        return Result.success();
+    }
+
+    @Operation(summary = "编辑部门（编码不可改，父部门禁止循环）")
+    @SaCheckPermission("system:department:update")
+    @OperationLog(moduleCode = "system", actionCode = "system:department:update", targetTable = "sys_department", targetId = "#id")
+    @PutMapping("/{id}")
+    public Result<Void> update(@PathVariable Long id, @Valid @RequestBody DepartmentUpdateDTO dto) {
+        departmentService.update(id, dto);
+        return Result.success();
+    }
+
+    @Operation(summary = "启用/停用部门（有启用子部门或被引用时禁止停用）")
+    @SaCheckPermission("system:department:enable")
+    @OperationLog(moduleCode = "system", actionCode = "system:department:enable", targetTable = "sys_department", targetId = "#id")
+    @PutMapping("/{id}/enabled")
+    public Result<Void> updateEnabled(@PathVariable Long id, @Valid @RequestBody DepartmentEnabledDTO dto) {
+        departmentService.updateEnabled(id, dto);
+        return Result.success();
     }
 }
