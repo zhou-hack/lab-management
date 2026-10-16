@@ -24,10 +24,9 @@ const viewModules = {
   BookingAdminList: () => import('@/views/admin/booking/BookingList.vue'),
   BookingApproval: () => import('@/views/admin/booking/BookingApproval.vue'),
   BookingUserList: () => import('@/views/booking/BookingList.vue'),
-  // equipment 模块
-  EquipmentCategory: () => import('@/views/admin/equipment/CategoryManage.vue'),
-  EquipmentModel: () => import('@/views/admin/equipment/ModelManage.vue'),
-  EquipmentAsset: () => import('@/views/admin/equipment/AssetManage.vue'),
+  // equipment 模块（型号/台账两菜单共用整合页，分类并入型号面板抽屉）
+  EquipmentModel: () => import('@/views/admin/equipment/EquipmentManage.vue'),
+  EquipmentAsset: () => import('@/views/admin/equipment/EquipmentManage.vue'),
   // item 模块（单工作台形态，内部分页签）
   ItemWorkspace: () => import('@/views/item/ItemWorkspace.vue')
 }

@@ -95,11 +95,13 @@ const store = useUserStore()
 // 窗口 <1024 默认收起侧边栏（规范第 10 节，桌面断点）
 const collapsed = ref(window.innerWidth < 1024)
 
-// 侧边菜单：角色菜单树过滤动作（ACTION）节点；目录无有效子页时隐藏
+// 侧边菜单：角色菜单树过滤动作（ACTION）节点；目录无有效子页时隐藏；
+// 固定首页由布局自身渲染，后端若下发 /admin/home 节点需去重（规范 7.4）
 const menuTree = computed(() => {
   const filterTree = (nodes) =>
     (nodes || [])
       .filter((n) => n.menuType !== 'ACTION')
+      .filter((n) => n.routePath !== '/admin/home')
       .map((n) => ({ ...n, children: filterTree(n.children) }))
       .filter((n) => n.menuType === 'PAGE' || n.children.length)
   return filterTree(store.menus)
@@ -158,7 +160,6 @@ async function onUserCommand(command) {
   background: var(--brand-grad);
   color: #fff;
   font-size: 15px;
-  box-shadow: var(--brand-shadow);
 }
 
 .admin_layout__menu {

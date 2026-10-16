@@ -13,6 +13,7 @@ public record ModelVO(
         String equipmentName,
         String brand,
         String specification,
+        Integer quantity,
         String unitName,
         BigDecimal referencePrice,
         Integer expectedLifeMonths,

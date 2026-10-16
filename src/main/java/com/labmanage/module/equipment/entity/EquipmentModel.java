@@ -27,6 +27,9 @@ public class EquipmentModel extends BaseEntity {
     /** 规格说明 */
     private String specification;
 
+    /** 数量（登记设备台数，配合计量单位阅读） */
+    private Integer quantity;
+
     /** 计量单位（台/套等；列名 base_unit，接口契约沿用 unitName） */
     @TableField("base_unit")
     private String unitName;
@@ -81,6 +84,14 @@ public class EquipmentModel extends BaseEntity {
 
     public void setSpecification(String specification) {
         this.specification = specification;
+    }
+
+    public Integer getQuantity() {
+        return quantity;
+    }
+
+    public void setQuantity(Integer quantity) {
+        this.quantity = quantity;
     }
 
     public String getUnitName() {
