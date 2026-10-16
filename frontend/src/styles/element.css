@@ -84,6 +84,13 @@
   border-bottom: .5px solid var(--hair);
 }
 
+/* 表格窄屏：字号收缩（规范第 10 节，横向滚动由 .table-scroll-x 承担） */
+@media (max-width: 1024px) {
+  .el-table {
+    font-size: 12.5px;
+  }
+}
+
 /* ---------- Tag：全圆角 + 语义浅底、无描边 ---------- */
 .el-tag {
   border-radius: var(--r-full);

@@ -35,6 +35,12 @@ const staticRoutes = [
     ]
   },
   {
+    path: '/403',
+    name: 'Forbidden',
+    component: () => import('@/views/error/ForbiddenView.vue'),
+    meta: { title: '没有访问权限' }
+  },
+  {
     path: '/404',
     name: 'NotFound',
     component: () => import('@/views/error/NotFound.vue'),

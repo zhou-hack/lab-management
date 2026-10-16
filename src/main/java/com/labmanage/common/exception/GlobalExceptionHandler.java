@@ -2,6 +2,7 @@ package com.labmanage.common.exception;
 
 import cn.dev33.satoken.exception.NotLoginException;
 import cn.dev33.satoken.exception.NotPermissionException;
+import cn.dev33.satoken.exception.NotSafeException;
 import com.labmanage.common.result.Result;
 import com.labmanage.common.result.ResultCode;
 import jakarta.servlet.http.HttpServletResponse;
@@ -45,12 +46,21 @@ public class GlobalExceptionHandler {
         }
         return switch (code) {
             case 40000 -> HttpStatus.BAD_REQUEST.value();
-            case 40100 -> HttpStatus.UNAUTHORIZED.value();
+            case 40100, 40101 -> HttpStatus.UNAUTHORIZED.value();
             case 40300 -> HttpStatus.FORBIDDEN.value();
             case 40400 -> HttpStatus.NOT_FOUND.value();
             case 50000 -> HttpStatus.INTERNAL_SERVER_ERROR.value();
             default -> HttpStatus.CONFLICT.value();
         };
+    }
+
+    /**
+     * Sa-Token 二级认证未通过：敏感操作需先完成二次密码确认（40101，前端弹确认框而非跳登录）
+     */
+    @ExceptionHandler(NotSafeException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public Result<Void> handleNotSafeException(NotSafeException e) {
+        return Result.error(ResultCode.SAFE_AUTH_REQUIRED.getCode(), ResultCode.SAFE_AUTH_REQUIRED.getMsg());
     }
 
     /**

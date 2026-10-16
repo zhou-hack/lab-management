@@ -87,3 +87,6 @@ tools/
 
 # 本地下载的脚本副本（勿提交）
 lab_management_all(*).sql
+
+# 个人本地文档（勿提交）
+config Github.md

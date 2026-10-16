@@ -1,4 +1,3 @@
-import PlaceholderView from '@/views/common/PlaceholderView.vue'
 import router from '@/router'
 
 /**
@@ -8,27 +7,26 @@ import router from '@/router'
  * 全部账号共用同一套管理端布局（AdminLayout），业务页面落地时在此登记真实组件。
  */
 const viewModules = {
-  // system 模块（用户管理已落地，其余占位页逐页替换）
+  // system 模块
   SystemUser: () => import('@/views/admin/system/SystemUser.vue'),
-  SystemRoster: PlaceholderView,
-  SystemDepartment: PlaceholderView,
-  SystemRole: PlaceholderView,
-  SystemScope: PlaceholderView,
-  SystemRestriction: PlaceholderView,
-  SystemLog: PlaceholderView,
-  SystemPolicy: PlaceholderView,
-  SystemGrantAudit: PlaceholderView,
-  GrantManage: PlaceholderView,
+  SystemRoster: () => import('@/views/admin/system/SystemRoster.vue'),
+  SystemDepartment: () => import('@/views/admin/system/SystemDepartment.vue'),
+  SystemRole: () => import('@/views/admin/system/SystemRole.vue'),
+  SystemScope: () => import('@/views/admin/system/SystemScope.vue'),
+  SystemRestriction: () => import('@/views/admin/system/SystemRestriction.vue'),
+  SystemLog: () => import('@/views/admin/system/SystemLog.vue'),
+  SystemPolicy: () => import('@/views/admin/system/SystemPolicy.vue'),
+  SystemGrantAudit: () => import('@/views/admin/system/SystemGrantAudit.vue'),
+  GrantManage: () => import('@/views/admin/grant/GrantManage.vue'),
   // space 模块
   SpaceLabList: () => import('@/views/admin/space/LabList.vue'),
   // booking 模块
   BookingAdminList: () => import('@/views/admin/booking/BookingList.vue'),
   BookingApproval: () => import('@/views/admin/booking/BookingApproval.vue'),
   BookingUserList: () => import('@/views/booking/BookingList.vue'),
-  // equipment 模块
-  EquipmentCategory: () => import('@/views/admin/equipment/CategoryManage.vue'),
-  EquipmentModel: () => import('@/views/admin/equipment/ModelManage.vue'),
-  EquipmentAsset: () => import('@/views/admin/equipment/AssetManage.vue'),
+  // equipment 模块（型号/台账两菜单共用整合页，分类并入型号面板抽屉）
+  EquipmentModel: () => import('@/views/admin/equipment/EquipmentManage.vue'),
+  EquipmentAsset: () => import('@/views/admin/equipment/EquipmentManage.vue'),
   // item 模块（单工作台形态，内部分页签）
   ItemWorkspace: () => import('@/views/item/ItemWorkspace.vue')
 }

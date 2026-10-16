@@ -29,7 +29,6 @@ public record StockScrapCreateDTO(
 
         @Schema(description = "报废明细行")
         @NotEmpty(message = "报废明细行不能为空")
-        @Valid
-        List<StockScrapLineDTO> lines
+        List<@Valid StockScrapLineDTO> lines
 ) {
 }

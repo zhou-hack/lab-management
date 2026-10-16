@@ -267,15 +267,14 @@ async function quickLoginPhone(phone) {
 </script>
 
 <style scoped>
+/* 页面底保持极浅灰纯色（规范第 3 节：禁止给页面背景用渐变） */
 .login_page {
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
   padding: 20px;
-  background:
-    radial-gradient(900px 500px at 80% 10%, var(--brand-a12), transparent 60%),
-    var(--bg);
+  background: var(--bg);
 }
 
 /* 登录卡：特大容器 r-xl 22px（规范第 5 节） */

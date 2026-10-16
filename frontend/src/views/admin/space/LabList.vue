@@ -256,60 +256,63 @@
         </el-table-column>
         <el-table-column
           label="操作"
-          width="230"
+          width="262"
           fixed="right"
+          class-name="space_list__op_cell"
         >
           <template #default="{ row }">
-            <el-button
-              link
-              type="primary"
-              @click="onDetail(row)"
-            >
-              详情
-            </el-button>
-            <el-button
-              v-if="row.status === 'AVAILABLE'"
-              v-permission="'booking:lab:create'"
-              link
-              type="primary"
-              @click="onBook(row)"
-            >
-              预约
-            </el-button>
-            <el-button
-              v-permission="'space:space:update'"
-              link
-              type="primary"
-              @click="onEdit(row)"
-            >
-              编辑
-            </el-button>
-            <el-button
-              v-if="row.status !== 'CLOSED'"
-              v-permission="'space:space:update'"
-              link
-              type="warning"
-              @click="onToggle(row, false)"
-            >
-              停用
-            </el-button>
-            <el-button
-              v-else
-              v-permission="'space:space:update'"
-              link
-              type="success"
-              @click="onToggle(row, true)"
-            >
-              启用
-            </el-button>
-            <el-button
-              v-permission="'space:space:delete'"
-              link
-              type="danger"
-              @click="onDelete(row)"
-            >
-              删除
-            </el-button>
+            <div class="space_list__actions">
+              <el-button
+                link
+                type="primary"
+                @click="onDetail(row)"
+              >
+                详情
+              </el-button>
+              <el-button
+                v-if="row.status === 'AVAILABLE'"
+                v-permission="'booking:lab:create'"
+                link
+                type="primary"
+                @click="onBook(row)"
+              >
+                预约
+              </el-button>
+              <el-button
+                v-permission="'space:space:update'"
+                link
+                type="primary"
+                @click="onEdit(row)"
+              >
+                编辑
+              </el-button>
+              <el-button
+                v-if="row.status !== 'CLOSED'"
+                v-permission="'space:space:update'"
+                link
+                type="warning"
+                @click="onToggle(row, false)"
+              >
+                停用
+              </el-button>
+              <el-button
+                v-else
+                v-permission="'space:space:update'"
+                link
+                type="success"
+                @click="onToggle(row, true)"
+              >
+                启用
+              </el-button>
+              <el-button
+                v-permission="'space:space:delete'"
+                link
+                type="danger"
+                @click="onDelete(row)"
+              >
+                删除
+              </el-button>
+            </div>
           </template>
         </el-table-column>
         <template #empty>
@@ -698,6 +701,29 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+/* 操作列：五个按钮强制单行，禁止换行 */
+.space_list__actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+/* 覆盖 Element Plus 相邻按钮默认 12px 左外边距，改用 gap 统一微调 */
+.space_list__actions .el-button + .el-button {
+  margin-left: 0;
+}
+
+/* link 按钮左右内边距收紧，保证五个按钮在 262px 列宽内单行排布 */
+.space_list__actions .el-button.is-link {
+  padding: 2px 3px;
+}
+
+:deep(.space_list__op_cell .cell) {
+  white-space: nowrap;
 }
 
 @media (max-width: 768px) {
