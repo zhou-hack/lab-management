@@ -229,6 +229,7 @@ public class AuthServiceImpl implements AuthService {
         }
         SysUser user = new SysUser();
         user.setUserType(roster.getPersonType());
+        user.setRosterId(roster.getId());
         user.setPhone(phone);
         user.setPersonNo(roster.getPersonNo());
         user.setRealName(roster.getRealName());

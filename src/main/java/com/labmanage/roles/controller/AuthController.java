@@ -1,6 +1,7 @@
 package com.labmanage.roles.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
+import com.labmanage.common.log.OperationLog;
 import com.labmanage.common.result.Result;
 import com.labmanage.roles.dto.AccountLoginDTO;
 import com.labmanage.roles.dto.PasswordConfirmDTO;
@@ -37,6 +38,8 @@ public class AuthController {
     }
 
     @Operation(summary = "账号密码登录（管理员）")
+    @OperationLog(moduleCode = "auth", actionCode = "auth:login", targetTable = "sys_user",
+            targetId = "#result?.data?.userId")
     @PostMapping("/login")
     public Result<LoginVO> login(@Valid @RequestBody AccountLoginDTO dto) {
         return Result.success(authService.login(dto));
@@ -49,6 +52,8 @@ public class AuthController {
     }
 
     @Operation(summary = "短信验证码登录（首登自动建档）")
+    @OperationLog(moduleCode = "auth", actionCode = "auth:sms_login", targetTable = "sys_user",
+            targetId = "#result?.data?.userId")
     @PostMapping("/sms/login")
     public Result<LoginVO> smsLogin(@Valid @RequestBody SmsLoginDTO dto) {
         return Result.success(authService.smsLogin(dto));
@@ -77,6 +82,7 @@ public class AuthController {
     }
 
     @Operation(summary = "注销")
+    @OperationLog(moduleCode = "auth", actionCode = "auth:logout", targetTable = "sys_user")
     @SaCheckLogin
     @PostMapping("/logout")
     public Result<Void> logout() {

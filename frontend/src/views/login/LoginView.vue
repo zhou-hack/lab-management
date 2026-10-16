@@ -115,6 +115,44 @@
           登 录
         </el-button>
       </el-form>
+
+      <!-- dev 环境测试账号快捷填充（生产构建不渲染） -->
+      <div
+        v-if="isDev"
+        class="login_test"
+      >
+        <span class="login_test__label">测试账号</span>
+        <div class="login_test__btns">
+          <button
+            type="button"
+            class="login_test__btn"
+            @click="fillAccount('admin')"
+          >
+            管理员
+          </button>
+          <button
+            type="button"
+            class="login_test__btn"
+            @click="fillAccount('opsadmin')"
+          >
+            运维
+          </button>
+          <button
+            type="button"
+            class="login_test__btn"
+            @click="fillSms('13800000002')"
+          >
+            老师
+          </button>
+          <button
+            type="button"
+            class="login_test__btn"
+            @click="fillSms('13800000001')"
+          >
+            学生
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -210,6 +248,23 @@ async function submit() {
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer)
 })
+
+// ---------- dev 测试账号快捷填充 ----------
+const isDev = import.meta.env.DEV
+
+function fillAccount(accountName) {
+  mode.value = 'password'
+  form.accountName = accountName
+  form.password = 'Admin123456'
+}
+
+async function fillSms(phone) {
+  mode.value = 'phone'
+  form.phone = phone
+  form.code = ''
+  // dev 模拟通道：发送成功后验证码自动回填；60s 间隔内重发会提示 409，不启动倒计时
+  await sendCode()
+}
 </script>
 
 <style scoped>
@@ -331,5 +386,45 @@ onBeforeUnmount(() => {
 
 .login_submit:active {
   transform: scale(.985);
+}
+
+/* dev 测试账号：低调弱化，贴卡片底部 */
+.login_test {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: .5px dashed var(--hair);
+}
+
+.login_test__label {
+  font-size: 12px;
+  color: var(--g4);
+  letter-spacing: 2px;
+}
+
+.login_test__btns {
+  display: flex;
+  gap: 10px;
+}
+
+.login_test__btn {
+  height: 28px;
+  padding: 0 16px;
+  border: .5px solid var(--hair);
+  border-radius: var(--r-full);
+  background: var(--surface-sunken);
+  font-size: 12px;
+  color: var(--g3);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.login_test__btn:hover {
+  color: var(--brand);
+  border-color: var(--brand);
+  background: var(--brand-a12);
 }
 </style>

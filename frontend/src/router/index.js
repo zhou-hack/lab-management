@@ -55,8 +55,22 @@ const staticRoutes = [
     component: () => import('@/views/error/NotFound.vue'),
     meta: { title: '页面不存在' }
   },
+  {
+    path: '/403',
+    name: 'Forbidden',
+    component: () => import('@/views/error/ForbiddenView.vue'),
+    meta: { title: '没有访问权限' }
+  },
   { path: '/:pathMatch(.*)*', redirect: '/404' }
 ]
+
+// 已知页面路径全集（sys_menu.route_path，与 router/dynamic.js 白名单同步维护）：
+// 已登录用户直接访问其中未获授权的页面时落 403；其余未注册路径仍按 404/首页兜底
+const KNOWN_PAGE_PATHS = new Set([
+  '/system/user', '/system/roster', '/system/department', '/system/role', '/system/scope',
+  '/system/restriction', '/system/log', '/system/policy', '/system/grant',
+  '/space/campus', '/space/lab', '/grant'
+])
 
 const APP_TITLE = '实验室设备管理系统'
 
@@ -88,6 +102,15 @@ router.beforeEach(async (to) => {
     if (store.mustSetPassword && to.path !== '/set_password') {
       return { path: '/set_password' }
     }
+    // 目标对当前身份不可达（如沿用旧身份的 redirect 但无权限）时回首页，避免误落 404；
+    // 直接输入的地址若属于已知页面但当前身份无菜单权限，落 403
+    const resolved = router.resolve(to.fullPath)
+    if (resolved.matched.some((r) => r.path === '/:pathMatch(.*)*')) {
+      if (!to.redirectedFrom && KNOWN_PAGE_PATHS.has(to.path)) {
+        return { path: '/403' }
+      }
+      return store.homePath
+    }
     return { ...to, replace: true }
   }
 
@@ -105,9 +128,14 @@ router.beforeEach(async (to) => {
     return store.homePath
   }
 
-  // 管理端静态首页仅管理员可见；动态业务页由菜单注册与否天然隔离
+  // 管理端静态首页仅管理员可见，无权限访问管理端落 403；动态业务页由菜单注册与否天然隔离
   if ((to.path === '/admin' || to.path.startsWith('/admin/')) && !store.isAdmin) {
-    return store.homePath
+    return { path: '/403' }
+  }
+
+  // 已知页面但未为当前身份注册（无菜单权限）：落 403；其余未注册路径交由兜底规则进 404
+  if (to.matched.some((r) => r.path === '/:pathMatch(.*)*') && KNOWN_PAGE_PATHS.has(to.path)) {
+    return { path: '/403' }
   }
 
   return true

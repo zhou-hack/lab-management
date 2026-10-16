@@ -151,7 +151,7 @@
         </el-table-column>
         <el-table-column
           label="操作"
-          width="130"
+          width="200"
           fixed="right"
         >
           <template #default="{ row }">
@@ -162,6 +162,14 @@
               @click="openEdit(row)"
             >
               编辑
+            </el-button>
+            <el-button
+              v-permission="'system:user:reset_password'"
+              link
+              type="warning"
+              @click="openReset(row)"
+            >
+              重置密码
             </el-button>
             <el-button
               v-permission="'system:user:enable'"
@@ -332,6 +340,54 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 重置密码 -->
+    <el-dialog
+      v-model="resetVisible"
+      title="重置密码"
+      width="420px"
+      destroy-on-close
+    >
+      <el-form
+        ref="resetFormRef"
+        :model="resetForm"
+        :rules="resetRules"
+        label-width="86px"
+      >
+        <el-form-item label="账号">
+          <el-input
+            :model-value="resetRow?.accountName || resetRow?.personNo || '—'"
+            disabled
+          />
+        </el-form-item>
+        <el-form-item
+          label="新密码"
+          prop="newPassword"
+        >
+          <el-input
+            v-model="resetForm.newPassword"
+            type="password"
+            show-password
+            placeholder="8-64 位，含字母和数字"
+          />
+        </el-form-item>
+      </el-form>
+      <p class="user_page__tip t-hint">
+        重置后「{{ resetRow?.realName }}」的全部登录会话将立即退出，下次登录须先修改密码。该操作需二次密码确认。
+      </p>
+      <template #footer>
+        <el-button @click="resetVisible = false">
+          取消
+        </el-button>
+        <el-button
+          type="warning"
+          :loading="submitting"
+          @click="submitReset"
+        >
+          重置
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -342,6 +398,7 @@ import {
   createUser,
   getDepartmentOptions,
   pageUsers,
+  resetUserPassword,
   updateUser,
   updateUserEnabled
 } from '@/api/system/user'
@@ -494,6 +551,38 @@ async function toggleEnabled(row) {
   await updateUserEnabled(row.id, disabling ? 0 : 1)
   ElMessage.success(disabling ? '已停用' : '已启用')
   load()
+}
+
+// ---------- 重置密码 ----------
+const resetVisible = ref(false)
+const resetFormRef = ref()
+const resetRow = ref(null)
+const resetForm = reactive({ newPassword: '' })
+
+const resetRules = {
+  newPassword: [{ required: true, message: '请输入新密码', trigger: 'blur' }, passwordRule]
+}
+
+function openReset(row) {
+  resetRow.value = row
+  resetForm.newPassword = ''
+  resetVisible.value = true
+}
+
+async function submitReset() {
+  try {
+    await resetFormRef.value.validate()
+  } catch {
+    return
+  }
+  submitting.value = true
+  try {
+    await resetUserPassword(resetRow.value.id, resetForm.newPassword)
+    ElMessage.success('已重置，该用户需重新登录并修改密码')
+    resetVisible.value = false
+  } finally {
+    submitting.value = false
+  }
 }
 
 onMounted(() => {

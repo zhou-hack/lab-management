@@ -9,6 +9,7 @@ import com.labmanage.common.utils.PageUtils;
 import com.labmanage.roles.dto.UserCreateDTO;
 import com.labmanage.roles.dto.UserEnabledDTO;
 import com.labmanage.roles.dto.UserPageQueryDTO;
+import com.labmanage.roles.dto.UserPasswordResetDTO;
 import com.labmanage.roles.dto.UserUpdateDTO;
 import com.labmanage.roles.entity.SysDepartment;
 import com.labmanage.roles.entity.SysUser;
@@ -19,6 +20,7 @@ import com.labmanage.roles.mapper.SysDepartmentMapper;
 import com.labmanage.roles.mapper.SysUserMapper;
 import com.labmanage.roles.mapper.SysUserRoleMapper;
 import com.labmanage.roles.service.AuthService;
+import com.labmanage.roles.service.SysScopeService;
 import com.labmanage.roles.service.SysUserService;
 import com.labmanage.roles.vo.DepartmentOptionVO;
 import com.labmanage.roles.vo.UserDetailVO;
@@ -45,15 +47,18 @@ public class SysUserServiceImpl implements SysUserService {
 
     private final AuthService authService;
 
+    private final SysScopeService scopeService;
+
     private final BCryptPasswordEncoder passwordEncoder;
 
     public SysUserServiceImpl(SysUserMapper userMapper, SysUserRoleMapper userRoleMapper,
                               SysDepartmentMapper departmentMapper, AuthService authService,
-                              BCryptPasswordEncoder passwordEncoder) {
+                              SysScopeService scopeService, BCryptPasswordEncoder passwordEncoder) {
         this.userMapper = userMapper;
         this.userRoleMapper = userRoleMapper;
         this.departmentMapper = departmentMapper;
         this.authService = authService;
+        this.scopeService = scopeService;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -75,6 +80,8 @@ public class SysUserServiceImpl implements SysUserService {
     @Transactional(rollbackFor = Exception.class)
     public UserDetailVO createAdmin(UserCreateDTO dto) {
         requireEnabledDepartment(dto.departmentId());
+        // 创建管理员须全校写，防止部门管理员制造同僚（docs/RBAC权限管理总设计方案.md 5.2）
+        scopeService.requireAllWrite();
         SysUser user = new SysUser();
         user.setUserType(UserType.ADMIN.name());
         user.setAccountName(dto.accountName());
@@ -100,7 +107,11 @@ public class SysUserServiceImpl implements SysUserService {
     @Override
     public UserDetailVO update(Long id, UserUpdateDTO dto) {
         SysUser user = requireUser(id);
+        requireOpsAdminOperator(user);
         requireEnabledDepartment(dto.departmentId());
+        // 迁出部门与迁入部门都须在操作者写范围内
+        scopeService.requireDepartmentWrite(user.getDepartmentId());
+        scopeService.requireDepartmentWrite(dto.departmentId());
         user.setRealName(dto.realName());
         user.setPhone(dto.phone());
         user.setDepartmentId(dto.departmentId());
@@ -115,6 +126,8 @@ public class SysUserServiceImpl implements SysUserService {
     @Override
     public void updateEnabled(Long id, UserEnabledDTO dto) {
         SysUser user = requireUser(id);
+        requireOpsAdminOperator(user);
+        scopeService.requireDepartmentWrite(user.getDepartmentId());
         if (Integer.valueOf(0).equals(dto.enabled())) {
             if (id.equals(StpUtil.getLoginIdAsLong())) {
                 throw new BusinessException(40900, "不能停用当前登录账号");
@@ -133,6 +146,22 @@ public class SysUserServiceImpl implements SysUserService {
     }
 
     @Override
+    public void resetPassword(Long id, UserPasswordResetDTO dto) {
+        SysUser user = requireUser(id);
+        requireOpsAdminOperator(user);
+        if (id.equals(StpUtil.getLoginIdAsLong())) {
+            throw new BusinessException(40900, "不能重置当前登录账号密码，请使用修改密码");
+        }
+        scopeService.requireDepartmentWrite(user.getDepartmentId());
+        user.setPasswordHash(passwordEncoder.encode(dto.newPassword()));
+        // password_changed_at 置 NULL：复用密码到期机制，目标用户下次登录强制改密
+        user.setPasswordChangedAt(null);
+        userMapper.updateById(user);
+        // 重置立即生效：踢出该用户全部会话
+        authService.evictSession(id);
+    }
+
+    @Override
     public List<DepartmentOptionVO> departmentOptions() {
         return departmentMapper.selectList(Wrappers.<SysDepartment>lambdaQuery()
                         .eq(SysDepartment::getEnabled, 1)
@@ -148,6 +177,19 @@ public class SysUserServiceImpl implements SysUserService {
             throw new BusinessException(40400, "用户不存在");
         }
         return user;
+    }
+
+    /**
+     * 运维账号保护：目标用户持有 OPS_ADMIN 角色时，仅 OPS_ADMIN 本人可编辑/启停/重置，
+     * 防止普通管理员接管运维账号获取全量权限与范围豁免（docs/权限清单.md 隔离规则 8）。
+     */
+    private void requireOpsAdminOperator(SysUser target) {
+        if (!authService.loadRoleCodes(target.getId()).contains(RoleCode.OPS_ADMIN.name())) {
+            return;
+        }
+        if (!StpUtil.getRoleList().contains(RoleCode.OPS_ADMIN.name())) {
+            throw new BusinessException(40300, "运维管理员账号仅运维管理员本人可操作");
+        }
     }
 
     private void requireEnabledDepartment(Long departmentId) {

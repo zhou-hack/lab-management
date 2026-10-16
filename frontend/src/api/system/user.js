@@ -29,6 +29,11 @@ export function updateUserEnabled(id, enabled) {
   return request.put(`/system/users/${id}/enabled`, { enabled })
 }
 
+/** 重置用户密码（强制首登改密并踢出会话；敏感操作需二级确认） */
+export function resetUserPassword(id, newPassword) {
+  return request.put(`/system/users/${id}/password_reset`, { newPassword })
+}
+
 /** 启用部门下拉选项 → [{ id, departmentName }] */
 export function getDepartmentOptions() {
   return request.get('/system/departments/options')

@@ -1,4 +1,3 @@
-import PlaceholderView from '@/views/common/PlaceholderView.vue'
 import router from '@/router'
 
 /**
@@ -7,19 +6,23 @@ import router from '@/router'
  *
  * 业务页面落地时在此登记真实组件（布局按页面形态选择）：
  *   SystemUser: { layout: 'admin', load: () => import('@/views/admin/system/UserManage.vue') }
- * 系统管理页面建设中，暂以占位页注册，逐页替换。
+ *
+ * 新增页面时同步把菜单 route_path 登记到 router/index.js 的 KNOWN_PAGE_PATHS
+ * （用于已登录但无菜单权限的直接访问落 403）。
  */
 const viewModules = {
   SystemUser: { layout: 'admin', load: () => import('@/views/admin/system/SystemUser.vue') },
-  SystemRoster: { layout: 'admin', load: PlaceholderView },
-  SystemDepartment: { layout: 'admin', load: PlaceholderView },
-  SystemRole: { layout: 'admin', load: PlaceholderView },
-  SystemScope: { layout: 'admin', load: PlaceholderView },
-  SystemRestriction: { layout: 'admin', load: PlaceholderView },
-  SystemLog: { layout: 'admin', load: PlaceholderView },
-  SystemPolicy: { layout: 'admin', load: PlaceholderView },
-  SystemGrantAudit: { layout: 'admin', load: PlaceholderView },
-  GrantManage: { layout: 'admin', load: PlaceholderView }
+  SystemRoster: { layout: 'admin', load: () => import('@/views/admin/system/SystemRoster.vue') },
+  SystemDepartment: { layout: 'admin', load: () => import('@/views/admin/system/SystemDepartment.vue') },
+  SystemRole: { layout: 'admin', load: () => import('@/views/admin/system/SystemRole.vue') },
+  SystemScope: { layout: 'admin', load: () => import('@/views/admin/system/SystemScope.vue') },
+  SystemRestriction: { layout: 'admin', load: () => import('@/views/admin/system/SystemRestriction.vue') },
+  SystemLog: { layout: 'admin', load: () => import('@/views/admin/system/SystemLog.vue') },
+  SystemPolicy: { layout: 'admin', load: () => import('@/views/admin/system/SystemPolicy.vue') },
+  SystemGrantAudit: { layout: 'admin', load: () => import('@/views/admin/system/SystemGrantAudit.vue') },
+  SpaceCampus: { layout: 'admin', load: () => import('@/views/admin/space/SpaceCampus.vue') },
+  SpaceLab: { layout: 'admin', load: () => import('@/views/admin/space/SpaceLab.vue') },
+  GrantManage: { layout: 'front', load: () => import('@/views/front/grant/GrantManage.vue') }
 }
 
 const addedRouteNames = []

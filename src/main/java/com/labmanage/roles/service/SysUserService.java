@@ -4,6 +4,7 @@ import com.labmanage.common.result.PageResult;
 import com.labmanage.roles.dto.UserCreateDTO;
 import com.labmanage.roles.dto.UserEnabledDTO;
 import com.labmanage.roles.dto.UserPageQueryDTO;
+import com.labmanage.roles.dto.UserPasswordResetDTO;
 import com.labmanage.roles.dto.UserUpdateDTO;
 import com.labmanage.roles.vo.DepartmentOptionVO;
 import com.labmanage.roles.vo.UserDetailVO;
@@ -30,6 +31,9 @@ public interface SysUserService {
 
     /** 启用/停用：停用踢出会话；启用顺带解除登录锁定。不允许停用当前登录账号 */
     void updateEnabled(Long id, UserEnabledDTO dto);
+
+    /** 重置密码：置为指定初始密码、强制首登改密并踢出全部会话；不允许重置当前登录账号 */
+    void resetPassword(Long id, UserPasswordResetDTO dto);
 
     /** 启用部门下拉选项（用户管理表单用） */
     List<DepartmentOptionVO> departmentOptions();
