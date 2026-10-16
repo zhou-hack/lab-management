@@ -40,13 +40,13 @@ const staticRoutes = [
     component: () => import('@/views/error/ForbiddenView.vue'),
     meta: { title: '没有访问权限' }
   },
+  // 兜底 404 必须直接渲染组件、不能 redirect：重定向在路由匹配阶段即完成，
+  // beforeEach 拿到的 to 已变成 /404，守卫注册完动态路由后重放会丢失原始目标路径
   {
-    path: '/404',
-    name: 'NotFound',
+    path: '/:pathMatch(.*)*',
     component: () => import('@/views/error/NotFound.vue'),
     meta: { title: '页面不存在' }
-  },
-  { path: '/:pathMatch(.*)*', redirect: '/404' }
+  }
 ]
 
 const APP_TITLE = '实验室设备管理系统'
@@ -79,7 +79,9 @@ router.beforeEach(async (to) => {
     if (store.mustSetPassword && to.path !== '/set_password') {
       return { path: '/set_password' }
     }
-    return { ...to, replace: true }
+    // 用完整路径重放：动态路由刚注册，需触发新一轮匹配才能命中；
+    // 不用 {...to} 展开是避免 to 命中兜底 404 记录时携带其记录信息
+    return to.fullPath
   }
 
   // 强制改密拦截：标志来自登录响应 / profile，刷新后仍生效
