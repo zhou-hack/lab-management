@@ -19,8 +19,7 @@ import java.util.List;
 public record StocktakeCountDTO(
         @Schema(description = "实盘行")
         @NotNull(message = "实盘行不能为空")
-        @Valid
-        List<CountLineDTO> lines
+        List<@Valid CountLineDTO> lines
 ) {
 
     /**

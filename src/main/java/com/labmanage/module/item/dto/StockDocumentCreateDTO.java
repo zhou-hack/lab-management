@@ -36,7 +36,6 @@ public record StockDocumentCreateDTO(
 
         @Schema(description = "单据明细行")
         @NotEmpty(message = "单据明细行不能为空")
-        @Valid
-        List<StockDocumentLineCreateDTO> lines
+        List<@Valid StockDocumentLineCreateDTO> lines
 ) {
 }
