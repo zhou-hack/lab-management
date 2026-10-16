@@ -16,6 +16,7 @@ import com.labmanage.roles.entity.SysUser;
 import com.labmanage.roles.entity.SysUserRole;
 import com.labmanage.roles.enums.RoleCode;
 import com.labmanage.roles.enums.UserType;
+import com.labmanage.roles.support.PasswordCryptoService;
 import com.labmanage.roles.mapper.SysDepartmentMapper;
 import com.labmanage.roles.mapper.SysUserMapper;
 import com.labmanage.roles.mapper.SysUserRoleMapper;
@@ -51,15 +52,23 @@ public class SysUserServiceImpl implements SysUserService {
 
     private final BCryptPasswordEncoder passwordEncoder;
 
+    private final PasswordCryptoService passwordCryptoService;
+
+    /** 密码强度：8-64 位且同时包含字母和数字（解密后的明文校验，与 AuthServiceImpl 一致） */
+    private static final java.util.regex.Pattern PASSWORD_RULE =
+            java.util.regex.Pattern.compile("^(?=.*[A-Za-z])(?=.*\\d).{8,64}$");
+
     public SysUserServiceImpl(SysUserMapper userMapper, SysUserRoleMapper userRoleMapper,
                               SysDepartmentMapper departmentMapper, AuthService authService,
-                              SysScopeService scopeService, BCryptPasswordEncoder passwordEncoder) {
+                              SysScopeService scopeService, BCryptPasswordEncoder passwordEncoder,
+                              PasswordCryptoService passwordCryptoService) {
         this.userMapper = userMapper;
         this.userRoleMapper = userRoleMapper;
         this.departmentMapper = departmentMapper;
         this.authService = authService;
         this.scopeService = scopeService;
         this.passwordEncoder = passwordEncoder;
+        this.passwordCryptoService = passwordCryptoService;
     }
 
     @Override
@@ -153,7 +162,11 @@ public class SysUserServiceImpl implements SysUserService {
             throw new BusinessException(40900, "不能重置当前登录账号密码，请使用修改密码");
         }
         scopeService.requireDepartmentWrite(user.getDepartmentId());
-        user.setPasswordHash(passwordEncoder.encode(dto.newPassword()));
+        String newPassword = passwordCryptoService.decrypt(dto.newPassword());
+        if (!PASSWORD_RULE.matcher(newPassword).matches()) {
+            throw new BusinessException(40000, "新密码需 8-64 位且同时包含字母和数字");
+        }
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
         // password_changed_at 置 NULL：复用密码到期机制，目标用户下次登录强制改密
         user.setPasswordChangedAt(null);
         userMapper.updateById(user);

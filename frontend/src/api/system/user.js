@@ -1,4 +1,5 @@
 import request from '../request'
+import { encryptPassword } from '@/utils/crypto'
 
 /**
  * 系统管理-用户管理接口（学生/老师账号由名单首登建档，新建仅限管理员账号）
@@ -29,9 +30,9 @@ export function updateUserEnabled(id, enabled) {
   return request.put(`/system/users/${id}/enabled`, { enabled })
 }
 
-/** 重置用户密码（强制首登改密并踢出会话；敏感操作需二级确认） */
-export function resetUserPassword(id, newPassword) {
-  return request.put(`/system/users/${id}/password_reset`, { newPassword })
+/** 重置用户密码（强制首登改密并踢出会话；敏感操作需二级确认；新密码 RSA 密文上传） */
+export async function resetUserPassword(id, newPassword) {
+  return request.put(`/system/users/${id}/password_reset`, { newPassword: await encryptPassword(newPassword) })
 }
 
 /** 启用部门下拉选项 → [{ id, departmentName }] */

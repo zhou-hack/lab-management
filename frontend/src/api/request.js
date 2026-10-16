@@ -62,7 +62,9 @@ service.interceptors.response.use(
       return Promise.reject(error)
     }
     const isTimeout = error.code === 'ECONNABORTED' || (error.message || '').includes('timeout')
-    ElMessage.error(isTimeout ? '请求超时，请重试' : '网络异常，请稍后重试')
+    // 后端已返回业务错误体时优先展示其 msg，避免真实原因被"网络异常"掩盖
+    const serverMsg = error.response && error.response.data && error.response.data.msg
+    ElMessage.error(serverMsg || (isTimeout ? '请求超时，请重试' : '网络异常，请稍后重试'))
     return Promise.reject(error)
   }
 )
