@@ -27,7 +27,6 @@ public record StockReturnCreateDTO(
 
         @Schema(description = "归还明细行")
         @NotEmpty(message = "归还明细行不能为空")
-        @Valid
-        List<StockReturnLineDTO> lines
+        List<@Valid StockReturnLineDTO> lines
 ) {
 }

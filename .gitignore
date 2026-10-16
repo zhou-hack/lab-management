@@ -83,3 +83,9 @@ tools/
 
 # ---------- 本地代理计划文档（勿提交） ----------
 .trae/
+
+# ---------- 本地指引文档（勿提交） ----------
+# GitHub SSH 配置指引（个人本地文档）
+config Github.md
+# 团队开发约定（dev/item 分支历史早于 main 合入，合并时自然带入，避免双源提交）
+docs/development.md

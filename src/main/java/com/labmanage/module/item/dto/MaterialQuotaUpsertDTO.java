@@ -24,8 +24,7 @@ public record MaterialQuotaUpsertDTO(
 
         @Schema(description = "定额行")
         @NotEmpty(message = "定额行不能为空")
-        @Valid
-        List<QuotaLineDTO> lines
+        List<@Valid QuotaLineDTO> lines
 ) {
 
     /**

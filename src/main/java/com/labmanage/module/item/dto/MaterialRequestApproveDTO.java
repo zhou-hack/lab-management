@@ -17,8 +17,7 @@ import java.util.List;
 @Schema(description = "物料申领单审批参数")
 public record MaterialRequestApproveDTO(
         @Schema(description = "行批准量（为空时全部行按申请量批准）")
-        @Valid
-        List<ApproveLineDTO> lines
+        List<@Valid ApproveLineDTO> lines
 ) {
 
     /**

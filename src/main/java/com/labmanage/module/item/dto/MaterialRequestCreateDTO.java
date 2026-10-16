@@ -58,7 +58,6 @@ public record MaterialRequestCreateDTO(
 
         @Schema(description = "申领行")
         @NotEmpty(message = "申领行不能为空")
-        @Valid
-        List<MaterialRequestLineDTO> lines
+        List<@Valid MaterialRequestLineDTO> lines
 ) {
 }

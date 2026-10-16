@@ -27,7 +27,6 @@ public record StockTransferCreateDTO(
 
         @Schema(description = "调拨明细行")
         @NotEmpty(message = "调拨明细行不能为空")
-        @Valid
-        List<StockTransferLineDTO> lines
+        List<@Valid StockTransferLineDTO> lines
 ) {
 }
