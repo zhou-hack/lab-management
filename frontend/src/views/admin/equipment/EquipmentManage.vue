@@ -71,7 +71,7 @@ import ModelSection from '@/views/admin/equipment/ModelManage.vue'
 import AssetSection from '@/views/admin/equipment/AssetManage.vue'
 
 /**
- * 设备管理整合页：设备型号 / 设备台账两个折叠面板（规范 7.4 统一布局内）。
+ * 设备管理整合页：设备管理（型号）/ 设备台账两个折叠面板（规范 7.4 统一布局内）。
  * - 分类目录已并入型号面板的「管理分类」抽屉，不再单独成页
  * - 型号按所属分类分组折叠，台账按设备型号分组折叠；面板可各自展开收起、允许同时展开，
  *   收起时子组件 DOM 保留，查询条件与分页状态不丢失
@@ -82,7 +82,7 @@ import AssetSection from '@/views/admin/equipment/AssetManage.vue'
 const panels = [
   {
     key: 'model',
-    title: '设备型号',
+    title: '设备管理',
     sub: '按分类分组 · 型号码 · 规格参数 · 归还擦除 · 分类目录管理',
     unit: ' 个型号',
     icon: Goods,

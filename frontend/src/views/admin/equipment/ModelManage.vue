@@ -134,6 +134,15 @@
                   show-overflow-tooltip
                 />
                 <el-table-column
+                  prop="quantity"
+                  label="数量"
+                  width="90"
+                >
+                  <template #default="{ row }">
+                    {{ row.quantity ?? 0 }}
+                  </template>
+                </el-table-column>
+                <el-table-column
                   prop="unitName"
                   label="计量单位"
                   width="90"
@@ -307,6 +316,16 @@
             maxlength="500"
             show-word-limit
             placeholder="如 i7/16G/512G"
+          />
+        </el-form-item>
+        <el-form-item
+          label="数量"
+          prop="quantity"
+        >
+          <el-input-number
+            v-model="form.quantity"
+            :min="0"
+            :precision="0"
           />
         </el-form-item>
         <el-form-item
@@ -521,6 +540,7 @@ const form = reactive({
   equipmentName: '',
   brand: '',
   specification: '',
+  quantity: 0,
   unitName: '',
   referencePrice: null,
   expectedLifeMonths: null,
@@ -532,7 +552,8 @@ const rules = {
   modelCode: [{ required: true, message: '请输入型号码', trigger: 'blur' }],
   equipmentName: [{ required: true, message: '请输入设备名称', trigger: 'blur' }],
   specification: [{ required: true, message: '请输入规格说明', trigger: 'blur' }],
-  unitName: [{ required: true, message: '请输入计量单位', trigger: 'blur' }]
+  unitName: [{ required: true, message: '请输入计量单位', trigger: 'blur' }],
+  quantity: [{ required: true, message: '请输入数量', trigger: 'change' }]
 }
 
 /** group 存在时（分组头快捷入口）预选该分类 */
@@ -563,6 +584,7 @@ function openEdit(row) {
     equipmentName: row.equipmentName,
     brand: row.brand || '',
     specification: row.specification || '',
+    quantity: row.quantity ?? 0,
     unitName: row.unitName,
     referencePrice: row.referencePrice,
     expectedLifeMonths: row.expectedLifeMonths,
@@ -587,6 +609,7 @@ async function save() {
         equipmentName: form.equipmentName.trim(),
         brand: form.brand.trim() || null,
         specification: form.specification.trim(),
+        quantity: form.quantity ?? 0,
         unitName: form.unitName.trim(),
         referencePrice: form.referencePrice ?? null,
         expectedLifeMonths: form.expectedLifeMonths ?? null,
@@ -597,6 +620,7 @@ async function save() {
         equipmentName: form.equipmentName.trim(),
         brand: form.brand.trim() || null,
         specification: form.specification.trim(),
+        quantity: form.quantity ?? 0,
         unitName: form.unitName.trim(),
         referencePrice: form.referencePrice ?? null,
         expectedLifeMonths: form.expectedLifeMonths ?? null,

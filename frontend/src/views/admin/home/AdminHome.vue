@@ -40,7 +40,7 @@
       </div>
     </div>
 
-    <!-- 可视化图表：设备状态环形 + 实验室设备分布（真实数据聚合，无虚构） -->
+    <!-- 可视化图表：设备状态环形 + 归口部门设备分布（真实数据聚合，无虚构） -->
     <div
       v-if="canViewAssets"
       class="admin_home__charts"
@@ -108,7 +108,7 @@
 
       <div class="card admin_home__chart_card">
         <div class="sechead">
-          实验室设备分布
+          归口部门设备分布
         </div>
         <div
           v-if="dashboard.loading"
@@ -122,7 +122,7 @@
           </div>
         </div>
         <div
-          v-else-if="!labAgg.length"
+          v-else-if="!deptAgg.length"
           class="empty"
         >
           <el-icon
@@ -138,7 +138,7 @@
           class="admin_home__bars"
         >
           <div
-            v-for="item in labAgg"
+            v-for="item in deptAgg"
             :key="item.name"
             class="admin_home__bar_row"
           >
@@ -149,7 +149,7 @@
             <span class="admin_home__bar_track">
               <span
                 class="admin_home__bar_fill"
-                :style="{ width: (item.count / labMax * 100) + '%' }"
+                :style="{ width: (item.count / deptMax * 100) + '%' }"
               />
             </span>
             <span class="admin_home__figure admin_home__bar_value">{{ item.count }}</span>
@@ -219,17 +219,14 @@ import { computed, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Bell,
-  Collection,
   Document,
   Grid,
   Location,
   Monitor,
-  Notebook,
-  OfficeBuilding
+  Notebook
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import { pageAssets, pageModels } from '@/api/equipment'
-import { pageCampuses, pageLabs } from '@/api/space'
 import { EQUIPMENT_STATUS } from '@/utils/enums'
 
 const router = useRouter()
@@ -237,8 +234,6 @@ const store = useUserStore()
 
 /* ---------- 权限门控：统计与图表仅对有权限的模块拉取 ---------- */
 const PERMS = {
-  campus: 'space:campus:list',
-  lab: 'space:lab:list',
   model: 'equipment:model:list',
   asset: 'equipment:asset:list'
 }
@@ -248,8 +243,6 @@ const canViewAssets = computed(() => store.perms.includes(PERMS.asset))
 /* ---------- 仪表数据：真实接口聚合；单项失败回退“—”，不虚构 ---------- */
 const dashboard = reactive({
   loading: true,
-  campusTotal: null,
-  labTotal: null,
   modelTotal: null,
   assetTotal: null,
   assetRows: [],
@@ -262,8 +255,6 @@ async function loadDashboard() {
     api({ pageNum: 1, pageSize: 1 })
       .then((r) => { dashboard[key] = r.total })
       .catch(() => {})
-  if (store.perms.includes(PERMS.campus)) jobs.push(fetchTotal(pageCampuses, 'campusTotal'))
-  if (store.perms.includes(PERMS.lab)) jobs.push(fetchTotal(pageLabs, 'labTotal'))
   if (store.perms.includes(PERMS.model)) jobs.push(fetchTotal(pageModels, 'modelTotal'))
   if (canViewAssets.value) {
     jobs.push(
@@ -283,14 +274,8 @@ onMounted(loadDashboard)
 
 const kpis = computed(() => {
   const list = []
-  if (store.perms.includes(PERMS.campus)) {
-    list.push({ label: '校区', icon: OfficeBuilding, value: dashboard.campusTotal })
-  }
-  if (store.perms.includes(PERMS.lab)) {
-    list.push({ label: '实验室', icon: Location, value: dashboard.labTotal })
-  }
   if (store.perms.includes(PERMS.model)) {
-    list.push({ label: '设备型号', icon: Grid, value: dashboard.modelTotal })
+    list.push({ label: '设备管理', icon: Grid, value: dashboard.modelTotal })
   }
   if (store.perms.includes(PERMS.asset)) {
     list.push({ label: '设备资产', icon: Monitor, value: dashboard.assetTotal })
@@ -342,11 +327,11 @@ const donutStyle = computed(() => {
   return { background: stops.length ? `conic-gradient(${stops.join(', ')})` : 'var(--surface-sunken)' }
 })
 
-/* 实验室设备分布：取保有量前六的实验室 */
-const labAgg = computed(() => {
+/* 归口部门设备分布：取保有量前六的归口部门 */
+const deptAgg = computed(() => {
   const map = new Map()
   for (const row of dashboard.assetRows) {
-    const name = row.labName || '未指定实验室'
+    const name = row.departmentName || '未指定部门'
     map.set(name, (map.get(name) || 0) + 1)
   }
   return [...map.entries()]
@@ -355,28 +340,14 @@ const labAgg = computed(() => {
     .slice(0, 6)
 })
 
-const labMax = computed(() => Math.max(1, ...labAgg.value.map((i) => i.count)))
+const deptMax = computed(() => Math.max(1, ...deptAgg.value.map((i) => i.count)))
 
 /* ---------- 功能入口：仅展示当前账号有列表权限的模块 ---------- */
 const ENTRIES = [
   {
-    path: '/admin/space',
-    title: '空间管理',
-    sub: '校区 · 楼栋 · 实验室',
-    icon: OfficeBuilding,
-    perms: ['space:campus:list', 'space:lab:list']
-  },
-  {
-    path: '/admin/equipment/category',
-    title: '设备分类',
-    sub: '多级分类树维护',
-    icon: Collection,
-    perms: ['equipment:category:list']
-  },
-  {
     path: '/admin/equipment/model',
-    title: '设备型号',
-    sub: '型号码与规格参数',
+    title: '设备管理',
+    sub: '型号码与规格参数 · 分类目录维护',
     icon: Grid,
     perms: ['equipment:model:list']
   },
@@ -562,7 +533,7 @@ const dateLine = new Intl.DateTimeFormat('zh-CN', {
   color: var(--g3);
 }
 
-/* 条形排行：实验室保有量 */
+/* 条形排行：归口部门设备分布 */
 .admin_home__bars {
   display: flex;
   flex-direction: column;

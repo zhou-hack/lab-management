@@ -21,21 +21,6 @@
           @change="search"
         />
         <el-select
-          v-model="query.labId"
-          class="asset_manage__filter"
-          placeholder="全部实验室"
-          clearable
-          filterable
-          @change="search"
-        >
-          <el-option
-            v-for="lab in labOptions"
-            :key="lab.id"
-            :label="lab.labName"
-            :value="lab.id"
-          />
-        </el-select>
-        <el-select
           v-model="query.status"
           class="asset_manage__filter asset_manage__filter--status"
           placeholder="全部状态"
@@ -127,13 +112,8 @@
                   min-width="110"
                 />
                 <el-table-column
-                  prop="labName"
-                  label="保管实验室"
-                  min-width="130"
-                />
-                <el-table-column
                   label="存放位置"
-                  min-width="130"
+                  min-width="150"
                   show-overflow-tooltip
                 >
                   <template #default="{ row }">
@@ -303,24 +283,6 @@
           />
         </el-form-item>
         <el-form-item
-          label="保管实验室"
-          prop="labId"
-        >
-          <el-select
-            v-model="createForm.labId"
-            filterable
-            placeholder="请选择实验室"
-            @change="onCreateLabChange"
-          >
-            <el-option
-              v-for="lab in labOptions"
-              :key="lab.id"
-              :label="`${lab.labName}（${lab.labCode}）`"
-              :value="lab.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item
           label="归口部门"
           prop="departmentId"
         >
@@ -329,7 +291,7 @@
             :data="departmentOptions"
             node-key="id"
             check-strictly
-            placeholder="选择实验室后自动带出，可调整"
+            placeholder="请选择归口部门"
           />
         </el-form-item>
         <el-form-item label="存放位置">
@@ -492,27 +454,13 @@
         label-width="100px"
       >
         <el-form-item
-          label="目标实验室"
-          prop="toLabId"
+          label="目标位置"
+          prop="toLocation"
         >
-          <el-select
-            v-model="transferForm.toLabId"
-            filterable
-            placeholder="请选择目标实验室"
-          >
-            <el-option
-              v-for="lab in labOptions"
-              :key="lab.id"
-              :label="`${lab.labName}（${lab.labCode}）`"
-              :value="lab.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="目标位置">
           <el-input
             v-model="transferForm.toLocation"
             maxlength="255"
-            placeholder="选填"
+            placeholder="请输入目标存放位置"
           />
         </el-form-item>
         <el-form-item label="迁移原因">
@@ -613,7 +561,6 @@ import {
   transferAsset,
   updateAsset
 } from '@/api/equipment'
-import { pageLabs } from '@/api/space'
 import { departmentTreeOptions } from '@/api/department'
 import { EQUIPMENT_STATUS, EQUIPMENT_STATUS_OPTIONS, VALUE_LEVEL, enumMeta } from '@/utils/enums'
 
@@ -631,19 +578,9 @@ const emit = defineEmits(['count'])
 
 /* ---------------- 下拉选项 ---------------- */
 
-const labOptions = ref([])
 const modelOptions = ref([])
 const custodianList = ref([])
 const departmentOptions = ref([])
-
-async function loadLabOptions() {
-  try {
-    const data = await pageLabs({ pageNum: 1, pageSize: 100 })
-    labOptions.value = data.records || []
-  } catch {
-    // 失败提示由请求拦截器统一处理
-  }
-}
 
 async function loadModelOptions() {
   try {
@@ -675,7 +612,6 @@ async function loadDepartmentOptions() {
 const query = reactive({
   keyword: '',
   departmentId: null,
-  labId: '',
   status: ''
 })
 const records = ref([])
@@ -750,9 +686,6 @@ async function load() {
     if (query.departmentId) {
       base.departmentId = query.departmentId
     }
-    if (query.labId) {
-      base.labId = query.labId
-    }
     if (query.status) {
       base.status = query.status
     }
@@ -790,7 +723,6 @@ const createForm = reactive({
   modelId: '',
   assetCode: '',
   serialNo: '',
-  labId: '',
   departmentId: '',
   locationDetail: '',
   custodianId: '',
@@ -801,7 +733,6 @@ const createForm = reactive({
 const createRules = {
   modelId: [{ required: true, message: '请选择设备型号', trigger: 'change' }],
   assetCode: [{ required: true, message: '请输入资产编号', trigger: 'blur' }],
-  labId: [{ required: true, message: '请选择保管实验室', trigger: 'change' }],
   departmentId: [{ required: true, message: '请选择归口部门', trigger: 'change' }]
 }
 
@@ -810,7 +741,6 @@ function openCreate() {
     modelId: '',
     assetCode: '',
     serialNo: '',
-    labId: '',
     departmentId: '',
     locationDetail: '',
     custodianId: '',
@@ -819,12 +749,6 @@ function openCreate() {
     warrantyUntil: ''
   })
   createDialog.visible = true
-}
-
-/** 选择保管实验室后按实验室归口部门自动带出，减少手工选择 */
-function onCreateLabChange(labId) {
-  const lab = labOptions.value.find((item) => item.id === labId)
-  createForm.departmentId = lab ? lab.departmentId : ''
 }
 
 async function saveCreate() {
@@ -839,7 +763,6 @@ async function saveCreate() {
       modelId: createForm.modelId,
       assetCode: createForm.assetCode.trim(),
       serialNo: createForm.serialNo.trim() || null,
-      labId: createForm.labId,
       departmentId: createForm.departmentId,
       locationDetail: createForm.locationDetail.trim() || null,
       custodianId: createForm.custodianId || null,
@@ -917,16 +840,15 @@ async function saveEdit() {
 
 const transferDialog = reactive({ visible: false, saving: false })
 const transferFormRef = ref()
-const transferForm = reactive({ assetId: '', assetCode: '', toLabId: '', toLocation: '', reason: '' })
+const transferForm = reactive({ assetId: '', assetCode: '', toLocation: '', reason: '' })
 const transferRules = {
-  toLabId: [{ required: true, message: '请选择目标实验室', trigger: 'change' }]
+  toLocation: [{ required: true, message: '请输入目标存放位置', trigger: 'blur' }]
 }
 
 function openTransfer(row) {
   Object.assign(transferForm, {
     assetId: row.id,
     assetCode: row.assetCode,
-    toLabId: '',
     toLocation: '',
     reason: ''
   })
@@ -942,8 +864,7 @@ async function saveTransfer() {
   transferDialog.saving = true
   try {
     await transferAsset(transferForm.assetId, {
-      toLabId: transferForm.toLabId,
-      toLocation: transferForm.toLocation.trim() || null,
+      toLocation: transferForm.toLocation.trim(),
       reason: transferForm.reason.trim() || null
     })
     ElMessage.success('迁移成功')
@@ -1026,7 +947,6 @@ watch(
     if (active && !loaded.value) {
       loaded.value = true
       load()
-      loadLabOptions()
       loadModelOptions()
       loadCustodianList()
       loadDepartmentOptions()

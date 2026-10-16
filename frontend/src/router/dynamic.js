@@ -8,9 +8,8 @@ import AdminLayout from '@/layout/admin/AdminLayout.vue'
  */
 const viewModules = {
   '/admin/home': () => import('@/views/admin/home/AdminHome.vue'),
-  '/admin/space': () => import('@/views/admin/space/SpaceManage.vue'),
-  // 设备管理两菜单共用整合页（型号/台账折叠面板，进入时按路由展开对应面板；
-  // 分类目录已并入型号面板的「管理分类」抽屉，不再单独成页）
+  // 管理模块下两菜单（设备管理/设备台账）共用整合页（型号/台账折叠面板，
+  // 进入时按路由展开对应面板；分类目录已并入型号面板的「管理分类」抽屉，不再单独成页）
   '/admin/equipment/model': () => import('@/views/admin/equipment/EquipmentManage.vue'),
   '/admin/equipment/asset': () => import('@/views/admin/equipment/EquipmentManage.vue')
 }

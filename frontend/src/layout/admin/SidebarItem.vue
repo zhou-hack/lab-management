@@ -32,11 +32,9 @@
 <script setup>
 import { computed } from 'vue'
 import {
-  Collection,
   Files,
   Grid,
   HomeFilled,
-  Location,
   Monitor,
   Notebook,
   OfficeBuilding,
@@ -61,8 +59,6 @@ const hasChildren = computed(() => visibleChildren.value.length > 0)
 /* 图标：componentKey 白名单优先，未命中按菜单名关键字兜底（规范 7.4） */
 const ICON_BY_KEY = {
   '/admin/home': HomeFilled,
-  '/admin/space': OfficeBuilding,
-  '/admin/space/labs': Location,
   '/admin/equipment': Monitor,
   '/admin/equipment/model': Grid,
   '/admin/equipment/asset': Notebook
@@ -70,11 +66,8 @@ const ICON_BY_KEY = {
 
 const KEYWORD_ICONS = [
   ['首页', HomeFilled],
-  ['空间', OfficeBuilding],
-  ['场地', Location],
-  ['实验室', Location],
+  ['管理模块', Monitor],
   ['设备', Monitor],
-  ['分类', Collection],
   ['型号', Grid],
   ['台账', Notebook],
   ['用户', User],
