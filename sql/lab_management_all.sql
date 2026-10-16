@@ -36,10 +36,14 @@
 -- 7. 含可空列的组合唯一：用生成列归一
 --    （参照 stock_location.lab_key、stocktake.active_key 模式）。
 -- 8. 种子数据编号段（防冲突，勿占用他人段；新段先向数据库组长登记再使用）：
---      权限     sys_permission：      item 101-137，equipment 141-154，space 155-159；
---      菜单     sys_menu：            item 151-199，equipment 200-204，space 1001-1005；
---      权限绑定 sys_role_permission： item 201-237，space 251-259，equipment 515-528；
---      菜单绑定 sys_role_menu：       item 301-349，equipment 606-610，space 1101-1105。
+--      权限     sys_permission：      item 101-137，equipment 141-154，
+--                                  space 155-159（2026-10-16 功能移除，段位保留不再登记）；
+--      菜单     sys_menu：            item 151-199，equipment 200-204，
+--                                  space 1001-1005（2026-10-16 功能移除，段位保留不再登记）；
+--      权限绑定 sys_role_permission： item 201-237，equipment 515-528，
+--                                  space 251-259（同上，段位保留不再登记）；
+--      菜单绑定 sys_role_menu：       item 301-349，equipment 606-610，
+--                                  space 1101-1105（同上，段位保留不再登记）。
 --    权限码规范 `模块:资源:操作`（如 item:material:create）；
 --    module_code 用模块代号；菜单 ACTION 层 menu_code 即权限码。
 -- 9. 禁止：改他人分区的表结构/编号；DROP 既有表；改写已登记的历史种子。
@@ -50,8 +54,10 @@ SET NAMES utf8mb4;
 -- ############################################################################
 -- 模块一：场地模块（实施分组 A · 单表版）
 --   表：lab；并为 sys_user_data_scope、assistant_grant_scope 补充跨模块外键。
---   种子：场地 3 条（id 1-3）；权限 155-159；菜单 1001-1005；
---         权限绑定 251-259；菜单绑定 1101-1105。
+--   变更登记（2026-10-16）：空间管理功能已从应用移除（接口/页面/菜单全部下线），
+--   权限 155-159、菜单 1001-1005 及角色绑定 251-259、1101-1105 不再登记；
+--   lab 表与场地种子保留——equipment_asset.lab_id 等历史列仍引用该表，
+--   线上库对应迁移见 remove_space_module.sql。
 -- ############################################################################
 
 -- ----------------------------------------------------------------------------
@@ -113,46 +119,9 @@ VALUES
     '08:00', '21:00', 'AVAILABLE', 1, 1);
 
 -- ----------------------------------------------------------------------------
--- 1.4 场地权限（155-159，标识规范 模块:资源:操作，module_code='space'）
---     原编号 101-105 与物料模块 101-121 冲突，整合时移至 155-159。
+-- 1.4 场地权限/菜单/绑定（原 155-159、1001-1005、251-259、1101-1105）
+--     2026-10-16 空间管理功能移除，不再登记（编号段保留防复用）。
 -- ----------------------------------------------------------------------------
-INSERT INTO sys_permission (id, permission_code, permission_name, module_code, enabled)
-VALUES
-(155, 'space:space:list',   '场地列表',       'space', 1),
-(156, 'space:space:read',   '场地详情',       'space', 1),
-(157, 'space:space:create', '新建场地',       'space', 1),
-(158, 'space:space:update', '编辑/启停场地',  'space', 1),
-(159, 'space:space:delete', '删除场地',       'space', 1);
-
--- ----------------------------------------------------------------------------
--- 1.5 场地菜单（1001-1005，menu_type 取 DIRECTORY/PAGE/ACTION）
---     1002 路由与组件沿用前端已落地白名单（/admin/space/labs → admin/space/LabList）。
--- ----------------------------------------------------------------------------
-INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key,
-                      permission_id, menu_type, sort_order, enabled)
-VALUES
-(1001, NULL, 'space',        '空间管理', '/admin/space',      NULL,                    NULL, 'DIRECTORY', 10, 1),
-(1002, 1001, 'space_labs',   '场地管理', '/admin/space/labs', 'admin/space/LabList',   NULL, 'PAGE',      1, 1),
-(1003, 1002, 'space_create', '新建场地', NULL,                NULL,                    157,  'ACTION',    1, 1),
-(1004, 1002, 'space_update', '编辑场地', NULL,                NULL,                    158,  'ACTION',    2, 1),
-(1005, 1002, 'space_delete', '删除场地', NULL,                NULL,                    159,  'ACTION',    3, 1);
-
--- 管理员（role_id=1）拥有场地模块全部权限 155-159
-INSERT INTO sys_role_permission (id, role_id, permission_id, enabled)
-VALUES
-(251, 1, 155, 1), (252, 1, 156, 1), (253, 1, 157, 1), (254, 1, 158, 1), (255, 1, 159, 1);
-
--- 教师（role_id=2）/学生（role_id=3）只读：仅列表与详情
-INSERT INTO sys_role_permission (id, role_id, permission_id, enabled)
-VALUES
-(256, 2, 155, 1), (257, 2, 156, 1),
-(258, 3, 155, 1), (259, 3, 156, 1);
-
--- 管理员可见场地模块全部菜单 1001-1005（师生经预约入口只读访问，无管理菜单）
-INSERT INTO sys_role_menu (id, role_id, menu_id, enabled)
-VALUES
-(1101, 1, 1001, 1), (1102, 1, 1002, 1), (1103, 1, 1003, 1),
-(1104, 1, 1004, 1), (1105, 1, 1005, 1);
 
 -- 管理员数据范围：ALL + WRITE（WRITE 含 READ；无目标 ID，scope_target_id 归一生成列=0）
 INSERT INTO sys_user_data_scope (id, user_id, scope_type, department_id, campus_id, building_id,
@@ -323,6 +292,7 @@ CREATE TABLE equipment_model (
     equipment_name        VARCHAR(128)  NOT NULL                COMMENT '设备名称',
     brand                 VARCHAR(128)  NULL                    COMMENT '品牌',
     specification         VARCHAR(500)  NOT NULL                COMMENT '规格说明',
+    quantity             INT           NOT NULL DEFAULT 0          COMMENT '数量（登记设备台数）',
     base_unit             VARCHAR(16)   NOT NULL                COMMENT '计量单位（台/套等）',
     reference_price       DECIMAL(18,2) NULL                    COMMENT '参考单价（MONEY；实际采购价见 equipment_asset）',
     expected_life_months  INT           NULL                    COMMENT '预计寿命（月）',
@@ -504,11 +474,11 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code) V
 
 -- ----------------------------------------------------------------------------
 -- 3.8 equipment 菜单（200、202-204；原 161-170 与物料 151-179 冲突，移至 200 段；
---     分类目录并入型号管理页抽屉，原独立菜单 201 移除；借用菜单按产品定稿不登记）
+--     分类目录并入设备管理页抽屉，原独立菜单 201 移除；借用菜单按产品定稿不登记）
 -- ----------------------------------------------------------------------------
 INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order) VALUES
-(200, NULL, 'M_EQUIPMENT_ADMIN',    '设备管理', '/admin',                    NULL,                         NULL, 'DIRECTORY', 20),
-(202, 200,  'C_EQUIPMENT_MODEL',    '型号管理', '/admin/equipment/model',    '/admin/equipment/model',    145,  'PAGE',      1),
+(200, NULL, 'M_EQUIPMENT_ADMIN',    '管理模块', '/admin',                    NULL,                         NULL, 'DIRECTORY', 20),
+(202, 200,  'C_EQUIPMENT_MODEL',    '设备管理', '/admin/equipment/model',    '/admin/equipment/model',    145,  'PAGE',      1),
 (203, 200,  'C_EQUIPMENT_ASSET',    '设备台账', '/admin/equipment/asset',    '/admin/equipment/asset',    149,  'PAGE',      2),
 (204, 203,  'F_EQUIPMENT_ASSET_CREATE', '设备登记', NULL, NULL, 150, 'ACTION', 1);
 

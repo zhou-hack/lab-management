@@ -23,8 +23,6 @@ import com.labmanage.module.equipment.mapper.EquipmentModelMapper;
 import com.labmanage.module.equipment.service.AssetService;
 import com.labmanage.module.equipment.vo.AssetVO;
 import com.labmanage.module.equipment.vo.CustodianOptionVO;
-import com.labmanage.module.space.entity.Lab;
-import com.labmanage.module.space.mapper.LabMapper;
 import com.labmanage.roles.department.entity.SysDepartment;
 import com.labmanage.roles.department.mapper.SysDepartmentMapper;
 import com.labmanage.roles.user.entity.SysUser;
@@ -53,20 +51,17 @@ public class AssetServiceImpl implements AssetService {
     private final EquipmentAssetMapper assetMapper;
     private final EquipmentModelMapper modelMapper;
     private final EquipmentLocationHistoryMapper locationHistoryMapper;
-    private final LabMapper labMapper;
     private final SysDepartmentMapper departmentMapper;
     private final SysUserMapper userMapper;
 
     public AssetServiceImpl(EquipmentAssetMapper assetMapper,
                             EquipmentModelMapper modelMapper,
                             EquipmentLocationHistoryMapper locationHistoryMapper,
-                            LabMapper labMapper,
                             SysDepartmentMapper departmentMapper,
                             SysUserMapper userMapper) {
         this.assetMapper = assetMapper;
         this.modelMapper = modelMapper;
         this.locationHistoryMapper = locationHistoryMapper;
-        this.labMapper = labMapper;
         this.departmentMapper = departmentMapper;
         this.userMapper = userMapper;
     }
@@ -83,9 +78,6 @@ public class AssetServiceImpl implements AssetService {
             // 无维护权限：强制收敛为「在架」目录视图
             wrapper.eq(EquipmentAsset::getStatus, EquipmentStatus.IDLE)
                     .eq(EquipmentAsset::getEnabled, 1);
-        }
-        if (query.getLabId() != null) {
-            wrapper.eq(EquipmentAsset::getLabId, query.getLabId());
         }
         if (query.getDepartmentId() != null) {
             wrapper.eq(EquipmentAsset::getDepartmentId, query.getDepartmentId());
@@ -116,7 +108,6 @@ public class AssetServiceImpl implements AssetService {
         if (model == null || model.getEnabled() != 1) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "设备型号不存在或已停用");
         }
-        requireLab(request.labId());
         requireDepartment(request.departmentId());
         Long codeExists = assetMapper.selectCount(new LambdaQueryWrapper<EquipmentAsset>()
                 .eq(EquipmentAsset::getAssetCode, request.assetCode()));
@@ -127,7 +118,6 @@ public class AssetServiceImpl implements AssetService {
         asset.setModelId(request.modelId());
         asset.setAssetCode(request.assetCode());
         asset.setSerialNo(request.serialNo());
-        asset.setLabId(request.labId());
         asset.setDepartmentId(request.departmentId());
         asset.setLocationDetail(request.locationDetail());
         asset.setCustodianId(request.custodianId());
@@ -173,15 +163,11 @@ public class AssetServiceImpl implements AssetService {
         if (asset.getStatus() != EquipmentStatus.IDLE) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "仅空闲设备允许迁移");
         }
-        Lab toLab = requireLab(request.toLabId());
-        if (Objects.equals(toLab.getId(), asset.getLabId())
-                && Objects.equals(request.toLocation(), asset.getLocationDetail())) {
+        if (Objects.equals(request.toLocation(), asset.getLocationDetail())) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "设备已在目标位置");
         }
         EquipmentLocationHistory history = new EquipmentLocationHistory();
         history.setAssetId(asset.getId());
-        history.setFromLabId(asset.getLabId());
-        history.setToLabId(request.toLabId());
         history.setFromLocation(asset.getLocationDetail());
         history.setToLocation(request.toLocation());
         history.setMovedAt(Instant.now());
@@ -189,7 +175,6 @@ public class AssetServiceImpl implements AssetService {
         history.setReason(request.reason());
         locationHistoryMapper.insert(history);
 
-        asset.setLabId(request.toLabId());
         asset.setLocationDetail(request.toLocation());
         assetMapper.updateById(asset);
     }
@@ -222,14 +207,6 @@ public class AssetServiceImpl implements AssetService {
         return asset;
     }
 
-    private Lab requireLab(Long labId) {
-        Lab lab = labMapper.selectById(labId);
-        if (lab == null || lab.getEnabled() != 1) {
-            throw new BusinessException(ResultCode.CONFLICT.getCode(), "实验室不存在或已停用");
-        }
-        return lab;
-    }
-
     private SysDepartment requireDepartment(Long departmentId) {
         SysDepartment department = departmentMapper.selectById(departmentId);
         if (department == null || department.getEnabled() != 1) {
@@ -246,10 +223,6 @@ public class AssetServiceImpl implements AssetService {
                 assets.stream().map(EquipmentAsset::getModelId).collect(Collectors.toSet()),
                 modelMapper::selectBatchIds,
                 EquipmentModel::getId);
-        Map<Long, Lab> labs = loadMap(
-                assets.stream().map(EquipmentAsset::getLabId).filter(Objects::nonNull).collect(Collectors.toSet()),
-                labMapper::selectBatchIds,
-                Lab::getId);
         Map<Long, SysDepartment> departments = loadMap(
                 assets.stream().map(EquipmentAsset::getDepartmentId).filter(Objects::nonNull).collect(Collectors.toSet()),
                 departmentMapper::selectBatchIds,
@@ -261,7 +234,6 @@ public class AssetServiceImpl implements AssetService {
         return assets.stream()
                 .map(asset -> {
                     EquipmentModel model = models.get(asset.getModelId());
-                    Lab lab = labs.get(asset.getLabId());
                     SysDepartment department = departments.get(asset.getDepartmentId());
                     SysUser custodian = custodians.get(asset.getCustodianId());
                     return new AssetVO(
@@ -272,8 +244,6 @@ public class AssetServiceImpl implements AssetService {
                             model != null ? model.getModelCode() : null,
                             model != null ? model.getEquipmentName() : null,
                             model != null ? model.getCategoryId().toString() : null,
-                            asset.getLabId() == null ? null : asset.getLabId().toString(),
-                            lab != null ? lab.getLabName() : null,
                             asset.getDepartmentId() == null ? null : asset.getDepartmentId().toString(),
                             department != null ? department.getDepartmentName() : null,
                             asset.getLocationDetail(),

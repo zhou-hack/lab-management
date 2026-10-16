@@ -14,9 +14,6 @@ public class AssetPageQuery extends BasePageQuery {
     /** 关键字（资产编号/序列号/名称模糊匹配） */
     private String keyword;
 
-    /** 保管实验室过滤 */
-    private Long labId;
-
     /** 归口部门过滤 */
     private Long departmentId;
 
@@ -32,14 +29,6 @@ public class AssetPageQuery extends BasePageQuery {
 
     public void setKeyword(String keyword) {
         this.keyword = keyword;
-    }
-
-    public Long getLabId() {
-        return labId;
-    }
-
-    public void setLabId(Long labId) {
-        this.labId = labId;
     }
 
     public Long getDepartmentId() {

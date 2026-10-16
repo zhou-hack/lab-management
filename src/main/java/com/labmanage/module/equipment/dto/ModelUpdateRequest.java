@@ -1,5 +1,6 @@
 package com.labmanage.module.equipment.dto;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -20,6 +21,10 @@ public record ModelUpdateRequest(
         @NotBlank(message = "规格说明不能为空")
         @Size(max = 500, message = "规格说明长度不能超过 500")
         String specification,
+
+        @NotNull(message = "数量不能为空")
+        @Min(value = 0, message = "数量不能为负")
+        Integer quantity,
 
         @NotBlank(message = "计量单位不能为空")
         @Size(max = 16, message = "计量单位长度不能超过 16")

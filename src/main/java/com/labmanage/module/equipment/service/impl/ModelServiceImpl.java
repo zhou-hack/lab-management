@@ -73,6 +73,7 @@ public class ModelServiceImpl implements ModelService {
         model.setEquipmentName(request.equipmentName());
         model.setBrand(request.brand());
         model.setSpecification(request.specification());
+        model.setQuantity(request.quantity());
         model.setUnitName(request.unitName());
         model.setReferencePrice(request.referencePrice());
         model.setExpectedLifeMonths(request.expectedLifeMonths());
@@ -87,6 +88,7 @@ public class ModelServiceImpl implements ModelService {
         model.setEquipmentName(request.equipmentName());
         model.setBrand(request.brand());
         model.setSpecification(request.specification());
+        model.setQuantity(request.quantity());
         model.setUnitName(request.unitName());
         model.setReferencePrice(request.referencePrice());
         model.setExpectedLifeMonths(request.expectedLifeMonths());
@@ -131,6 +133,7 @@ public class ModelServiceImpl implements ModelService {
                             model.getEquipmentName(),
                             model.getBrand(),
                             model.getSpecification(),
+                            model.getQuantity() != null ? model.getQuantity() : 0,
                             model.getUnitName(),
                             model.getReferencePrice(),
                             model.getExpectedLifeMonths(),

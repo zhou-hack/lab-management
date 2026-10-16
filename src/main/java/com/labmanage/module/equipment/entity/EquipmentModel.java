@@ -26,6 +26,9 @@ public class EquipmentModel extends BaseEntity {
     /** 规格说明 */
     private String specification;
 
+    /** 数量（登记设备台数，配合计量单位阅读） */
+    private Integer quantity;
+
     /** 计量单位（台/套等） */
     private String unitName;
 
@@ -87,6 +90,14 @@ public class EquipmentModel extends BaseEntity {
 
     public void setUnitName(String unitName) {
         this.unitName = unitName;
+    }
+
+    public Integer getQuantity() {
+        return quantity;
+    }
+
+    public void setQuantity(Integer quantity) {
+        this.quantity = quantity;
     }
 
     public BigDecimal getReferencePrice() {

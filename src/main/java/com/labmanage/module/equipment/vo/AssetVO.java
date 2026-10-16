@@ -17,8 +17,6 @@ public record AssetVO(
         String modelCode,
         String equipmentName,
         String categoryId,
-        String labId,
-        String labName,
         String departmentId,
         String departmentName,
         String locationDetail,

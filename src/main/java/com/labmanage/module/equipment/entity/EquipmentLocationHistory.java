@@ -14,13 +14,7 @@ public class EquipmentLocationHistory extends BaseEntity {
     /** 设备（→ equipment_asset.id） */
     private Long assetId;
 
-    /** 原实验室（NULL=首装） */
-    private Long fromLabId;
-
-    /** 新实验室 */
-    private Long toLabId;
-
-    /** 原室内位置说明 */
+    /** 原位置说明（空间模块移除前为实验室维度迁移） */
     private String fromLocation;
 
     /** 新室内位置说明 */
@@ -41,22 +35,6 @@ public class EquipmentLocationHistory extends BaseEntity {
 
     public void setAssetId(Long assetId) {
         this.assetId = assetId;
-    }
-
-    public Long getFromLabId() {
-        return fromLabId;
-    }
-
-    public void setFromLabId(Long fromLabId) {
-        this.fromLabId = fromLabId;
-    }
-
-    public Long getToLabId() {
-        return toLabId;
-    }
-
-    public void setToLabId(Long toLabId) {
-        this.toLabId = toLabId;
     }
 
     public String getFromLocation() {
