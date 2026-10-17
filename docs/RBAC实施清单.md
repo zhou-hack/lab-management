@@ -27,34 +27,39 @@
 ## 二、权限标识登记
 
 「归属角色」为初始绑定；ASSISTANT 为附加角色，由有效 assistant_grant 动态计算，按授权范围与动作（ISSUE/RETURN）生效。
+OPS_ADMIN（运维管理员）为最高级预置运维角色，仅 SQL 预置不开放页面创建，绑定全部已登记权限（后续模块新增权限随各自脚本同步绑定 OPS_ADMIN），不受数据范围约束。
 
 ### 2.1 system 模块（已出初始 SQL）
 
 | permission_code | 名称 | 归属角色 |
 | --- | --- | --- |
-| system:user:list / get / create / update / enable | 用户管理 | ADMIN |
-| system:roster:list / create / update / enable | 预录名单管理 | ADMIN |
-| system:department:list / create / update / enable | 组织管理 | ADMIN |
-| system:role:list | 角色与权限查看（一期角色预置只读） | ADMIN |
-| system:scope:list / grant | 数据范围查看 / 授权 | ADMIN |
-| system:restriction:list / create / revoke | 预约限制（手动冻结/撤销） | ADMIN |
-| system:log:list | 操作日志查询 | ADMIN |
-| system:policy:list / publish | 策略参数查看 / 发布 | ADMIN |
-| system:grant:list / create / revoke | 助理授权（老师本人） | TEACHER |
-| system:grant:audit | 助理授权全局审计 | ADMIN |
+| system:user:list / get / create / update / enable / reset_password | 用户管理 | ADMIN / OPS_ADMIN（createAdmin 固定绑 ADMIN 角色且调用方须全校写；OPS_ADMIN 账号仅 OPS_ADMIN 本人可编辑/启停/重置） |
+| system:roster:list / create / update / enable / export / import | 预录名单管理（export 导出 CSV 复用列表筛选；import 批量导入 CSV 部分成功、需二级认证） | ADMIN / OPS_ADMIN |
+| system:department:list / create / update / enable | 组织管理 | ADMIN / OPS_ADMIN |
+| system:role:list | 角色与权限查看（角色仍 SQL 预置不可增删） | ADMIN / OPS_ADMIN |
+| system:role:assign | 调整角色权限（整集替换 + 踢持有者会话；锁 OPS_ADMIN 角色） | 仅 OPS_ADMIN |
+| system:scope:list / grant | 数据范围查看 / 授权 | ADMIN / OPS_ADMIN |
+| system:restriction:list / create / revoke | 预约限制（手动冻结/撤销） | ADMIN / OPS_ADMIN |
+| system:log:list | 操作日志查询 | ADMIN / OPS_ADMIN |
+| system:policy:list / publish | 策略参数查看 / 发布 | ADMIN / OPS_ADMIN |
+| system:grant:list / create / revoke | 助理授权（老师本人） | TEACHER / OPS_ADMIN |
+| system:grant:audit | 助理授权全局审计 | ADMIN / OPS_ADMIN |
 
-### 2.2 space 模块（随空间脚本登记）
+### 2.2 space 模块（空间部分已随 [sql/space.sql](../sql/space.sql) 登记）
 
 | permission_code | 名称 | 归属角色 |
 | --- | --- | --- |
-| space:campus:list / create / update / enable | 校区管理 | ADMIN |
-| space:building:list / create / update / enable | 楼栋管理 | ADMIN |
-| space:lab:list | 实验室目录 | ADMIN / TEACHER / STUDENT（只读目录） |
-| space:lab:create / update / enable | 实验室台账 | ADMIN |
+| space:campus:list / create / update / enable | 校区管理 | ADMIN / OPS_ADMIN |
+| space:building:list / create / update / enable | 楼栋管理 | ADMIN / OPS_ADMIN |
+| space:lab:list | 实验室目录 | ADMIN / TEACHER / STUDENT（只读目录）/ OPS_ADMIN |
+| space:lab:create / update / enable | 实验室台账 | ADMIN / OPS_ADMIN |
 | space:course:list | 课程列表 | TEACHER / ADMIN |
 | space:course:create / update / enable | 课程维护 | ADMIN |
 | space:course:import | 排课导入 | ADMIN |
 | space:schedule:view | 教室使用表（课表+预约周视图） | ADMIN |
+
+> 落地状态：campus/building/lab 三组共 12 项权限（ID 1000–1011）已登记；course/schedule 权限随教学基础部分另行登记。
+> TEACHER/STUDENT 一期仅绑定 space:lab:list 权限、不登记菜单；其只读实验室目录页随分组 B 预约模块以学生端布局落地。
 
 ### 2.3 asset 模块
 
@@ -123,17 +128,27 @@
 
 | menu_code | 名称 | route_path | component_key | 绑定权限 | 归属角色 |
 | --- | --- | --- | --- | --- | --- |
-| system（目录） | 系统管理 | /system | — | — | ADMIN |
-| system_user | 用户管理 | /system/user | SystemUser | system:user:list | ADMIN |
-| system_roster | 名单管理 | /system/roster | SystemRoster | system:roster:list | ADMIN |
-| system_department | 组织管理 | /system/department | SystemDepartment | system:department:list | ADMIN |
-| system_role | 角色权限 | /system/role | SystemRole | system:role:list | ADMIN |
-| system_scope | 数据范围 | /system/scope | SystemScope | system:scope:list | ADMIN |
-| system_restriction | 预约限制 | /system/restriction | SystemRestriction | system:restriction:list | ADMIN |
-| system_log | 操作日志 | /system/log | SystemLog | system:log:list | ADMIN |
-| system_policy | 参数配置 | /system/policy | SystemPolicy | system:policy:list | ADMIN |
-| system_grant_audit | 助理授权审计 | /system/grant | SystemGrantAudit | system:grant:audit | ADMIN |
+| system（目录） | 系统管理 | /system | — | — | ADMIN / OPS_ADMIN |
+| system_user | 用户管理 | /system/user | SystemUser | system:user:list | ADMIN / OPS_ADMIN |
+| system_roster | 名单管理 | /system/roster | SystemRoster | system:roster:list | ADMIN / OPS_ADMIN |
+| system_department | 组织管理 | /system/department | SystemDepartment | system:department:list | ADMIN / OPS_ADMIN |
+| system_role | 角色权限 | /system/role | SystemRole | system:role:list | ADMIN / OPS_ADMIN |
+| system_scope | 数据范围 | /system/scope | SystemScope | system:scope:list | ADMIN / OPS_ADMIN |
+| system_restriction | 预约限制 | /system/restriction | SystemRestriction | system:restriction:list | ADMIN / OPS_ADMIN |
+| system_log | 操作日志 | /system/log | SystemLog | system:log:list | ADMIN / OPS_ADMIN |
+| system_policy | 参数配置 | /system/policy | SystemPolicy | system:policy:list | ADMIN / OPS_ADMIN |
+| system_grant_audit | 助理授权审计 | /system/grant | SystemGrantAudit | system:grant:audit | ADMIN / OPS_ADMIN |
 | grant_manage | 助理管理（老师端） | /grant | GrantManage | system:grant:list | TEACHER |
+
+### 3.1 space 模块（已随 [sql/space.sql](../sql/space.sql) 登记）
+
+| menu_code | 名称 | route_path | component_key | 绑定权限 | 归属角色 |
+| --- | --- | --- | --- | --- | --- |
+| space（目录） | 空间管理 | /space | — | — | ADMIN / OPS_ADMIN |
+| space_campus | 校区楼栋 | /space/campus | SpaceCampus | space:campus:list | ADMIN / OPS_ADMIN |
+| space_lab | 实验室目录 | /space/lab | SpaceLab | space:lab:list | ADMIN / OPS_ADMIN |
+
+> TEACHER/STUDENT 仅绑定 space:lab:list 权限、不登记菜单；两个页面一期挂管理端布局，学生/老师端只读实验室目录页随分组 B 预约模块以学生端布局另行登记。
 
 ---
 

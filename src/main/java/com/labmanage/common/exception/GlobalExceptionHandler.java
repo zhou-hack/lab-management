@@ -2,10 +2,12 @@ package com.labmanage.common.exception;
 
 import cn.dev33.satoken.exception.NotLoginException;
 import cn.dev33.satoken.exception.NotPermissionException;
+import cn.dev33.satoken.exception.NotSafeException;
 import com.labmanage.common.result.Result;
 import com.labmanage.common.result.ResultCode;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -25,12 +27,15 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 public class GlobalExceptionHandler {
 
     /**
-     * 业务异常
+     * 业务异常：HTTP 状态按错误码映射（40000→400、40400→404、40900→409 等）
      */
     @ExceptionHandler(BusinessException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    public Result<Void> handleBusinessException(BusinessException e) {
-        return Result.error(e.getCode(), e.getMessage());
+    public ResponseEntity<Result<Void>> handleBusinessException(BusinessException e) {
+        HttpStatus status = HttpStatus.resolve(e.getCode() / 100);
+        if (status == null || !status.isError()) {
+            status = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+        return ResponseEntity.status(status).body(Result.error(e.getCode(), e.getMessage()));
     }
 
     /**
@@ -111,6 +116,15 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.FORBIDDEN)
     public Result<Void> handleNotPermissionException(NotPermissionException e) {
         return Result.error(ResultCode.FORBIDDEN.getCode(), ResultCode.FORBIDDEN.getMsg());
+    }
+
+    /**
+     * Sa-Token 二级认证未通过：敏感操作需先完成二次密码确认（40101，前端弹确认框而非跳登录）
+     */
+    @ExceptionHandler(NotSafeException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public Result<Void> handleNotSafeException(NotSafeException e) {
+        return Result.error(ResultCode.SAFE_AUTH_REQUIRED.getCode(), ResultCode.SAFE_AUTH_REQUIRED.getMsg());
     }
 
     /**

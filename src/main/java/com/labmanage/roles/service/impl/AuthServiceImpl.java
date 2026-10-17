@@ -31,6 +31,7 @@ import com.labmanage.roles.vo.LoginVO;
 import com.labmanage.roles.vo.MenuVO;
 import com.labmanage.roles.vo.ProfileVO;
 import com.labmanage.roles.vo.SmsSendVO;
+import org.springframework.core.env.Environment;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -72,11 +73,14 @@ public class AuthServiceImpl implements AuthService {
 
     private final BCryptPasswordEncoder passwordEncoder;
 
+    private final Environment environment;
+
     public AuthServiceImpl(SysUserMapper userMapper, SysPersonRosterMapper rosterMapper,
                            SysUserRoleMapper userRoleMapper, SysRoleMapper roleMapper,
                            SysPermissionMapper permissionMapper, SysMenuMapper menuMapper,
                            AssistantGrantMapper grantMapper, SmsCodeService smsCodeService,
-                           PolicyService policyService, BCryptPasswordEncoder passwordEncoder) {
+                           PolicyService policyService, BCryptPasswordEncoder passwordEncoder,
+                           Environment environment) {
         this.userMapper = userMapper;
         this.rosterMapper = rosterMapper;
         this.userRoleMapper = userRoleMapper;
@@ -87,6 +91,7 @@ public class AuthServiceImpl implements AuthService {
         this.smsCodeService = smsCodeService;
         this.policyService = policyService;
         this.passwordEncoder = passwordEncoder;
+        this.environment = environment;
     }
 
     @Override
@@ -109,7 +114,10 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public SmsSendVO sendSmsCode(SmsSendDTO dto) {
-        return new SmsSendVO(smsCodeService.send(dto.phone()));
+        SmsCodeService.SendResult result = smsCodeService.send(dto.phone());
+        // 模拟通道联调：仅 dev 环境回显验证码，其他环境置空
+        boolean devProfile = List.of(environment.getActiveProfiles()).contains("dev");
+        return new SmsSendVO(result.ttlSeconds(), devProfile ? result.code() : null);
     }
 
     @Override
@@ -122,8 +130,7 @@ public class AuthServiceImpl implements AuthService {
             user = registerFromRoster(dto.phone());
         }
         checkUsable(user);
-        boolean needSetPassword = user.getPasswordHash() == null
-                && UserType.TEACHER.name().equals(user.getUserType());
+        boolean needSetPassword = needSetPassword(user);
         return doLogin(user, needSetPassword);
     }
 
@@ -139,7 +146,13 @@ public class AuthServiceImpl implements AuthService {
         StpUtil.getSession().set(SESSION_ROLES, roles);
         StpUtil.getSession().set(SESSION_PERMS, permissions);
         return new ProfileVO(String.valueOf(user.getId()), user.getRealName(), user.getUserType(),
-                roles, permissions, buildMenuTree(menuMapper.selectMenusByUserId(userId)));
+                roles, permissions, buildMenuTree(menuMapper.selectMenusByUserId(userId)),
+                passwordChangeRequired(user), needSetPassword(user));
+    }
+
+    /** 老师首登尚未设置敏感操作密码时须强制设置 */
+    private boolean needSetPassword(SysUser user) {
+        return user.getPasswordHash() == null && UserType.TEACHER.name().equals(user.getUserType());
     }
 
     @Override
@@ -216,6 +229,7 @@ public class AuthServiceImpl implements AuthService {
         }
         SysUser user = new SysUser();
         user.setUserType(roster.getPersonType());
+        user.setRosterId(roster.getId());
         user.setPhone(phone);
         user.setPersonNo(roster.getPersonNo());
         user.setRealName(roster.getRealName());

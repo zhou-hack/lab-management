@@ -1,10 +1,13 @@
 <template>
   <div class="not_found">
-    <div class="not_found__icon">
-      ∅
+    <div class="not_found__code">
+      404
     </div>
-    <p class="t-sub">
+    <p class="not_found__title">
       页面不存在或没有访问权限
+    </p>
+    <p class="not_found__desc t-sub">
+      请检查地址是否正确，或返回首页重新选择功能入口
     </p>
     <el-button
       type="primary"
@@ -33,12 +36,32 @@ function goHome() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 60px 20px;
+  gap: 10px;
+  padding: 72px 20px;
+  text-align: center;
 }
 
-.not_found__icon {
-  font-size: 48px;
-  color: var(--g4);
+.not_found__code {
+  font-family: var(--font-num);
+  font-size: 64px;
+  font-weight: var(--fw-semibold);
+  line-height: 1;
+  letter-spacing: 2px;
+  background: var(--brand-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-variant-numeric: tabular-nums;
+}
+
+.not_found__title {
+  margin: 6px 0 0;
+  font-size: 15px;
+  font-weight: var(--fw-medium);
+  color: var(--g1);
+}
+
+.not_found__desc {
+  margin: 0 0 8px;
 }
 </style>

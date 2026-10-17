@@ -20,7 +20,8 @@
 --     模块脚本补充（实施分组 A 的空间表、分组 B 的单据表）；
 --   * 审计字段 create_user_id/update_user_id 统一不建外键，避免组织/用户表
 --     循环依赖；其值由服务端写入 sys_user.id，系统任务为 NULL。
--- 初始数据：预置部门（设备处）、4 个角色、初始管理员 admin 及其角色绑定；
+-- 初始数据：预置部门（设备处）、4 个角色（第 5 个角色 OPS_ADMIN 见增量脚本
+--   sql/sys_ops_role.sql）、初始管理员 admin 及其角色绑定；
 --   权限与菜单初始数据由业务模块脚本按 `模块:资源:操作` 规范登记。
 -- ============================================================================
 
@@ -314,7 +315,7 @@ CREATE TABLE user_booking_restriction (
 INSERT INTO sys_department (id, parent_id, department_code, department_name, department_type, enabled)
 VALUES (1, NULL, 'ASSET_OFFICE', '设备处', 'ASSET_OFFICE', 1);
 
--- 预置角色（对应权限清单四类角色；ID 固定小值，与雪花 ID 不冲突）
+-- 预置角色（权限清单四类业务角色；第 5 个角色 OPS_ADMIN 见 sql/sys_ops_role.sql；ID 固定小值，与雪花 ID 不冲突）
 INSERT INTO sys_role (id, role_code, role_name, enabled) VALUES
 (1, 'ADMIN',     '管理员',   1),
 (2, 'TEACHER',   '老师',     1),
@@ -336,22 +337,26 @@ INSERT INTO sys_user_role (id, user_id, role_id, enabled) VALUES (1, 1, 1, 1);
 -- ID 段约定：system 模块 1-999，业务模块按 RBAC实施清单 第一节分段登记。
 -- ============================================================================
 
--- system 模块权限（26 项）
+-- system 模块权限（30 项）
 INSERT INTO sys_permission (id, permission_code, permission_name, module_code, enabled) VALUES
 (1,  'system:user:list',        '用户列表',       'system', 1),
 (2,  'system:user:get',         '用户详情',       'system', 1),
 (3,  'system:user:create',      '创建用户',       'system', 1),
 (4,  'system:user:update',      '编辑用户',       'system', 1),
 (5,  'system:user:enable',      '启用停用用户',   'system', 1),
+(27, 'system:user:reset_password', '重置密码',    'system', 1),
 (6,  'system:roster:list',      '名单列表',       'system', 1),
 (7,  'system:roster:create',    '名单录入',       'system', 1),
 (8,  'system:roster:update',    '名单编辑',       'system', 1),
 (9,  'system:roster:enable',    '名单启用停用',   'system', 1),
+(29, 'system:roster:export',    '名单导出',       'system', 1),
+(30, 'system:roster:import',    '名单导入',       'system', 1),
 (10, 'system:department:list',   '组织列表',       'system', 1),
 (11, 'system:department:create', '组织新增',       'system', 1),
 (12, 'system:department:update', '组织编辑',       'system', 1),
 (13, 'system:department:enable', '组织启用停用',   'system', 1),
 (14, 'system:role:list',         '角色权限查看',   'system', 1),
+(28, 'system:role:assign',       '调整角色权限',   'system', 1),
 (15, 'system:scope:list',        '数据范围查看',   'system', 1),
 (16, 'system:scope:grant',       '数据范围授权',   'system', 1),
 (17, 'system:restriction:list',   '预约限制查看',   'system', 1),
@@ -379,13 +384,14 @@ INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component
 (10, 1,    'system_grant_audit',  '授权审计',     '/system/grant',      'SystemGrantAudit', 26,   'PAGE',      9,  1),
 (11, NULL, 'grant_manage',        '助理管理',     '/grant',             'GrantManage',      23,   'PAGE',      50, 1);
 
--- 角色权限绑定：ADMIN 全部系统权限（1-22、26），TEACHER 助理授权三项（23-25）
+-- 角色权限绑定：ADMIN 全部系统权限（1-22、26-27、29-30），TEACHER 助理授权三项（23-25）
 INSERT INTO sys_role_permission (id, role_id, permission_id, enabled) VALUES
 (1,  1, 1,  1), (2,  1, 2,  1), (3,  1, 3,  1), (4,  1, 4,  1), (5,  1, 5,  1),
 (6,  1, 6,  1), (7,  1, 7,  1), (8,  1, 8,  1), (9,  1, 9,  1), (10, 1, 10, 1),
 (11, 1, 11, 1), (12, 1, 12, 1), (13, 1, 13, 1), (14, 1, 14, 1), (15, 1, 15, 1),
 (16, 1, 16, 1), (17, 1, 17, 1), (18, 1, 18, 1), (19, 1, 19, 1), (20, 1, 20, 1),
-(21, 1, 21, 1), (22, 1, 22, 1), (23, 1, 26, 1),
+(21, 1, 21, 1), (22, 1, 22, 1), (23, 1, 26, 1), (51, 1, 27, 1),
+(84, 1, 29, 1), (85, 1, 30, 1),
 (24, 2, 23, 1), (25, 2, 24, 1), (26, 2, 25, 1);
 
 -- 角色菜单绑定：ADMIN 系统管理目录及 9 个页面，TEACHER 助理管理页

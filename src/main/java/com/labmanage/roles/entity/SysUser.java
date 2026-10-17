@@ -14,6 +14,9 @@ public class SysUser extends BaseEntity {
     /** 用户类型：STUDENT/TEACHER/ADMIN */
     private String userType;
 
+    /** 名单 ID（→ sys_person_roster.id；管理员为 NULL） */
+    private Long rosterId;
+
     private String accountName;
 
     private String phone;
@@ -41,6 +44,14 @@ public class SysUser extends BaseEntity {
 
     public void setUserType(String userType) {
         this.userType = userType;
+    }
+
+    public Long getRosterId() {
+        return rosterId;
+    }
+
+    public void setRosterId(Long rosterId) {
+        this.rosterId = rosterId;
     }
 
     public String getAccountName() {
