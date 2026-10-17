@@ -37,9 +37,9 @@
 --    （参照 stock_location.lab_key、stocktake.active_key 模式）。
 -- 8. 种子数据编号段（防冲突，勿占用他人段；新段先向数据库组长登记再使用）：
 --      权限     sys_permission：      item 101-137，equipment 141-154，space 155-159，booking 3001-3004；
---      菜单     sys_menu：            item 151-199，equipment 202/204（200/203 已弃用），space 1001-1005，booking 3000-3003；
---      权限绑定 sys_role_permission： item 201-237，space 251-259，equipment 515-528，booking 3001-3010；
---      菜单绑定 sys_role_menu：       item 301-349，equipment 608/610（606/609 已弃用），space 1101-1105，booking 3001-3005。
+--      菜单     sys_menu：            item 151-199/205，equipment 202/204（200/203 已弃用），space 1001-1005，booking 3000-3003；
+--      权限绑定 sys_role_permission： item 201-237（学生代理 238-239），space 251-259，equipment 515-528，booking 3001-3010；
+--      菜单绑定 sys_role_menu：       item 301-349（学生代理 350），equipment 608/610（606/609 已弃用），space 1101-1105，booking 3001-3005。
 --    权限码规范 `模块:资源:操作`（如 item:material:create）；
 --    module_code 用模块代号；菜单 ACTION 层 menu_code 即权限码。
 -- 9. 禁止：改他人分区的表结构/编号；DROP 既有表；改写已登记的历史种子。
@@ -798,6 +798,9 @@ INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component
 -- 页面：物料工作台（v0.1 整合为单页工作台 ItemWorkspace，内部分页签覆盖原 11 个页面入口；
 --       原页面菜单 153-158 / 180-183 停用保留，ACTION 按钮权限不受影响）
 (152, 151, 'ITEM_WORKSPACE',   '物料工作台', '/admin/item/workspace', 'ItemWorkspace', NULL, 'PAGE', 1, 1),
+-- 页面：物料代领（2026-10-17 产品定稿：面向被授权学生=学生代理；仅 item:request:list(122)，
+--       领取操作由后端按 assistant_grant 有效授权动态放行；未授权学生不可见/被拒）
+(205, 151, 'ITEM_ASSISTANT_PICKUP', '物料代领', '/admin/item/assistant_pickup', 'ItemAssistantPickup', 122, 'PAGE', 2, 1),
 (153, 151, 'ITEM_MATERIAL',    '物料档案', '/admin/item/material',    NULL, NULL, 'PAGE', 2, 0),
 (154, 151, 'ITEM_LOCATION',    '库位管理', '/admin/item/location',    NULL, NULL, 'PAGE', 3, 0),
 (155, 151, 'ITEM_DOCUMENT',    '库存单据', '/admin/item/document',    NULL, NULL, 'PAGE', 4, 0),
@@ -1122,6 +1125,18 @@ INSERT INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
 (338, 1, 188, 1), (339, 1, 189, 1), (340, 1, 190, 1), (341, 1, 191, 1),
 (342, 1, 192, 1), (343, 1, 193, 1), (344, 1, 194, 1), (345, 1, 195, 1),
 (346, 1, 196, 1), (347, 1, 197, 1), (348, 1, 198, 1), (349, 1, 199, 1);
+
+-- ----------------------------------------------------------------------------
+-- 学生代理（被授权学生，role=STUDENT）物料代领绑定（2026-10-17 产品定稿）
+--   权限：item:request:list(122) + item:request:issue(126)；
+--   菜单：物料代领 205。可见性/可操作由后端按 assistant_grant 有效授权动态控制，
+--   未授权学生即使登录也因无有效授权被拒（接口侧再校验，前端仅做入口展示）。
+-- ----------------------------------------------------------------------------
+INSERT INTO sys_role_permission (id, role_id, permission_id, enabled) VALUES
+(238, 3, 122, 1), (239, 3, 126, 1);
+
+INSERT INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
+(350, 3, 205, 1);
 
 -- ############################################################################
 -- 模块六：场地预约模块（v0.1 整合自 dev/space 分支预约实现）
