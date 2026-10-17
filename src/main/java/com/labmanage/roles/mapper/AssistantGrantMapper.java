@@ -30,6 +30,15 @@ public interface AssistantGrantMapper extends BaseMapper<AssistantGrant> {
     int countValidGrant(@Param("studentId") Long studentId, @Param("now") Instant now);
 
     /**
+     * 全部有效授权的学生 ID（去重）：角色权限调整时踢会话用。
+     */
+    @Select("""
+            SELECT DISTINCT student_id FROM assistant_grant
+            WHERE deleted = 0 AND status = 'ACTIVE' AND start_at <= #{now} AND end_at > #{now}
+            """)
+    List<Long> selectValidStudentIds(@Param("now") Instant now);
+
+    /**
      * 授权分页列表（join 老师/学生姓名；展示状态按 UTC 当前时间窗口计算；
      * teacherId 为 NULL 时表示审计全量查询）。
      */

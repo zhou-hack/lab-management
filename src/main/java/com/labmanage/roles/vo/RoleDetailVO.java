@@ -16,6 +16,7 @@ public record RoleDetailVO(
 ) {
 
     public record PermissionItem(
+            String id,
             String permissionCode,
             String permissionName,
             String moduleCode

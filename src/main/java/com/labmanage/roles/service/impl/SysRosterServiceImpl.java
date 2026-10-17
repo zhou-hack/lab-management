@@ -18,16 +18,49 @@ import com.labmanage.roles.mapper.SysPersonRosterMapper;
 import com.labmanage.roles.mapper.SysUserMapper;
 import com.labmanage.roles.service.SysRosterService;
 import com.labmanage.roles.service.SysScopeService;
+import com.labmanage.roles.vo.RosterExportRowVO;
+import com.labmanage.roles.vo.RosterImportResultVO;
 import com.labmanage.roles.vo.RosterPageItemVO;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * 预录名单管理服务实现
  */
 @Service
 public class SysRosterServiceImpl implements SysRosterService {
+
+    /** 导入 CSV 表头（首行必须完全一致） */
+    private static final String IMPORT_HEADER = "学工号,身份类型,姓名,手机号,部门编码";
+
+    private static final String EXPORT_HEADER = "学工号,身份类型,姓名,手机号,部门编码,部门名称,状态,创建时间";
+
+    /** Excel 兼容的 UTF-8 BOM */
+    private static final String CSV_BOM = "\uFEFF";
+
+    private static final int IMPORT_MAX_BYTES = 2 * 1024 * 1024;
+
+    private static final int IMPORT_MAX_ROWS = 1000;
+
+    private static final int IMPORT_MAX_ERRORS = 50;
+
+    private static final DateTimeFormatter SHANGHAI_TIME =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.of("Asia/Shanghai"));
 
     private final SysPersonRosterMapper rosterMapper;
 
@@ -37,12 +70,15 @@ public class SysRosterServiceImpl implements SysRosterService {
 
     private final SysScopeService scopeService;
 
+    private final Validator validator;
+
     public SysRosterServiceImpl(SysPersonRosterMapper rosterMapper, SysDepartmentMapper departmentMapper,
-                                SysUserMapper userMapper, SysScopeService scopeService) {
+                                SysUserMapper userMapper, SysScopeService scopeService, Validator validator) {
         this.rosterMapper = rosterMapper;
         this.departmentMapper = departmentMapper;
         this.userMapper = userMapper;
         this.scopeService = scopeService;
+        this.validator = validator;
     }
 
     @Override
@@ -123,6 +159,139 @@ public class SysRosterServiceImpl implements SysRosterService {
         }
         roster.setEnabled(dto.enabled());
         rosterMapper.updateById(roster);
+    }
+
+    @Override
+    public byte[] exportCsv(RosterPageQueryDTO query) {
+        if (query.getKeyword() != null) {
+            query.setKeyword(query.getKeyword().trim());
+        }
+        List<RosterExportRowVO> rows = rosterMapper.selectRosterExport(query);
+        StringBuilder csv = new StringBuilder(CSV_BOM).append(EXPORT_HEADER).append("\r\n");
+        for (RosterExportRowVO row : rows) {
+            csv.append(csvCell(row.personNo())).append(',')
+                    .append(csvCell(personTypeName(row.personType()))).append(',')
+                    .append(csvCell(row.realName())).append(',')
+                    .append(csvCell(row.phone())).append(',')
+                    .append(csvCell(row.departmentCode())).append(',')
+                    .append(csvCell(row.departmentName())).append(',')
+                    .append(Integer.valueOf(1).equals(row.enabled()) ? "启用" : "停用").append(',')
+                    .append(row.createTime() == null ? "" : SHANGHAI_TIME.format(row.createTime()))
+                    .append("\r\n");
+        }
+        return csv.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    @Override
+    public byte[] importTemplate() {
+        String csv = CSV_BOM + IMPORT_HEADER + "\r\n"
+                + "20240001,STUDENT,张三,13800000001,ASSET_OFFICE\r\n"
+                + "T2024001,TEACHER,李四,13900000002,ASSET_OFFICE\r\n";
+        return csv.getBytes(StandardCharsets.UTF_8);
+    }
+
+    @Override
+    public RosterImportResultVO importCsv(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(40000, "请选择要导入的 CSV 文件");
+        }
+        if (file.getSize() > IMPORT_MAX_BYTES) {
+            throw new BusinessException(40000, "文件大小不能超过 2MB");
+        }
+        String content;
+        try {
+            content = new String(file.getBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException("读取导入文件失败", e);
+        }
+        // 非 UTF-8（如 GBK）解码会产生 U+FFFD 替换字符，乱码入库前整体拒绝
+        if (content.indexOf('\uFFFD') >= 0) {
+            throw new BusinessException(40000, "文件编码无效，请使用 UTF-8 编码的 CSV");
+        }
+        if (content.startsWith(CSV_BOM)) {
+            content = content.substring(1);
+        }
+        String[] lines = content.split("\r\n|\r|\n", -1);
+        if (lines.length == 0 || !IMPORT_HEADER.equals(lines[0].trim())) {
+            throw new BusinessException(40000, "表头不正确，请使用下载的导入模板");
+        }
+        int total = 0;
+        for (int i = 1; i < lines.length; i++) {
+            if (lines[i] != null && !lines[i].trim().isEmpty()) {
+                total++;
+            }
+        }
+        // 部分成功语义下成功行即时入库，行数超限必须在任何写入前整体拒绝
+        if (total > IMPORT_MAX_ROWS) {
+            throw new BusinessException(40000, "单次最多导入 " + IMPORT_MAX_ROWS + " 行数据");
+        }
+        int success = 0;
+        List<RosterImportResultVO.RowError> errors = new ArrayList<>();
+        Map<String, SysDepartment> departmentCache = new HashMap<>();
+        for (int i = 1; i < lines.length; i++) {
+            String line = lines[i];
+            if (line == null || line.trim().isEmpty()) {
+                continue;
+            }
+            int rowIndex = i + 1;
+            String[] columns = line.split(",", -1);
+            String personNo = columns.length > 0 ? columns[0].trim() : "";
+            try {
+                importRow(columns, departmentCache);
+                success++;
+            } catch (BusinessException e) {
+                if (errors.size() < IMPORT_MAX_ERRORS) {
+                    errors.add(new RosterImportResultVO.RowError(rowIndex, personNo, e.getMessage()));
+                }
+            }
+        }
+        return new RosterImportResultVO(total, success, total - success, errors);
+    }
+
+    /** 逐行导入：复用单条录入的部门校验、数据范围与冲突处理，失败抛 BusinessException 由调用方收集 */
+    private void importRow(String[] columns, Map<String, SysDepartment> departmentCache) {
+        if (columns.length != 5) {
+            throw new BusinessException(40000, "列数不正确（需 5 列：学工号,身份类型,姓名,手机号,部门编码）");
+        }
+        String departmentCode = columns[4].trim();
+        SysDepartment department = departmentCache.computeIfAbsent(departmentCode, this::findDepartmentByCode);
+        if (department == null) {
+            throw new BusinessException(40000, "部门编码不存在：" + departmentCode);
+        }
+        RosterCreateDTO dto = new RosterCreateDTO(
+                columns[0].trim(), columns[1].trim(), columns[2].trim(), columns[3].trim(), department.getId());
+        Set<ConstraintViolation<RosterCreateDTO>> violations = validator.validate(dto);
+        if (!violations.isEmpty()) {
+            throw new BusinessException(40000, violations.iterator().next().getMessage());
+        }
+        create(dto);
+    }
+
+    private SysDepartment findDepartmentByCode(String departmentCode) {
+        return departmentMapper.selectOne(Wrappers.<SysDepartment>lambdaQuery()
+                .eq(SysDepartment::getDepartmentCode, departmentCode));
+    }
+
+    private String personTypeName(String personType) {
+        return switch (personType) {
+            case "STUDENT" -> "学生";
+            case "TEACHER" -> "老师";
+            default -> personType;
+        };
+    }
+
+    private String csvCell(String value) {
+        if (value == null) {
+            return "";
+        }
+        // 防 Excel 公式注入：以 = + - @ 开头的值前缀单引号，Excel 按文本展示且不显示该引号
+        if (!value.isEmpty() && "=+-@".indexOf(value.charAt(0)) >= 0) {
+            value = "'" + value;
+        }
+        if (value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
     }
 
     private SysPersonRoster requireRoster(Long id) {
