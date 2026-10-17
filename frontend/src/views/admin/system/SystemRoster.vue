@@ -65,11 +65,27 @@
             </el-button>
           </el-form-item>
         </el-form>
-        <div v-permission="'system:roster:create'">
-          <el-button @click="openBatch">
-            批量导入
+        <div>
+          <el-button
+            v-permission="'system:roster:export'"
+            @click="doExport"
+          >
+            导出 CSV
           </el-button>
           <el-button
+            v-permission="'system:roster:import'"
+            @click="openImport"
+          >
+            导入 CSV
+          </el-button>
+          <el-button
+            v-permission="'system:roster:create'"
+            @click="openBatch"
+          >
+            批量粘贴
+          </el-button>
+          <el-button
+            v-permission="'system:roster:create'"
             type="primary"
             @click="openCreate"
           >
@@ -418,21 +434,124 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 导入 CSV -->
+    <el-dialog
+      v-model="importVisible"
+      title="导入名单 CSV"
+      width="520px"
+      destroy-on-close
+    >
+      <el-upload
+        ref="uploadRef"
+        drag
+        :auto-upload="false"
+        :limit="1"
+        accept=".csv"
+        :on-change="onImportFileChange"
+        :on-remove="onImportFileRemove"
+        :on-exceed="onImportFileExceed"
+      >
+        <el-icon size="28">
+          <UploadFilled />
+        </el-icon>
+        <div class="el-upload__text">
+          拖拽 CSV 文件到此处，或 <em>点击选择</em>
+        </div>
+      </el-upload>
+      <p class="roster_page__tip t-hint">
+        仅支持 UTF-8 编码 CSV（≤2MB、≤1000 行），列：学工号,身份类型,姓名,手机号,部门编码；
+        重复或非法的行自动跳过并给出失败明细，其余正常入库。
+        <el-link
+          type="primary"
+          @click="doDownloadTemplate"
+        >
+          下载导入模板
+        </el-link>
+      </p>
+      <template #footer>
+        <el-button @click="importVisible = false">
+          取消
+        </el-button>
+        <el-button
+          type="primary"
+          :disabled="!importFile"
+          :loading="submitting"
+          @click="submitImport"
+        >
+          导入
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 导入结果 -->
+    <el-dialog
+      v-model="importResultVisible"
+      title="导入结果"
+      width="560px"
+    >
+      <p class="roster_page__result">
+        共 {{ importResult.totalCount }} 行：成功
+        <span class="roster_page__ok">{{ importResult.successCount }}</span> 行，失败
+        <span class="roster_page__fail">{{ importResult.failCount }}</span> 行
+      </p>
+      <el-table
+        v-if="importResult.errors.length"
+        :data="importResult.errors"
+        max-height="320"
+        size="small"
+      >
+        <el-table-column
+          prop="rowIndex"
+          label="行号"
+          width="70"
+        />
+        <el-table-column
+          prop="personNo"
+          label="学工号"
+          width="130"
+        />
+        <el-table-column
+          prop="reason"
+          label="失败原因"
+          min-width="220"
+        />
+      </el-table>
+      <p
+        v-if="importResult.failCount > importResult.errors.length"
+        class="roster_page__tip t-hint"
+      >
+        失败明细仅显示前 {{ importResult.errors.length }} 条。
+      </p>
+      <template #footer>
+        <el-button
+          type="primary"
+          @click="importResultVisible = false"
+        >
+          知道了
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { UploadFilled } from '@element-plus/icons-vue'
 import {
   createRoster,
   createRosterBatch,
+  downloadRosterImportTemplate,
+  exportRosters,
+  importRosters,
   pageRosters,
   updateRoster,
   updateRosterEnabled
 } from '@/api/system/roster'
 import { getDepartmentOptions } from '@/api/system/user'
 import { formatInstant } from '@/utils/datetime'
+import { withSafeAuth } from '@/utils/safe_auth'
 
 const query = reactive({ pageNum: 1, pageSize: 20, keyword: '', personType: '', matched: null })
 const rows = ref([])
@@ -629,6 +748,80 @@ async function toggleEnabled(row) {
   load()
 }
 
+// ---------- 导出 CSV / 导入 CSV ----------
+function saveBlob(blob, filenamePrefix) {
+  const d = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  const ts = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${filenamePrefix}_${ts}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+async function doExport() {
+  const params = {}
+  if (query.keyword) params.keyword = query.keyword
+  if (query.personType) params.personType = query.personType
+  if (query.matched === 0 || query.matched === 1) params.matched = query.matched
+  const blob = await exportRosters(params)
+  saveBlob(blob, 'rosters')
+  ElMessage.success('已导出')
+}
+
+async function doDownloadTemplate() {
+  const blob = await downloadRosterImportTemplate()
+  saveBlob(blob, 'roster_import_template')
+}
+
+const importVisible = ref(false)
+const uploadRef = ref()
+const importFile = ref(null)
+const importResultVisible = ref(false)
+const importResult = ref({ totalCount: 0, successCount: 0, failCount: 0, errors: [] })
+
+function openImport() {
+  importFile.value = null
+  importVisible.value = true
+}
+
+function onImportFileChange(file) {
+  if (file.size > 2 * 1024 * 1024) {
+    ElMessage.error('文件大小不能超过 2MB')
+    uploadRef.value.clearFiles()
+    importFile.value = null
+    return
+  }
+  importFile.value = file.raw
+}
+
+function onImportFileRemove() {
+  importFile.value = null
+}
+
+function onImportFileExceed(files) {
+  uploadRef.value.clearFiles()
+  // handleStart 内部会触发 on-change，大小校验由 onImportFileChange 统一处理
+  uploadRef.value.handleStart(files[0])
+}
+
+async function submitImport() {
+  if (!importFile.value) return
+  submitting.value = true
+  try {
+    const { ok, data } = await withSafeAuth(() => importRosters(importFile.value))
+    if (!ok) return
+    importVisible.value = false
+    importResult.value = data
+    importResultVisible.value = true
+    if (data.successCount > 0) load()
+  } finally {
+    submitting.value = false
+  }
+}
+
 onMounted(() => {
   load()
   getDepartmentOptions().then((data) => {
@@ -665,5 +858,20 @@ onMounted(() => {
   margin: 4px 0 0;
   font-size: 12px;
   line-height: 1.7;
+}
+
+.roster_page__result {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.roster_page__ok {
+  color: var(--el-color-success);
+  font-weight: 600;
+}
+
+.roster_page__fail {
+  color: var(--el-color-danger);
+  font-weight: 600;
 }
 </style>
