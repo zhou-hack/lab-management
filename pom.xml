@@ -80,6 +80,19 @@
             <version>${mysql.version}</version>
         </dependency>
 
+        <!-- Apache POI：场地导入 Excel（.xls/.xlsx）解析；CSV 由内置解析器处理。
+             5.5.1 为 2026-10-13 核实 Maven Central 最新稳定正式版 -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+
         <!-- Knife4j / SpringDoc -->
         <dependency>
             <groupId>com.github.xiaoymin</groupId>

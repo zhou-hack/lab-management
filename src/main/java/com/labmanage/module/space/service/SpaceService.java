@@ -10,7 +10,9 @@ import com.labmanage.module.space.vo.SpaceBatchStatusVO;
 import com.labmanage.module.space.vo.SpaceDetailVO;
 import com.labmanage.module.space.vo.SpaceListVO;
 import com.labmanage.module.space.vo.SpaceOptionVO;
+import com.labmanage.module.space.vo.SpaceImportVO;
 import com.labmanage.module.space.vo.SpaceStatsVO;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -44,6 +46,17 @@ public interface SpaceService {
      * 场地 CSV 导出（与分页同条件过滤，UTF-8 BOM，时间按上海时区展示）。
      */
     byte[] exportCsv(SpacePageQuery query);
+
+    /**
+     * 场地导入模板（表头与导出完全一致的空 CSV，UTF-8 BOM）。
+     */
+    byte[] importTemplateCsv();
+
+    /**
+     * 场地批量导入（CSV/Excel；部分成功：合法行分批落库，非法行逐条返回原因）。
+     * 仅写入 lab 表，不触碰预约等下游业务。
+     */
+    SpaceImportVO importSpaces(MultipartFile file);
 
     /**
      * 场地下拉选项（供预约等下游模块联调）。

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { loginByPassword, loginByPhone, logout as apiLogout, getProfile } from '@/api/user'
 import { getToken, setToken, removeToken } from '@/utils/token'
-import { registerDynamicRoutes, removeDynamicRoutes } from '@/router/dynamic'
+import { registerDynamicRoutes, removeDynamicRoutes, getRegisteredPaths } from '@/router/dynamic'
 
 export const useUserStore = defineStore('user', {
   state: () => ({
@@ -45,7 +45,7 @@ export const useUserStore = defineStore('user', {
       this.passwordChangeRequired = !!data.passwordChangeRequired
     },
     async buildRoutes() {
-      registerDynamicRoutes(this.menus)
+      registerDynamicRoutes(this.menus, this.userInfo?.userType)
       this.routesLoaded = true
     },
     /** 设置密码成功后清除强制改密标志 */

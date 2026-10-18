@@ -100,12 +100,13 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 上传文件超过大小限制（Excel 导入超限等）
+     * 上传文件超过大小限制（Excel/CSV 导入超限等）
      */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException e) {
-        return Result.error(ResultCode.BAD_REQUEST.getCode(), "上传文件过大，请分批导入");
+        log.warn("[上传超限] {}", e.getMessage());
+        return Result.error(ResultCode.BAD_REQUEST.getCode(), "上传文件过大，请压缩或分批导入");
     }
 
     /**

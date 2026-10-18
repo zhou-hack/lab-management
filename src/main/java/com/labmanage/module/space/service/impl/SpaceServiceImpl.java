@@ -19,15 +19,22 @@ import com.labmanage.module.space.enums.SpaceStatus;
 import com.labmanage.module.space.enums.SpaceType;
 import com.labmanage.module.space.mapper.BizSpaceMapper;
 import com.labmanage.module.space.service.SpaceService;
+import com.labmanage.module.space.service.support.SpaceImportFileParser;
+import com.labmanage.module.space.service.support.SpaceImportFileParser.RawRow;
 import com.labmanage.module.space.vo.SpaceBatchStatusVO;
+import com.labmanage.module.space.vo.SpaceImportVO;
 import com.labmanage.module.space.vo.SpaceDetailVO;
 import com.labmanage.module.space.vo.SpaceListVO;
 import com.labmanage.module.space.vo.SpaceOptionVO;
 import com.labmanage.module.space.vo.SpaceStatsVO;
+import org.apache.ibatis.session.ExecutorType;
+import org.apache.ibatis.session.SqlSession;
+import org.apache.ibatis.session.SqlSessionFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -35,8 +42,14 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 场地业务实现（lab 单表）。
@@ -69,16 +82,31 @@ public class SpaceServiceImpl implements SpaceService {
     private static final DateTimeFormatter EXPORT_TIME = DateTimeFormatter
             .ofPattern("yyyy-MM-dd HH:mm").withZone(SHANGHAI);
 
+    /** 导入：开放时段单元格中提取 HH:mm（兼容导出的 ~ 与 -、—、～、至 等分隔写法） */
+    private static final Pattern IMPORT_TIME_TOKEN = Pattern.compile("(\\d{1,2}):(\\d{2})");
+    /** 导入：容纳人数仅接受 1-5 位正整数（范围在代码内二次校验） */
+    private static final Pattern IMPORT_DIGITS = Pattern.compile("\\d{1,5}");
+    /** 导入：批量插入每批行数（大文件分批提交，控制单批内存与锁持有时间） */
+    private static final int IMPORT_INSERT_BATCH = 500;
+    /** 导入：容纳人数上限（与前端录入控件一致） */
+    private static final int IMPORT_MAX_CAPACITY = 9999;
+
     private final BizSpaceMapper spaceMapper;
     private final LabBookingMapper bookingMapper;
     private final LabSlotMapper slotMapper;
+    private final SpaceImportFileParser importFileParser;
+    private final SqlSessionFactory sqlSessionFactory;
 
     public SpaceServiceImpl(BizSpaceMapper spaceMapper,
                             LabBookingMapper bookingMapper,
-                            LabSlotMapper slotMapper) {
+                            LabSlotMapper slotMapper,
+                            SpaceImportFileParser importFileParser,
+                            SqlSessionFactory sqlSessionFactory) {
         this.spaceMapper = spaceMapper;
         this.bookingMapper = bookingMapper;
         this.slotMapper = slotMapper;
+        this.importFileParser = importFileParser;
+        this.sqlSessionFactory = sqlSessionFactory;
     }
 
     // ------------------------------------------------------------------ 查询
@@ -228,6 +256,218 @@ public class SpaceServiceImpl implements SpaceService {
                 SecurityUtils.currentUserId(), buildFilterSummary(query), spaces.size(),
                 (System.nanoTime() - begin) / 1_000_000);
         return sb.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    @Override
+    public byte[] importTemplateCsv() {
+        // 表头与导出完全一致，保证「导出 → 修改 → 导入」闭环
+        String header = '\ufeff' + String.join(",", SpaceImportFileParser.HEADERS) + "\r\n";
+        return header.getBytes(StandardCharsets.UTF_8);
+    }
+
+    @Override
+    public SpaceImportVO importSpaces(MultipartFile file) {
+        long begin = System.nanoTime();
+        Long operatorId = SecurityUtils.currentUserId();
+        String filename = file == null ? "(空)" : file.getOriginalFilename();
+        log.info("[场地导入] 开始：操作人={}, 文件名={}", operatorId, filename);
+
+        // 文件级校验（空文件/格式/表头/行数）在解析器内抛 40000
+        List<RawRow> rows = importFileParser.parse(file);
+
+        // 名称查重快照（含逻辑删除记录，删除后名称不可复用），一次性查库
+        Set<String> dbNames = new HashSet<>(spaceMapper.selectAllNamesIncludingDeleted());
+        Set<String> seenInFile = new HashSet<>();
+        Map<String, Integer> firstRowByName = new HashMap<>();
+
+        List<BizSpace> validSpaces = new ArrayList<>();
+        List<SpaceImportVO.Failure> failures = new ArrayList<>();
+
+        for (RawRow row : rows) {
+            Map<String, String> c = row.cells();
+            List<String> errors = new ArrayList<>();
+
+            String name = trimToNull(c.get("场地名称"));
+            if (name == null) {
+                errors.add("场地名称不能为空");
+            } else if (name.length() > 128) {
+                errors.add("场地名称长度不能超过 128");
+            }
+
+            SpaceType type = parseImportType(c.get("类型"), errors);
+
+            String location = trimToNull(c.get("位置"));
+            if (location != null && location.length() > 128) {
+                errors.add("位置长度不能超过 128");
+            }
+
+            Integer capacity = parseImportCapacity(c.get("容纳人数"), errors);
+
+            String facilities = trimToNull(c.get("配套设备"));
+            if (facilities != null && facilities.length() > 2000) {
+                errors.add("配套设备清单长度不能超过 2000");
+            }
+
+            LocalTime[] window = parseImportWindow(c.get("开放时段"), errors);
+            SpaceStatus status = parseImportStatus(c.get("状态"), errors);
+
+            // 重复检测仅对本身合法的名称执行，避免叠加噪音错误
+            if (name != null && name.length() <= 128) {
+                if (dbNames.contains(name)) {
+                    errors.add("场地名称已存在（含已删除记录，名称不可复用）");
+                } else if (!seenInFile.add(name)) {
+                    errors.add("与文件内第 " + firstRowByName.get(name) + " 行的场地名称重复");
+                } else {
+                    firstRowByName.put(name, row.rowNum());
+                }
+            }
+
+            if (!errors.isEmpty()) {
+                failures.add(new SpaceImportVO.Failure(row.rowNum(), name == null ? "" : name,
+                        String.join("；", errors), new LinkedHashMap<>(c)));
+                continue;
+            }
+
+            BizSpace space = new BizSpace();
+            space.setLabName(name);
+            space.setLabType(type);
+            space.setLocationDetail(location);
+            space.setCapacity(capacity);
+            space.setFacilities(facilities);
+            space.setOpenStart(window[0]);
+            space.setOpenEnd(window[1]);
+            space.setStatus(status);
+            validSpaces.add(space);
+        }
+
+        // 合法行分批落库（每批独立提交，部分成功；仅写 lab 表，不触碰预约等下游业务）
+        batchInsertSpaces(validSpaces);
+
+        int total = rows.size();
+        int successCount = validSpaces.size();
+        int failedCount = failures.size();
+        log.info("[场地导入] 完成：操作人={}, 文件={}, 数据行={}, 成功={}, 失败={}, 耗时={}ms",
+                operatorId, filename, total, successCount, failedCount,
+                (System.nanoTime() - begin) / 1_000_000);
+        if (failedCount > 0) {
+            log.warn("[场地导入] 存在失败行：操作人={}, 失败={} 条，首条=第{}行「{}」原因={}",
+                    operatorId, failedCount,
+                    failures.get(0).rowNum(), failures.get(0).labName(), failures.get(0).reason());
+            // 逐条打印前 20 条失败明细，便于审计与排查（超出部分仅计数，避免超大文件刷日志）
+            failures.stream().limit(20).forEach(f -> log.warn(
+                    "[场地导入] 失败明细：操作人={}, 第{}行「{}」, 原因={}",
+                    operatorId, f.rowNum(), f.labName(), f.reason()));
+            if (failedCount > 20) {
+                log.warn("[场地导入] 其余 {} 条失败明细见接口返回/失败明细文件", failedCount - 20);
+            }
+        }
+        return new SpaceImportVO(total, successCount, failedCount, failures);
+    }
+
+    /** BATCH 执行器分批插入，按 {@link #IMPORT_INSERT_BATCH} 刷新并清缓存 */
+    private void batchInsertSpaces(List<BizSpace> spaces) {
+        if (spaces.isEmpty()) {
+            return;
+        }
+        try (SqlSession batchSession = sqlSessionFactory.openSession(ExecutorType.BATCH, false)) {
+            BizSpaceMapper batchMapper = batchSession.getMapper(BizSpaceMapper.class);
+            int count = 0;
+            for (BizSpace space : spaces) {
+                batchMapper.insert(space);
+                count++;
+                if (count % IMPORT_INSERT_BATCH == 0) {
+                    batchSession.flushStatements();
+                    batchSession.clearCache();
+                }
+            }
+            batchSession.commit();
+        }
+    }
+
+    /** 导入类型解析：接受枚举 code 与中文名（教室/实训室），非法值收集错误 */
+    private SpaceType parseImportType(String raw, List<String> errors) {
+        String value = raw == null ? "" : raw.trim();
+        if (value.isEmpty()) {
+            errors.add("场地类型不能为空");
+            return null;
+        }
+        return switch (value) {
+            case "CLASSROOM", "教室" -> SpaceType.CLASSROOM;
+            case "TRAINING_ROOM", "实训室" -> SpaceType.TRAINING_ROOM;
+            default -> {
+                errors.add("场地类型只能是「教室」或「实训室」");
+                yield null;
+            }
+        };
+    }
+
+    /** 导入人数解析：必填、纯整数、1..9999 */
+    private Integer parseImportCapacity(String raw, List<String> errors) {
+        String value = raw == null ? "" : raw.trim();
+        if (value.isEmpty()) {
+            errors.add("容纳人数不能为空");
+            return null;
+        }
+        if (!IMPORT_DIGITS.matcher(value).matches()) {
+            errors.add("容纳人数必须为正整数");
+            return null;
+        }
+        int capacity = Integer.parseInt(value);
+        if (capacity < 1 || capacity > IMPORT_MAX_CAPACITY) {
+            errors.add("容纳人数须在 1 到 " + IMPORT_MAX_CAPACITY + " 之间");
+            return null;
+        }
+        return capacity;
+    }
+
+    /**
+     * 导入开放时段解析：空值取默认 08:00~21:00；否则须恰好含两个 HH:mm，
+     * 且开始早于结束。分隔符任意（导出格式为 08:00~21:00）。
+     */
+    private LocalTime[] parseImportWindow(String raw, List<String> errors) {
+        String value = raw == null ? "" : raw.trim();
+        if (value.isEmpty()) {
+            return new LocalTime[]{DEFAULT_OPEN_START, DEFAULT_OPEN_END};
+        }
+        Matcher matcher = IMPORT_TIME_TOKEN.matcher(value);
+        List<LocalTime> times = new ArrayList<>(2);
+        while (matcher.find()) {
+            int hour = Integer.parseInt(matcher.group(1));
+            int minute = Integer.parseInt(matcher.group(2));
+            if (hour > 23) {
+                errors.add("开放时段小时不能超过 23");
+                return null;
+            }
+            times.add(LocalTime.of(hour, minute));
+        }
+        if (times.size() != 2) {
+            errors.add("开放时段格式须为「HH:mm~HH:mm」（如 08:00~21:00）");
+            return null;
+        }
+        LocalTime start = times.get(0);
+        LocalTime end = times.get(1);
+        if (!start.isBefore(end)) {
+            errors.add("开放开始时间必须早于开放结束时间");
+            return null;
+        }
+        return new LocalTime[]{start, end};
+    }
+
+    /** 导入状态解析：空值默认可用；接受 code 与中文名，「停用」作为「关闭」的前端用语别名 */
+    private SpaceStatus parseImportStatus(String raw, List<String> errors) {
+        String value = raw == null ? "" : raw.trim();
+        if (value.isEmpty()) {
+            return SpaceStatus.AVAILABLE;
+        }
+        return switch (value) {
+            case "AVAILABLE", "可用" -> SpaceStatus.AVAILABLE;
+            case "MAINTAINING", "维护中" -> SpaceStatus.MAINTAINING;
+            case "CLOSED", "关闭", "停用" -> SpaceStatus.CLOSED;
+            default -> {
+                errors.add("状态只能是「可用/维护中/停用」之一");
+                yield null;
+            }
+        };
     }
 
     // ------------------------------------------------------------------ 写入

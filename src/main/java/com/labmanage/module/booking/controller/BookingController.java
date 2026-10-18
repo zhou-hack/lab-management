@@ -4,6 +4,7 @@ import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.booking.dto.BookingCancelDTO;
+import com.labmanage.module.booking.dto.BookingCheckoutDTO;
 import com.labmanage.module.booking.dto.BookingCreateDTO;
 import com.labmanage.module.booking.dto.BookingPageQuery;
 import com.labmanage.module.booking.dto.BookingRejectDTO;
@@ -60,6 +61,16 @@ public class BookingController {
         return Result.success(bookingService.pageAll(query));
     }
 
+    /**
+     * 预约情况只读分页（booking:lab:view）：学生只读视角，
+     * 全量查看预约情况与批准/驳回结果，不提供任何写操作。
+     */
+    @GetMapping("/board")
+    @SaCheckPermission("booking:lab:view")
+    public Result<PageResult<BookingVO>> pageBoard(@Valid @ModelAttribute BookingPageQuery query) {
+        return Result.success(bookingService.pageBoard(query));
+    }
+
     @GetMapping("/stats")
     @SaCheckPermission("booking:lab:approve")
     public Result<BookingStatsVO> stats() {
@@ -75,7 +86,9 @@ public class BookingController {
     }
 
     @GetMapping("/{id}")
-    @SaCheckPermission("booking:lab:list")
+    @SaCheckPermission(
+            value = {"booking:lab:list", "booking:lab:view", "booking:lab:approve"},
+            mode = cn.dev33.satoken.annotation.SaMode.OR)
     public Result<BookingDetailVO> detail(@PathVariable Long id) {
         return Result.success(bookingService.detail(id));
     }
@@ -99,6 +112,29 @@ public class BookingController {
     @SaCheckPermission("booking:lab:approve")
     public Result<Void> reject(@PathVariable Long id, @Valid @RequestBody BookingRejectDTO dto) {
         bookingService.reject(id, dto);
+        return Result.success();
+    }
+
+    /**
+     * 开门签到：已批准且到达开始时间，管理员核对场地后开门（booking:lab:approve）。
+     * 写 document_event(CHECKIN)，IN_USE 为派生态不落库。
+     */
+    @PostMapping("/{id}/checkin")
+    @SaCheckPermission("booking:lab:approve")
+    public Result<Void> checkin(@PathVariable Long id) {
+        bookingService.checkin(id);
+        return Result.success();
+    }
+
+    /**
+     * 结束清点：已开门签到后，管理员清点完毕结束使用（booking:lab:approve）。
+     * 写 document_event(CHECKOUT) 并释放占用槽，FINISHED 为派生态。
+     */
+    @PostMapping("/{id}/checkout")
+    @SaCheckPermission("booking:lab:approve")
+    public Result<Void> checkout(@PathVariable Long id,
+                                 @Valid @RequestBody(required = false) BookingCheckoutDTO dto) {
+        bookingService.checkout(id, dto);
         return Result.success();
     }
 }

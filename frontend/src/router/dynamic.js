@@ -39,6 +39,16 @@ const viewModules = {
 
 const addedRouteNames = []
 
+/**
+ * 最近一次注册成功的页面路径（已命中本地组件白名单）。
+ * 供登录落地页回退使用：后端菜单缺首页（如 /admin/home）时避免跳入 404。
+ */
+let registeredPaths = { admin: [], front: [] }
+
+export function getRegisteredPaths() {
+  return registeredPaths
+}
+
 function walkMenus(menus, visit) {
   for (const menu of menus || []) {
     visit(menu)
@@ -77,4 +87,5 @@ export function removeDynamicRoutes() {
       router.removeRoute(name)
     }
   }
+  registeredPaths = { admin: [], front: [] }
 }

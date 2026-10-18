@@ -36,8 +36,8 @@
 -- 7. 含可空列的组合唯一：用生成列归一
 --    （参照 stock_location.lab_key、stocktake.active_key 模式）。
 -- 8. 种子数据编号段（防冲突，勿占用他人段；新段先向数据库组长登记再使用）：
---      权限     sys_permission：      item 101-137，equipment 141-154，space 155-159，booking 3001-3005；
---      菜单     sys_menu：            item 151-199/205，equipment 202/204（200/203 已弃用），space 1001-1005，booking 3000-3004；
+--      权限     sys_permission：      item 101-137，equipment 141-169，space 155-159，booking 3001-3005；
+--      菜单     sys_menu：            item 151-199/205，equipment 202/204/206-211（200/203 已弃用），space 1001-1005，booking 3000-3004；
 --      权限绑定 sys_role_permission： item 201-237（学生代理 238-239），space 251-259，equipment 515-528，booking 3001-3010；
 --      菜单绑定 sys_role_menu：       item 301-349（学生代理 350），equipment 608/610（606/609 已弃用），space 1101-1105，booking 3001-3005。
 --    权限码规范 `模块:资源:操作`（如 item:material:create）；

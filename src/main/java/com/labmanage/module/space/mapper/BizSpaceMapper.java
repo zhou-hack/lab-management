@@ -24,6 +24,13 @@ public interface BizSpaceMapper extends BaseMapper<BizSpace> {
     Long selectIdByNameIncludingDeleted(@Param("labName") String labName);
 
     /**
+     * 全量场地名称（含逻辑删除记录），导入前去重一次性快照，避免逐行查库。
+     * 名称删除后不复用，导入行命中任一记录即判重。
+     */
+    @Select("SELECT lab_name FROM lab")
+    List<String> selectAllNamesIncludingDeleted();
+
+    /**
      * 统计引用该场地的有效 LAB 级数据范围授权条数（删除前引用检查）。
      * 单表模式下 sys_user_data_scope.lab_id 的目标为 lab.id。
      */

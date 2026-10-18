@@ -10,6 +10,7 @@ import com.labmanage.common.result.ResultCode;
 import com.labmanage.common.utils.PageUtils;
 import com.labmanage.common.utils.SecurityUtils;
 import com.labmanage.module.booking.dto.BookingCancelDTO;
+import com.labmanage.module.booking.dto.BookingCheckoutDTO;
 import com.labmanage.module.booking.dto.BookingCreateDTO;
 import com.labmanage.module.booking.dto.BookingPageQuery;
 import com.labmanage.module.booking.dto.BookingRejectDTO;
@@ -17,8 +18,13 @@ import com.labmanage.module.booking.entity.LabBooking;
 import com.labmanage.module.booking.entity.LabSlot;
 import com.labmanage.module.booking.enums.BookingStatus;
 import com.labmanage.module.booking.enums.CancelType;
+import com.labmanage.module.booking.flow.entity.BizDocument;
+import com.labmanage.module.booking.flow.enums.DocumentEventType;
+import com.labmanage.module.booking.flow.service.BookingFlowService;
+import com.labmanage.module.booking.flow.vo.BookingTimelineEventVO;
 import com.labmanage.module.booking.mapper.LabBookingMapper;
 import com.labmanage.module.booking.mapper.LabSlotMapper;
+import com.labmanage.module.booking.service.BookingExpiryService;
 import com.labmanage.module.booking.service.BookingService;
 import com.labmanage.module.booking.vo.AvailabilityVO;
 import com.labmanage.module.booking.vo.BookingDetailVO;
@@ -42,14 +48,16 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * 场地预约业务实现。
  * <p>
+ * 权级流程：教师发起（PENDING/待管理员核对）→ 管理员核对批准（APPROVED，
+ * 场地行锁内写占用）/整单驳回（REJECTED，原因详情可见）→ 开门签到
+ * （CHECKIN 事件，IN_USE 派生）→ 结束清点（CHECKOUT 事件，FINISHED 派生）；
+ * 本人可撤销；start_time 已过未核对由定时任务自动取消。
  * 冲突协议（数据库设计 8.1）：半开区间重叠，仅 released_at IS NULL 的 lab_slot
- * 参与；待审批不占用，提交与审批双重校验，最后批准者遇冲突拒绝不抢占；
- * 审批事务先 SELECT ... FOR UPDATE 锁定场地行，串行化同场地审批防并发双写。
+ * 参与；提交与审批双重校验，审批事务先 SELECT ... FOR UPDATE 锁场地行防并发双写。
  */
 @Service
 public class BookingServiceImpl implements BookingService {
@@ -65,15 +73,21 @@ public class BookingServiceImpl implements BookingService {
     private final LabSlotMapper slotMapper;
     private final BizSpaceMapper spaceMapper;
     private final SysUserMapper userMapper;
+    private final BookingFlowService flowService;
+    private final BookingExpiryService expiryService;
 
     public BookingServiceImpl(LabBookingMapper bookingMapper,
                               LabSlotMapper slotMapper,
                               BizSpaceMapper spaceMapper,
-                              SysUserMapper userMapper) {
+                              SysUserMapper userMapper,
+                              BookingFlowService flowService,
+                              BookingExpiryService expiryService) {
         this.bookingMapper = bookingMapper;
         this.slotMapper = slotMapper;
         this.spaceMapper = spaceMapper;
         this.userMapper = userMapper;
+        this.flowService = flowService;
+        this.expiryService = expiryService;
     }
 
     // ------------------------------------------------------------------ 写入
@@ -123,56 +137,38 @@ public class BookingServiceImpl implements BookingService {
         booking.setStatus(BookingStatus.PENDING);
         bookingMapper.insert(booking);
 
-        log.info("[预约提交] 完成：操作人={}, 预约ID={}, 场地={}, 状态=PENDING, 耗时={}ms",
+        // 权级流程建档：统一单据 + ADMIN_REVIEW 待核对任务 + SUBMIT 事件
+        SysUser applicant = userMapper.selectById(operatorId);
+        Long deptId = applicant == null ? null : applicant.getDepartmentId();
+        flowService.onSubmit(booking, deptId);
+
+        log.info("[预约提交] 完成：操作人={}, 预约ID={}, 场地={}, 状态=PENDING(待管理员核对), 耗时={}ms",
                 operatorId, booking.getId(), space.getLabName(), (System.nanoTime() - begin) / 1_000_000);
-        return detailEntity(booking.getId(), operatorId);
+        return detailEntity(booking.getId());
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void cancel(Long id, BookingCancelDTO dto) {
         Long operatorId = SecurityUtils.currentUserId();
-        log.info("[预约取消] 开始：操作人={}, 预约ID={}", operatorId, id);
+        log.info("[预约撤销] 开始：操作人={}, 预约ID={}", operatorId, id);
 
         LabBooking booking = requireBooking(id);
         if (!booking.getApplicantId().equals(operatorId)) {
-            log.warn("[预约取消] 非申请人本人，拒绝：操作人={}, 预约ID={}, 申请人={}",
+            log.warn("[预约撤销] 非申请人本人，拒绝：操作人={}, 预约ID={}, 申请人={}",
                     operatorId, id, booking.getApplicantId());
             throw new BusinessException(ResultCode.FORBIDDEN.getCode(), "仅申请人本人可取消预约");
         }
         if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.APPROVED) {
-            log.warn("[预约取消] 当前状态不可取消：操作人={}, 预约ID={}, 状态={}",
+            log.warn("[预约撤销] 当前状态不可取消：操作人={}, 预约ID={}, 状态={}",
                     operatorId, id, booking.getStatus());
             throw new BusinessException(ResultCode.CONFLICT.getCode(),
                     "仅待审批或已批准的预约可取消，当前状态：" + booking.getStatus().getDisplayName());
         }
 
-        // 已批准的预约占用 lab_slot，取消须同步释放
-        if (booking.getStatus() == BookingStatus.APPROVED) {
-            Instant releaseAt = Instant.now();
-            int released = slotMapper.update(null, new LambdaUpdateWrapper<LabSlot>()
-                    .eq(LabSlot::getBookingId, id)
-                    .isNull(LabSlot::getReleasedAt)
-                    .set(LabSlot::getReleasedAt, releaseAt)
-                    .set(LabSlot::getReleaseReason, "MANUAL取消")
-                    .set(LabSlot::getUpdateUserId, operatorId));
-            log.info("[预约取消] 释放场地占用：预约ID={}, 释放行数={}, 释放时间={}", id, released, releaseAt);
-        }
-
-        Instant cancelledAt = Instant.now();
-        int rows = bookingMapper.update(null, new LambdaUpdateWrapper<LabBooking>()
-                .eq(LabBooking::getId, id)
-                .set(LabBooking::getStatus, BookingStatus.CANCELLED)
-                .set(LabBooking::getCancelReason, dto == null ? null : dto.reason())
-                .set(LabBooking::getCancelType, CancelType.MANUAL)
-                .set(LabBooking::getCancelledAt, cancelledAt)
-                .set(LabBooking::getUpdateUserId, operatorId));
-        if (rows == 0) {
-            log.warn("[预约取消] 更新未命中任何行（预约可能已被删除）：操作人={}, 预约ID={}", operatorId, id);
-            throw new BusinessException(ResultCode.NOT_FOUND);
-        }
-        log.info("[预约取消] 完成：操作人={}, 预约ID={}, 原状态={}, 取消时间={}",
-                operatorId, id, booking.getStatus(), cancelledAt);
+        String reason = dto == null ? null : dto.reason();
+        doCancel(booking, operatorId, CancelType.MANUAL, reason);
+        log.info("[预约撤销] 完成：操作人={}, 预约ID={}", operatorId, id);
     }
 
     @Override
@@ -180,32 +176,33 @@ public class BookingServiceImpl implements BookingService {
     public void approve(Long id) {
         Long operatorId = SecurityUtils.currentUserId();
         long begin = System.nanoTime();
-        log.info("[预约审批] 开始：操作人={}, 预约ID={}", operatorId, id);
+        log.info("[预约核对批准] 开始：操作人={}, 预约ID={}", operatorId, id);
 
         LabBooking booking = requireBooking(id);
         if (booking.getStatus() != BookingStatus.PENDING) {
-            log.warn("[预约审批] 状态非待审批，拒绝：操作人={}, 预约ID={}, 状态={}",
+            log.warn("[预约核对批准] 状态非待核对，拒绝：操作人={}, 预约ID={}, 状态={}",
                     operatorId, id, booking.getStatus());
             throw new BusinessException(ResultCode.CONFLICT.getCode(),
-                    "仅待审批的预约可审批，当前状态：" + booking.getStatus().getDisplayName());
+                    "仅待核对的预约可批准，当前状态：" + booking.getStatus().getDisplayName());
         }
+        BizDocument doc = requireFlowDocument(id);
 
         // 场地行锁：串行化同场地审批（文档 8.1），锁内复核场地状态与时段冲突
         BizSpace space = spaceMapper.selectByIdForUpdate(booking.getLabId());
         if (space == null) {
-            log.warn("[预约审批] 场地不存在或已删除：操作人={}, 预约ID={}, 场地ID={}",
+            log.warn("[预约核对批准] 场地不存在或已删除：操作人={}, 预约ID={}, 场地ID={}",
                     operatorId, id, booking.getLabId());
             throw new BusinessException(ResultCode.NOT_FOUND);
         }
         if (space.getStatus() != SpaceStatus.AVAILABLE) {
-            log.warn("[预约审批] 场地当前状态不可批准：操作人={}, 预约ID={}, 场地={}, 状态={}",
+            log.warn("[预约核对批准] 场地当前状态不可批准：操作人={}, 预约ID={}, 场地={}, 状态={}",
                     operatorId, id, space.getLabName(), space.getStatus());
             throw new BusinessException(ResultCode.CONFLICT.getCode(),
                     "场地当前状态为 " + space.getStatus().getDisplayName() + "，无法批准");
         }
         long conflicts = slotMapper.countConflict(booking.getLabId(), booking.getStartAt(), booking.getEndAt());
         if (conflicts > 0) {
-            log.warn("[预约审批] 时段冲突（已被其他预约占用），拒绝：操作人={}, 预约ID={}, 场地ID={}, 冲突占用数={}",
+            log.warn("[预约核对批准] 时段冲突，拒绝：操作人={}, 预约ID={}, 场地ID={}, 冲突占用数={}",
                     operatorId, id, booking.getLabId(), conflicts);
             throw new BusinessException(ResultCode.CONFLICT.getCode(),
                     "时段已被其他预约占用（提交时无冲突，审批时被抢占），请驳回或要求调整时间");
@@ -220,41 +217,107 @@ public class BookingServiceImpl implements BookingService {
 
         int rows = bookingMapper.update(null, new LambdaUpdateWrapper<LabBooking>()
                 .eq(LabBooking::getId, id)
+                .eq(LabBooking::getStatus, BookingStatus.PENDING)
                 .set(LabBooking::getStatus, BookingStatus.APPROVED)
                 .set(LabBooking::getUpdateUserId, operatorId));
         if (rows == 0) {
-            log.warn("[预约审批] 更新未命中任何行（预约可能已被删除）：操作人={}, 预约ID={}", operatorId, id);
-            throw new BusinessException(ResultCode.NOT_FOUND);
+            log.warn("[预约核对批准] 更新未命中（预约状态已变更）：操作人={}, 预约ID={}", operatorId, id);
+            throw new BusinessException(ResultCode.CONFLICT.getCode(), "预约状态已变更，请刷新后重试");
         }
-        log.info("[预约审批] 完成：操作人={}, 预约ID={}, 场地={}, 时段=[{} ~ {}], 占用ID={}, 耗时={}ms",
-                operatorId, id, space.getLabName(), booking.getStartAt(), booking.getEndAt(),
-                slot.getId(), (System.nanoTime() - begin) / 1_000_000);
+
+        // 流程记录：审批任务 APPROVED + APPROVE 事件
+        flowService.onApprove(doc, booking, operatorId);
+        log.info("[预约核对批准] 完成：操作人={}, 预约ID={}, 场地={}, 占用ID={}, 耗时={}ms",
+                operatorId, id, space.getLabName(), slot.getId(), (System.nanoTime() - begin) / 1_000_000);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void reject(Long id, BookingRejectDTO dto) {
         Long operatorId = SecurityUtils.currentUserId();
-        log.info("[预约驳回] 开始：操作人={}, 预约ID={}, 原因={}", operatorId, id, dto.reason());
+        log.info("[预约整单驳回] 开始：操作人={}, 预约ID={}, 原因={}", operatorId, id, dto.reason());
 
         LabBooking booking = requireBooking(id);
         if (booking.getStatus() != BookingStatus.PENDING) {
-            log.warn("[预约驳回] 状态非待审批，拒绝：操作人={}, 预约ID={}, 状态={}",
+            log.warn("[预约整单驳回] 状态非待核对，拒绝：操作人={}, 预约ID={}, 状态={}",
                     operatorId, id, booking.getStatus());
             throw new BusinessException(ResultCode.CONFLICT.getCode(),
-                    "仅待审批的预约可驳回，当前状态：" + booking.getStatus().getDisplayName());
+                    "仅待核对的预约可驳回，当前状态：" + booking.getStatus().getDisplayName());
         }
+        BizDocument doc = requireFlowDocument(id);
 
         int rows = bookingMapper.update(null, new LambdaUpdateWrapper<LabBooking>()
                 .eq(LabBooking::getId, id)
+                .eq(LabBooking::getStatus, BookingStatus.PENDING)
                 .set(LabBooking::getStatus, BookingStatus.REJECTED)
                 .set(LabBooking::getRejectReason, dto.reason().trim())
                 .set(LabBooking::getUpdateUserId, operatorId));
         if (rows == 0) {
-            log.warn("[预约驳回] 更新未命中任何行（预约可能已被删除）：操作人={}, 预约ID={}", operatorId, id);
-            throw new BusinessException(ResultCode.NOT_FOUND);
+            log.warn("[预约整单驳回] 更新未命中（预约状态已变更）：操作人={}, 预约ID={}", operatorId, id);
+            throw new BusinessException(ResultCode.CONFLICT.getCode(), "预约状态已变更，请刷新后重试");
         }
-        log.info("[预约驳回] 完成：操作人={}, 预约ID={}, 申请人={}", operatorId, id, booking.getApplicantId());
+
+        flowService.onReject(doc, booking, operatorId, dto.reason().trim());
+        log.info("[预约整单驳回] 完成：操作人={}, 预约ID={}, 申请人={}", operatorId, id, booking.getApplicantId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void checkin(Long id) {
+        Long operatorId = SecurityUtils.currentUserId();
+        log.info("[开门签到] 开始：操作人={}, 预约ID={}", operatorId, id);
+
+        LabBooking booking = requireBooking(id);
+        if (booking.getStatus() != BookingStatus.APPROVED) {
+            throw new BusinessException(ResultCode.CONFLICT.getCode(),
+                    "仅已批准的预约可开门签到，当前状态：" + booking.getStatus().getDisplayName());
+        }
+        BizDocument doc = requireFlowDocument(id);
+        if (flowService.hasEvent(doc.getId(), DocumentEventType.CHECKIN)) {
+            throw new BusinessException(ResultCode.CONFLICT.getCode(), "该预约已完成开门签到，请勿重复操作");
+        }
+        Instant now = Instant.now();
+        if (now.isBefore(booking.getStartAt())) {
+            throw new BusinessException(ResultCode.CONFLICT.getCode(), "尚未到达预约开始时间，不能开门签到");
+        }
+
+        flowService.onCheckin(doc, booking, operatorId, now);
+        log.info("[开门签到] 完成：操作人={}, 预约ID={}, 签到时间={}", operatorId, id, now);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void checkout(Long id, BookingCheckoutDTO dto) {
+        Long operatorId = SecurityUtils.currentUserId();
+        log.info("[结束清点] 开始：操作人={}, 预约ID={}", operatorId, id);
+
+        LabBooking booking = requireBooking(id);
+        if (booking.getStatus() != BookingStatus.APPROVED) {
+            throw new BusinessException(ResultCode.CONFLICT.getCode(),
+                    "仅已批准且已签到的预约可结束清点，当前状态：" + booking.getStatus().getDisplayName());
+        }
+        BizDocument doc = requireFlowDocument(id);
+        if (!flowService.hasEvent(doc.getId(), DocumentEventType.CHECKIN)) {
+            throw new BusinessException(ResultCode.CONFLICT.getCode(), "请先完成开门签到，再结束清点");
+        }
+        if (flowService.hasEvent(doc.getId(), DocumentEventType.CHECKOUT)) {
+            throw new BusinessException(ResultCode.CONFLICT.getCode(), "该预约已结束清点，请勿重复操作");
+        }
+
+        Instant now = Instant.now();
+        String note = dto == null || dto.note() == null || dto.note().isBlank()
+                ? "结束清点" : dto.note().trim();
+        flowService.onCheckout(doc, booking, operatorId, now, note);
+
+        // 清点结束释放占用槽（预约本身仍为 APPROVED，FINISHED 由事件/时间派生展示）
+        int released = slotMapper.update(null, new LambdaUpdateWrapper<LabSlot>()
+                .eq(LabSlot::getBookingId, id)
+                .isNull(LabSlot::getReleasedAt)
+                .set(LabSlot::getReleasedAt, now)
+                .set(LabSlot::getReleaseReason, "结束清点")
+                .set(LabSlot::getUpdateUserId, operatorId));
+        log.info("[结束清点] 完成：操作人={}, 预约ID={}, 释放占用行数={}, 时间={}",
+                operatorId, id, released, now);
     }
 
     // ------------------------------------------------------------------ 查询
@@ -285,16 +348,31 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
+    public PageResult<BookingVO> pageBoard(BookingPageQuery query) {
+        Long operatorId = SecurityUtils.currentUserId();
+        long begin = System.nanoTime();
+        // 只读预约情况：全量可见（学生只读视角），不暴露任何写操作入口（前端按权限隐藏按钮）
+        Page<LabBooking> page = bookingMapper.selectPage(PageUtils.toPage(query), buildWrapper(query));
+        PageResult<BookingVO> result = toPageResult(page);
+        log.info("[预约情况只读] 完成：操作人={}, 页码={}, 页大小={}, 命中总数={}, 返回行数={}, 耗时={}ms",
+                operatorId, query.getPageNum(), query.getPageSize(),
+                page.getTotal(), result.records().size(), (System.nanoTime() - begin) / 1_000_000);
+        return result;
+    }
+
+    @Override
     public BookingDetailVO detail(Long id) {
         Long operatorId = SecurityUtils.currentUserId();
         LabBooking booking = requireBooking(id);
-        if (!booking.getApplicantId().equals(operatorId) && !StpUtil.hasPermission("booking:lab:approve")) {
-            log.warn("[预约详情] 非申请人且无审批权限，拒绝：操作人={}, 预约ID={}, 申请人={}",
+        boolean canViewAll = StpUtil.hasPermission("booking:lab:approve")
+                || StpUtil.hasPermission("booking:lab:view");
+        if (!booking.getApplicantId().equals(operatorId) && !canViewAll) {
+            log.warn("[预约详情] 非申请人且无查看权限，拒绝：操作人={}, 预约ID={}, 申请人={}",
                     operatorId, id, booking.getApplicantId());
-            throw new BusinessException(ResultCode.FORBIDDEN.getCode(), "仅申请人本人或审批人可查看预约详情");
+            throw new BusinessException(ResultCode.FORBIDDEN.getCode(), "无权查看该预约详情");
         }
         log.info("[预约详情] 完成：操作人={}, 预约ID={}, 状态={}", operatorId, id, booking.getStatus());
-        return detailEntity(id, operatorId);
+        return detailEntity(id);
     }
 
     @Override
@@ -341,9 +419,29 @@ public class BookingServiceImpl implements BookingService {
                 default -> log.warn("[预约统计] 未知状态不参与分档：status={}, cnt={}", row.get("status"), cnt);
             }
         }
-        log.info("[预约统计] 完成：操作人={}, 总数={}, 待审批={}, 已批准={}, 已驳回={}, 已取消={}",
+        log.info("[预约统计] 完成：操作人={}, 总数={}, 待核对={}, 已批准={}, 已驳回={}, 已取消={}",
                 operatorId, pending + approved + rejected + cancelled, pending, approved, rejected, cancelled);
         return new BookingStatsVO(pending + approved + rejected + cancelled, pending, approved, rejected, cancelled);
+    }
+
+    @Override
+    public int autoCancelExpired() {
+        Instant now = Instant.now();
+        List<LabBooking> expired = bookingMapper.selectExpiredPending(now);
+        if (expired.isEmpty()) {
+            return 0;
+        }
+        int cancelled = 0;
+        for (LabBooking booking : expired) {
+            try {
+                cancelled += expiryService.cancelOne(booking, now);
+            } catch (Exception e) {
+                // 单条失败不阻断整批；记录后继续，下一轮扫描会再次拾取仍 PENDING 的单
+                log.error("[超时自动取消] 单条处理失败，跳过：预约ID={}, 错误={}", booking.getId(), e.getMessage(), e);
+            }
+        }
+        log.info("[超时自动取消] 扫描完成：拾取={}, 实际取消={}, 扫描时间={}", expired.size(), cancelled, now);
+        return cancelled;
     }
 
     // ------------------------------------------------------------- 组装/辅助
@@ -370,9 +468,16 @@ public class BookingServiceImpl implements BookingService {
         List<LabBooking> records = page.getRecords();
         Map<Long, BizSpace> spaces = loadSpaces(records);
         Map<Long, SysUser> users = loadUsers(records);
+        Map<Long, Map<String, Instant>> checkTimes =
+                flowService.loadCheckTimes(records.stream().map(LabBooking::getId).toList());
         Instant now = Instant.now();
         List<BookingVO> vos = records.stream()
-                .map(b -> toVO(b, spaces.get(b.getLabId()), users.get(b.getApplicantId()), now))
+                .map(b -> {
+                    Map<String, Instant> ct = checkTimes.get(b.getId());
+                    Instant checkin = ct == null ? null : ct.get("CHECKIN");
+                    Instant checkout = ct == null ? null : ct.get("CHECKOUT");
+                    return toVO(b, spaces.get(b.getLabId()), users.get(b.getApplicantId()), now, checkin, checkout);
+                })
                 .toList();
         return PageResult.of(vos, page.getTotal(), (int) page.getCurrent(), (int) page.getSize());
     }
@@ -401,7 +506,8 @@ public class BookingServiceImpl implements BookingService {
         return map;
     }
 
-    private BookingVO toVO(LabBooking b, BizSpace space, SysUser applicant, Instant now) {
+    private BookingVO toVO(LabBooking b, BizSpace space, SysUser applicant, Instant now,
+                           Instant checkinAt, Instant checkoutAt) {
         return new BookingVO(
                 String.valueOf(b.getId()),
                 String.valueOf(b.getLabId()),
@@ -412,17 +518,29 @@ public class BookingServiceImpl implements BookingService {
                 b.getEndAt(),
                 b.getStatus(),
                 b.getStatus() == null ? null : b.getStatus().getDisplayName(),
-                runtimePhase(b, now),
+                runtimePhase(b, now, checkinAt, checkoutAt),
                 String.valueOf(b.getApplicantId()),
                 applicant == null ? null : applicant.getRealName(),
-                b.getCreateTime()
+                b.getCreateTime(),
+                checkinAt,
+                checkoutAt
         );
     }
 
-    private BookingDetailVO detailEntity(Long id, Long operatorId) {
+    private BookingDetailVO detailEntity(Long id) {
         LabBooking b = requireBooking(id);
         BizSpace space = spaceMapper.selectById(b.getLabId());
         SysUser applicant = userMapper.selectById(b.getApplicantId());
+        List<BookingTimelineEventVO> timeline = flowService.timeline(id);
+        Instant checkinAt = null;
+        Instant checkoutAt = null;
+        for (BookingTimelineEventVO e : timeline) {
+            if ("CHECKIN".equals(e.eventType())) {
+                checkinAt = e.occurredAt();
+            } else if ("CHECKOUT".equals(e.eventType())) {
+                checkoutAt = e.occurredAt();
+            }
+        }
         return new BookingDetailVO(
                 String.valueOf(b.getId()),
                 String.valueOf(b.getLabId()),
@@ -433,7 +551,7 @@ public class BookingServiceImpl implements BookingService {
                 b.getEndAt(),
                 b.getStatus(),
                 b.getStatus() == null ? null : b.getStatus().getDisplayName(),
-                runtimePhase(b, Instant.now()),
+                runtimePhase(b, Instant.now(), checkinAt, checkoutAt),
                 b.getRejectReason(),
                 b.getCancelReason(),
                 b.getCancelType(),
@@ -442,17 +560,27 @@ public class BookingServiceImpl implements BookingService {
                 String.valueOf(b.getApplicantId()),
                 applicant == null ? null : applicant.getRealName(),
                 b.getCreateTime(),
-                b.getUpdateTime()
+                b.getUpdateTime(),
+                checkinAt,
+                checkoutAt,
+                timeline
         );
     }
 
     /**
-     * 派生展示字段（仅 APPROVED 有值）：UPCOMING 未开始 / IN_USE 使用中 /
-     * FINISHED 已结束。不落库，不参与状态机迁移。
+     * 派生展示字段（仅 APPROVED 有值）：
+     * 已清点 → FINISHED；已签到 → IN_USE；否则按时间 UPCOMING/IN_USE/FINISHED。
+     * 不落库，不参与状态机迁移。
      */
-    private String runtimePhase(LabBooking b, Instant now) {
+    private String runtimePhase(LabBooking b, Instant now, Instant checkinAt, Instant checkoutAt) {
         if (b.getStatus() != BookingStatus.APPROVED) {
             return null;
+        }
+        if (checkoutAt != null) {
+            return "FINISHED";
+        }
+        if (checkinAt != null) {
+            return "IN_USE";
         }
         if (now.isBefore(b.getStartAt())) {
             return "UPCOMING";
@@ -461,6 +589,40 @@ public class BookingServiceImpl implements BookingService {
             return "IN_USE";
         }
         return "FINISHED";
+    }
+
+    /** 撤销/取消共用：按需释放占用 + 状态流转 CANCELLED + 流程事件。 */
+    private void doCancel(LabBooking booking, Long operatorId, CancelType cancelType, String reason) {
+        if (booking.getStatus() == BookingStatus.APPROVED) {
+            Instant releaseAt = Instant.now();
+            int released = slotMapper.update(null, new LambdaUpdateWrapper<LabSlot>()
+                    .eq(LabSlot::getBookingId, booking.getId())
+                    .isNull(LabSlot::getReleasedAt)
+                    .set(LabSlot::getReleasedAt, releaseAt)
+                    .set(LabSlot::getReleaseReason, cancelType == CancelType.MANUAL ? "MANUAL取消" : cancelType.name())
+                    .set(LabSlot::getUpdateUserId, operatorId));
+            log.info("[预约取消] 释放场地占用：预约ID={}, 释放行数={}, 释放时间={}", booking.getId(), released, releaseAt);
+        }
+
+        Instant cancelledAt = Instant.now();
+        int rows = bookingMapper.update(null, new LambdaUpdateWrapper<LabBooking>()
+                .eq(LabBooking::getId, booking.getId())
+                .in(LabBooking::getStatus, BookingStatus.PENDING, BookingStatus.APPROVED)
+                .set(LabBooking::getStatus, BookingStatus.CANCELLED)
+                .set(LabBooking::getCancelReason, reason)
+                .set(LabBooking::getCancelType, cancelType)
+                .set(LabBooking::getCancelledAt, cancelledAt)
+                .set(LabBooking::getUpdateUserId, operatorId));
+        if (rows == 0) {
+            log.warn("[预约取消] 更新未命中任何行：预约ID={}", booking.getId());
+            throw new BusinessException(ResultCode.CONFLICT.getCode(), "预约状态已变更，请刷新后重试");
+        }
+
+        BizDocument doc = flowService.findByBookingId(booking.getId());
+        if (doc != null) {
+            boolean system = cancelType == CancelType.AUTO_EXPIRED;
+            flowService.onCancel(doc, booking, system ? null : operatorId, system, reason);
+        }
     }
 
     /** 上海时区窗口校验：起止同日、不早于开放开始、不晚于开放结束 */
@@ -498,6 +660,15 @@ public class BookingServiceImpl implements BookingService {
             throw new BusinessException(ResultCode.NOT_FOUND);
         }
         return booking;
+    }
+
+    private BizDocument requireFlowDocument(Long bookingId) {
+        BizDocument doc = flowService.findByBookingId(bookingId);
+        if (doc == null) {
+            log.warn("[预约流程] 流程单据缺失：预约ID={}", bookingId);
+            throw new BusinessException(ResultCode.CONFLICT.getCode(), "预约流程档案缺失，无法执行该操作");
+        }
+        return doc;
     }
 
     private String formatTime(LocalTime time) {
