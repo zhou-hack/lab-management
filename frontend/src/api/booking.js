@@ -21,6 +21,21 @@ export function pageAllBookings(params) {
   return request.get('/booking/labs/all', { params })
 }
 
+/** 预约情况只读分页（booking:lab:view，学生只读视角） */
+export function pageBoardBookings(params) {
+  return request.get('/booking/labs/board', { params })
+}
+
+/** 开门签到（booking:lab:approve，已批准且到点） */
+export function checkinBooking(id) {
+  return request.post(`/booking/labs/${id}/checkin`)
+}
+
+/** 结束清点（booking:lab:approve，已签到后；note 选填） */
+export function checkoutBooking(id, note) {
+  return request.post(`/booking/labs/${id}/checkout`, { note })
+}
+
 /** 预约统计（按状态计数，booking:lab:approve） */
 export function getBookingStats() {
   return request.get('/booking/labs/stats')

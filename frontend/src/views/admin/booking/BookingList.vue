@@ -106,16 +106,9 @@
             全部预约
           </h2>
           <p class="t-sub">
-            时段按上海本地时间展示 · 待审批项可批准/驳回，批准即时占用时段
+            时段按上海本地时间展示 · 管理员仅查看与审批：待审批项可批准/驳回，批准即时占用时段
           </p>
         </div>
-        <el-button
-          v-permission="'booking:lab:create'"
-          type="primary"
-          @click="bookVisible = true"
-        >
-          发起预约
-        </el-button>
       </div>
 
       <el-table
@@ -191,7 +184,7 @@
         </el-table-column>
         <el-table-column
           label="操作"
-          width="170"
+          width="250"
           fixed="right"
         >
           <template #default="{ row }">
@@ -220,6 +213,26 @@
                 驳回
               </el-button>
             </template>
+            <template v-else-if="row.status === 'APPROVED' && !row.checkinAt">
+              <el-button
+                v-permission="'booking:lab:approve'"
+                link
+                type="success"
+                @click="onCheckin(row)"
+              >
+                开门签到
+              </el-button>
+            </template>
+            <template v-else-if="row.status === 'APPROVED' && row.checkinAt && !row.checkoutAt">
+              <el-button
+                v-permission="'booking:lab:approve'"
+                link
+                type="warning"
+                @click="onCheckout(row)"
+              >
+                结束清点
+              </el-button>
+            </template>
           </template>
         </el-table-column>
         <template #empty>
@@ -241,11 +254,6 @@
       </div>
     </div>
 
-    <SpaceBookDialog
-      v-model="bookVisible"
-      @close="bookVisible = false"
-      @submit="onSubmitBooking"
-    />
     <BookingDetailDrawer
       v-model="detailVisible"
       :booking-id="detailId"
@@ -257,15 +265,15 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import SpaceBookDialog from '@/views/booking/SpaceBookDialog.vue'
 import BookingDetailDrawer from './BookingDetailDrawer.vue'
 import { BOOKING_STATUS, BOOKING_STATUS_MAP, RUNTIME_PHASE_MAP } from '@/views/booking/booking.constants'
 import {
   pageAllBookings,
   getBookingStats,
-  createBooking,
   approveBooking,
-  rejectBooking
+  rejectBooking,
+  checkinBooking,
+  checkoutBooking
 } from '@/api/booking'
 import { listSpaceOptions } from '@/api/space'
 import { formatInstant, formatRange, shanghaiLocalToIso } from '@/utils/datetime'
@@ -274,7 +282,6 @@ const loading = ref(false)
 const records = ref([])
 const total = ref(0)
 const spaceOptions = ref([])
-const bookVisible = ref(false)
 const detailVisible = ref(false)
 const detailId = ref('')
 const stats = reactive({ total: 0, pending: 0, approved: 0, rejected: 0, cancelled: 0 })
@@ -340,15 +347,6 @@ function onDetail(row) {
   detailVisible.value = true
 }
 
-async function onSubmitBooking(payload) {
-  await createBooking(payload)
-  ElMessage.success('预约已提交，等待审批')
-  bookVisible.value = false
-  query.pageNum = 1
-  loadData()
-  loadStats()
-}
-
 async function onApprove(row) {
   try {
     await ElMessageBox.confirm(
@@ -387,6 +385,45 @@ async function onReject(row) {
   ElMessage.success('已驳回')
   loadData()
   loadStats()
+}
+
+async function onCheckin(row) {
+  try {
+    await ElMessageBox.confirm(
+      `确认为「${row.applicantName || row.applicantId}」${row.labName} ${formatRange(row.startAt, row.endAt)} 开门签到吗？签到后状态记为使用中。`,
+      '开门签到',
+      { type: 'warning', confirmButtonText: '确认签到', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  await checkinBooking(row.id)
+  ElMessage.success('开门签到成功')
+  loadData()
+}
+
+async function onCheckout(row) {
+  let note
+  try {
+    const res = await ElMessageBox.prompt(
+      `结束「${row.labName}」${formatRange(row.startAt, row.endAt)} 使用并清点，可填写清点备注（选填，≤200 字）。`,
+      '结束清点',
+      {
+        inputPlaceholder: '清点备注（选填）',
+        inputPattern: /^.{0,200}$/s,
+        inputErrorMessage: '备注不能超过 200 字',
+        type: 'warning',
+        confirmButtonText: '确认结束',
+        cancelButtonText: '取消'
+      }
+    )
+    note = res.value || ''
+  } catch {
+    return
+  }
+  await checkoutBooking(row.id, note || undefined)
+  ElMessage.success('已结束清点，时段已释放')
+  loadData()
 }
 
 onMounted(() => {

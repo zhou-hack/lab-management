@@ -171,7 +171,11 @@ async function submit() {
   loading.value = true
   try {
     await store.login({ mode: mode.value, ...form })
-    router.push(route.query.redirect || '/')
+    // redirect 可能是未登录时被通配符污染的 /404，或历史书签里的非法地址：
+    // 仅接受站内正常路径，其余回退根路径（由守卫按身份分流到实际首页）
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
+    const safeRedirect = redirect && redirect !== '/404' && redirect.startsWith('/') ? redirect : '/'
+    router.push(safeRedirect)
   } finally {
     loading.value = false
   }

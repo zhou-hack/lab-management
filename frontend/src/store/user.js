@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { loginByPassword, loginBySms, logout as apiLogout, getProfile } from '@/api/user'
 import { getToken, setToken, removeToken } from '@/utils/token'
-import { registerDynamicRoutes, removeDynamicRoutes } from '@/router/dynamic'
+import { registerDynamicRoutes, removeDynamicRoutes, getRegisteredPaths } from '@/router/dynamic'
 
 /**
  * 后端菜单 menuType（sys_menu.menu_type）→ 前端菜单类型
@@ -32,7 +32,19 @@ export const useUserStore = defineStore('user', {
   }),
   getters: {
     isAdmin: (state) => state.roles.includes('ADMIN'),
-    homePath: (state) => (state.roles.includes('ADMIN') ? '/admin/home' : '/home')
+    /**
+     * 登录落地页：优先约定首页（/admin/home、/home），
+     * 后端菜单未下发首页时回退到该身份第一个已注册页面，避免跳入 404 白屏。
+     */
+    homePath: (state) => {
+      const { admin, front } = getRegisteredPaths()
+      if (state.roles.includes('ADMIN')) {
+        if (admin.includes('/admin/home')) return '/admin/home'
+        return admin[0] || '/login'
+      }
+      if (front.includes('/home')) return '/home'
+      return front[0] || '/login'
+    }
   },
   actions: {
     /**
@@ -58,7 +70,7 @@ export const useUserStore = defineStore('user', {
       this.menus = (data.menus || []).map(mapMenu)
     },
     async buildRoutes() {
-      registerDynamicRoutes(this.menus)
+      registerDynamicRoutes(this.menus, this.userInfo?.userType)
       this.routesLoaded = true
     },
     async logout() {

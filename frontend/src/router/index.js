@@ -14,8 +14,10 @@ const staticRoutes = [
     name: 'NotFound',
     component: () => import('@/views/error/NotFound.vue'),
     meta: { title: '页面不存在' }
-  },
-  { path: '/:pathMatch(.*)*', redirect: '/404' }
+  }
+  // 注意：通配符 404 兜底不能放在静态路由里，否则动态路由（后端菜单下发）
+  // 注册前，所有业务路径都会先被通配符吞成 /404，导致登录/刷新后白屏。
+  // 通配符在 registerDynamicRoutes() 完成后再注册，见 router/dynamic.js。
 ]
 
 const APP_TITLE = '实验室设备管理系统'
@@ -39,7 +41,13 @@ router.beforeEach(async (to) => {
     try {
       await store.fetchUserMenus()
       await store.buildRoutes()
-      return { ...to, replace: true }
+      // 根路径在动态路由就绪后按身份分流；此时通配符已注册，
+      // 不能重放 '/'（会被通配符吞成 404），必须直接指向落地首页
+      if (to.path === '/') {
+        return { path: store.homePath, replace: true }
+      }
+      // 其余路径（如刷新业务页）用字符串重新匹配刚注册的动态路由
+      return { path: to.fullPath, replace: true }
     } catch {
       // 拉取失败（含 401 已清理场景）：重置状态回登录页
       store.resetState()
@@ -58,6 +66,11 @@ router.beforeEach(async (to) => {
 
   if (to.meta && to.meta.perms && !store.perms.includes(to.meta.perms)) {
     return { path: '/404' }
+  }
+
+  // 业务规则：场地预约不对学生开放（路由注册层已过滤，此处兜底防手输 URL/历史记录进入）
+  if (store.userInfo?.userType === 'STUDENT' && to.path.startsWith('/booking/')) {
+    return { path: store.homePath, replace: true }
   }
 
   return true

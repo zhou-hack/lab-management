@@ -139,6 +139,12 @@
         </div>
         <div class="space_list__toolbar_actions">
           <el-button
+            v-permission="'space:space:create'"
+            @click="importVisible = true"
+          >
+            导入
+          </el-button>
+          <el-button
             v-permission="'space:space:list'"
             :loading="exporting"
             @click="onExport"
@@ -270,15 +276,6 @@
                 详情
               </el-button>
               <el-button
-                v-if="row.status === 'AVAILABLE'"
-                v-permission="'booking:lab:create'"
-                link
-                type="primary"
-                @click="onBook(row)"
-              >
-                预约
-              </el-button>
-              <el-button
                 v-permission="'space:space:update'"
                 link
                 type="primary"
@@ -345,11 +342,10 @@
       :space="detailSpace"
       @close="detailVisible = false"
     />
-    <SpaceBookDialog
-      v-model="bookVisible"
-      :preset-space-id="bookSpaceId"
-      @close="bookVisible = false"
-      @submit="onSubmitBooking"
+    <SpaceImportDialog
+      v-model="importVisible"
+      @close="importVisible = false"
+      @success="onImported"
     />
   </div>
 </template>
@@ -359,7 +355,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import SpaceFormDialog from './SpaceFormDialog.vue'
 import SpaceDetailDrawer from './SpaceDetailDrawer.vue'
-import SpaceBookDialog from '@/views/booking/SpaceBookDialog.vue'
+import SpaceImportDialog from './SpaceImportDialog.vue'
 import { SPACE_TYPES, SPACE_TYPE_MAP, SPACE_STATUS, SPACE_STATUS_MAP } from './space.constants'
 import {
   pageSpaces,
@@ -373,7 +369,6 @@ import {
   exportSpaces,
   batchStatusSpaces
 } from '@/api/space'
-import { createBooking } from '@/api/booking'
 
 const loading = ref(false)
 const records = ref([])
@@ -397,8 +392,7 @@ const formVisible = ref(false)
 const editingSpace = ref(null)
 const detailVisible = ref(false)
 const detailSpace = ref(null)
-const bookVisible = ref(false)
-const bookSpaceId = ref('')
+const importVisible = ref(false)
 
 async function loadStats() {
   try {
@@ -454,6 +448,13 @@ function onReset() {
 function onCreate() {
   editingSpace.value = null
   formVisible.value = true
+}
+
+/** 导入有成功行后刷新列表与统计卡片 */
+function onImported() {
+  query.pageNum = 1
+  loadData()
+  loadStats()
 }
 
 function onEdit(row) {
@@ -551,17 +552,6 @@ async function onExport() {
   } finally {
     exporting.value = false
   }
-}
-
-function onBook(row) {
-  bookSpaceId.value = row.id
-  bookVisible.value = true
-}
-
-async function onSubmitBooking(payload) {
-  await createBooking(payload)
-  ElMessage.success('预约已提交，等待审批')
-  bookVisible.value = false
 }
 
 async function onDelete(row) {

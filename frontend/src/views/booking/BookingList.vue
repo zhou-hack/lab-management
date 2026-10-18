@@ -51,13 +51,16 @@
       <div class="my_booking__toolbar">
         <div>
           <h2 class="t-title my_booking__title">
-            我的预约
+            {{ isReadonly ? '预约情况' : '我的预约' }}
           </h2>
           <p class="t-sub">
-            时段按上海本地时间展示 · 提交后等待管理员审批，批准后占用生效
+            {{ isReadonly
+              ? '只读查看全部预约情况与批准/驳回结果 · 时段按上海本地时间展示'
+              : '时段按上海本地时间展示 · 提交后等待管理员核对，批准后占用生效' }}
           </p>
         </div>
         <el-button
+          v-if="canBook"
           v-permission="'booking:lab:create'"
           type="primary"
           @click="bookVisible = true"
@@ -131,29 +134,33 @@
         </el-table-column>
         <el-table-column
           label="操作"
-          width="90"
+          width="140"
           fixed="right"
+          class-name="my_booking__op_cell"
         >
           <template #default="{ row }">
-            <el-button
-              v-if="row.status === 'PENDING' || row.status === 'APPROVED'"
-              v-permission="'booking:lab:cancel'"
-              link
-              type="danger"
-              @click="onCancel(row)"
-            >
-              取消预约
-            </el-button>
-            <span
-              v-else
-              class="t-hint"
-            >
-              —
-            </span>
+            <div class="my_booking__actions">
+              <el-button
+                link
+                type="primary"
+                @click="onDetail(row)"
+              >
+                详情
+              </el-button>
+              <el-button
+                v-if="row.status === 'PENDING' || row.status === 'APPROVED'"
+                v-permission="'booking:lab:cancel'"
+                link
+                type="danger"
+                @click="onCancel(row)"
+              >
+                取消预约
+              </el-button>
+            </div>
           </template>
         </el-table-column>
         <template #empty>
-          <span class="t-hint">暂无预约记录，点击右上角「发起预约」</span>
+          <span class="t-hint">{{ isReadonly ? '暂无预约记录' : '暂无预约记录，点击右上角「发起预约」' }}</span>
         </template>
       </el-table>
 
@@ -176,21 +183,36 @@
       @close="bookVisible = false"
       @submit="onSubmitBooking"
     />
+    <MyBookingDetailDrawer
+      v-model="detailVisible"
+      :booking-id="detailId"
+      @close="detailVisible = false"
+    />
   </div>
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useUserStore } from '@/store/user'
 import SpaceBookDialog from './SpaceBookDialog.vue'
+import MyBookingDetailDrawer from './MyBookingDetailDrawer.vue'
 import { BOOKING_STATUS, BOOKING_STATUS_MAP, RUNTIME_PHASE_MAP } from './booking.constants'
-import { pageMyBookings, createBooking, cancelBooking } from '@/api/booking'
+import { pageMyBookings, pageBoardBookings, createBooking, cancelBooking } from '@/api/booking'
 import { formatInstant, formatRange, shanghaiLocalToIso } from '@/utils/datetime'
+
+const userStore = useUserStore()
+/** 业务规则：学生不可发起场地预约（后端权限同步回收，此处为前端兜底） */
+const canBook = computed(() => userStore.userInfo?.userType !== 'STUDENT')
+/** 学生纯只读：仅看预约情况与批准/驳回结果，列表走 view 视角的 board 接口 */
+const isReadonly = computed(() => userStore.userInfo?.userType === 'STUDENT')
 
 const loading = ref(false)
 const records = ref([])
 const total = ref(0)
 const bookVisible = ref(false)
+const detailVisible = ref(false)
+const detailId = ref('')
 
 const query = reactive({
   pageNum: 1,
@@ -211,7 +233,8 @@ async function loadData() {
     const [from, to] = query.dateRange || []
     if (from) params.startFrom = shanghaiLocalToIso(from, '00:00')
     if (to) params.startTo = shanghaiLocalToIso(to, '23:59')
-    const data = await pageMyBookings(params)
+    const fetchPage = isReadonly.value ? pageBoardBookings : pageMyBookings
+    const data = await fetchPage(params)
     records.value = data.records || []
     total.value = Number(data.total) || 0
   } finally {
@@ -239,6 +262,11 @@ async function onSubmitBooking(payload) {
   loadData()
 }
 
+function onDetail(row) {
+  detailId.value = row.id
+  detailVisible.value = true
+}
+
 async function onCancel(row) {
   let reason
   try {
@@ -263,7 +291,10 @@ async function onCancel(row) {
   loadData()
 }
 
-onMounted(loadData)
+onMounted(() => {
+  // 学生为纯只读视角（预约情况），同样加载数据；发起/撤销由权限与按钮显隐控制
+  loadData()
+})
 </script>
 
 <style scoped>
@@ -306,6 +337,27 @@ onMounted(loadData)
 
 .my_booking__space {
   font-weight: var(--fw-medium, 500);
+}
+
+/* 操作列：详情 / 取消预约强制单行 */
+.my_booking__actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.my_booking__actions .el-button + .el-button {
+  margin-left: 0;
+}
+
+.my_booking__actions .el-button.is-link {
+  padding: 2px 3px;
+}
+
+:deep(.my_booking__op_cell .cell) {
+  white-space: nowrap;
 }
 
 .my_booking__pager {

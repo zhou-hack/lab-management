@@ -8,6 +8,11 @@ spring:
     active: dev
   jackson:
     time-zone: UTC
+  servlet:
+    multipart:
+      # 场地导入：单文件上限 10MB，请求上限 12MB；超限由 GlobalExceptionHandler 转 40000
+      max-file-size: 10MB
+      max-request-size: 12MB
 
 mybatis-plus:
   configuration:
