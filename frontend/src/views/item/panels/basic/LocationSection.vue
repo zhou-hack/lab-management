@@ -12,9 +12,12 @@
         v-model="enabled"
         clearable
         placeholder="全部状态"
-        class="w140"
         @change="pager.search"
       >
+        <el-option
+          label="全部状态"
+          value=""
+        />
         <el-option
           label="启用"
           value="true"
@@ -212,7 +215,7 @@ const pager = usePagedList((params) =>
   pageLocations({
     ...params,
     keyword: keyword.value || undefined,
-    enabled: enabled.value === null || enabled.value === undefined ? undefined : enabled.value
+    enabled: enabled.value || undefined
   })
 )
 

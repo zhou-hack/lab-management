@@ -13,9 +13,12 @@
         clearable
         filterable
         placeholder="全部分类"
-        class="w200"
         @change="pager.search"
       >
+        <el-option
+          label="全部分类"
+          value=""
+        />
         <el-option
           v-for="c in categories"
           :key="c.id"
@@ -27,9 +30,12 @@
         v-model="materialType"
         clearable
         placeholder="全部类型"
-        class="w140"
         @change="pager.search"
       >
+        <el-option
+          label="全部类型"
+          value=""
+        />
         <el-option
           label="耗材"
           value="CONSUMABLE"
@@ -43,9 +49,12 @@
         v-model="enabled"
         clearable
         placeholder="全部状态"
-        class="w140"
         @change="pager.search"
       >
+        <el-option
+          label="全部状态"
+          value=""
+        />
         <el-option
           label="启用"
           value="true"
@@ -62,6 +71,32 @@
       >
         新增物料
       </el-button>
+      <el-button
+        v-permission="'item:material:import'"
+        @click="importDialogRef.open()"
+      >
+        批量导入
+      </el-button>
+      <el-dropdown
+        v-permission="'item:material:export'"
+        @command="doExport"
+      >
+        <el-button>
+          导出<el-icon class="el-icon--right">
+            <arrow-down />
+          </el-icon>
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="xlsx">
+              Excel（.xlsx）
+            </el-dropdown-item>
+            <el-dropdown-item command="csv">
+              CSV（.csv）
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
       <el-button @click="pager.search">
         查询
       </el-button>
@@ -308,15 +343,30 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 批量导入物料 -->
+    <ImportDialog
+      ref="importDialogRef"
+      title="批量导入物料"
+      tips="模板前 9 列为必填列（分类编码 / SKU 码 / 物料名称 / 规格型号 / 计量单位 / 数量精度 / 物料类型 / 危险品 / 高价值）；分类编码须已存在，SKU 码冲突的行跳过并记入失败明细。"
+      :upload-fn="importSkus"
+      :template-fn="downloadSkuImportTemplate"
+      fallback-template-name="物料导入模板"
+      @imported="pager.load"
+    />
   </div>
 </template>
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { ArrowDown } from '@element-plus/icons-vue'
 import {
   createMaterialSku,
   deleteMaterialSku,
+  downloadSkuImportTemplate,
+  exportSkus,
+  importSkus,
   listEnabledCategories,
   pageSkus,
   updateMaterialSku,
@@ -325,13 +375,17 @@ import {
 import { usePagedList } from '@/utils/usePagedList'
 import { confirmAction } from '@/utils/confirm'
 import { materialTypeMap } from '@/utils/statusMap'
+import { saveBlobFile } from '@/utils/download'
 import PagerBar from '@/components/PagerBar.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import ImportDialog from '@/components/ImportDialog.vue'
 
 const keyword = ref('')
 const categoryId = ref(null)
 const materialType = ref(null)
 const enabled = ref(null)
+const importDialogRef = ref(null)
+const exporting = ref(false)
 
 const pager = usePagedList((params) =>
   pageSkus({
@@ -339,7 +393,7 @@ const pager = usePagedList((params) =>
     keyword: keyword.value || undefined,
     categoryId: categoryId.value || undefined,
     materialType: materialType.value || undefined,
-    enabled: enabled.value === null || enabled.value === undefined ? undefined : enabled.value
+    enabled: enabled.value || undefined
   })
 )
 
@@ -473,6 +527,25 @@ async function doDelete(row) {
     pager.load()
   } catch {
     // 失败已由全局拦截器提示
+  }
+}
+
+async function doExport(format) {
+  exporting.value = true
+  try {
+    const file = await exportSkus({
+      keyword: keyword.value || undefined,
+      categoryId: categoryId.value || undefined,
+      materialType: materialType.value || undefined,
+      enabled: enabled.value || undefined,
+      format
+    })
+    saveBlobFile(file, `物料档案导出.${format}`)
+    ElMessage.success('导出成功，文件已开始下载')
+  } catch {
+    // 失败已由全局拦截器提示
+  } finally {
+    exporting.value = false
   }
 }
 

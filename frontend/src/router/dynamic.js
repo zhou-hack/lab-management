@@ -34,7 +34,9 @@ const viewModules = {
   EquipmentTeacherApprove: () => import('@/views/equipment/EquipmentTeacherApprove.vue'),
   EquipmentBookingManage: () => import('@/views/admin/equipment/EquipmentBookingManage.vue'),
   // item 模块（单工作台形态，内部分页签）
-  ItemWorkspace: () => import('@/views/item/ItemWorkspace.vue')
+  ItemWorkspace: () => import('@/views/item/ItemWorkspace.vue'),
+  // item 学生代理代领（菜单 205；复用申领面板，领取由后端 assistant_grant 动态放行）
+  ItemAssistantPickup: () => import('@/views/item/ItemAssistantPickup.vue')
 }
 
 const addedRouteNames = []

@@ -37,6 +37,9 @@ public record MaterialRequestLineVO(
         @Schema(description = "双人签字：1是 0否", example = "0")
         Integer requiresDualSign,
 
+        @Schema(description = "源申领行 ID（学生代理代领时非空）", example = "1234567890123456789")
+        String sourceLineId,
+
         @Schema(description = "批准量（未批准为空）", example = "8")
         BigDecimal approvedQty,
 
@@ -56,6 +59,7 @@ public record MaterialRequestLineVO(
                 e.getQuotaQtySnapshot(),
                 e.getRequiresExtraApproval(),
                 e.getRequiresDualSign(),
+                e.getSourceLineId() == null ? null : String.valueOf(e.getSourceLineId()),
                 e.getApprovedQty(),
                 e.getFulfilledQty()
         );

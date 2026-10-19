@@ -6,6 +6,7 @@ import com.labmanage.common.exception.BusinessException;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.ResultCode;
 import com.labmanage.common.utils.PageUtils;
+import com.labmanage.module.item.dto.StockBalanceExportQuery;
 import com.labmanage.module.item.dto.StockBalanceQuery;
 import com.labmanage.module.item.dto.StockBalanceWarningUpdateDTO;
 import com.labmanage.module.item.dto.StockMovementQuery;
@@ -59,31 +60,62 @@ public class StockQueryServiceImpl implements StockQueryService {
 
     @Override
     public PageResult<StockBalanceVO> pageBalance(StockBalanceQuery query) {
+        LambdaQueryWrapper<StockBalance> wrapper = balanceWrapperOf(
+                query.getLabId(), query.getLocationId(), query.getSkuId(), query.getCategoryId());
+        if (wrapper == null) {
+            return PageResult.of(List.of(), 0L, query.getPageNum(), query.getPageSize());
+        }
+        IPage<StockBalance> page = balanceMapper.selectPage(PageUtils.toPage(query), wrapper);
+        return PageResult.of(balanceVOsOf(page.getRecords()), page.getTotal(), query.getPageNum(), query.getPageSize());
+    }
+
+    @Override
+    public List<StockBalanceVO> listBalanceForExport(StockBalanceExportQuery query) {
+        LambdaQueryWrapper<StockBalance> wrapper = balanceWrapperOf(
+                query.getLabId(), query.getLocationId(), query.getSkuId(), query.getCategoryId());
+        if (wrapper == null) {
+            return List.of();
+        }
+        return balanceVOsOf(balanceMapper.selectList(wrapper));
+    }
+
+    /**
+     * 余额查询条件（分页与导出共用）；实验室名下无库位、分类下无物料时返回 null 表示结果集为空
+     */
+    private LambdaQueryWrapper<StockBalance> balanceWrapperOf(String labId, String locationId, String skuId,
+                                                              String categoryId) {
         LambdaQueryWrapper<StockBalance> wrapper = new LambdaQueryWrapper<>();
-        if (query.getLocationId() != null && !query.getLocationId().isBlank()) {
-            wrapper.eq(StockBalance::getLocationId, IdUtils.requireId(query.getLocationId(), "库位 ID"));
+        if (locationId != null && !locationId.isBlank()) {
+            wrapper.eq(StockBalance::getLocationId, IdUtils.requireId(locationId, "库位 ID"));
         }
-        if (query.getSkuId() != null && !query.getSkuId().isBlank()) {
-            wrapper.eq(StockBalance::getSkuId, IdUtils.requireId(query.getSkuId(), "物料 ID"));
+        if (skuId != null && !skuId.isBlank()) {
+            wrapper.eq(StockBalance::getSkuId, IdUtils.requireId(skuId, "物料 ID"));
         }
-        if (query.getLabId() != null && !query.getLabId().isBlank()) {
-            List<Long> locationIds = locationIdsOfLab(IdUtils.requireId(query.getLabId(), "实验室 ID"));
+        if (categoryId != null && !categoryId.isBlank()) {
+            List<Long> skuIds = skuIdsOfCategory(IdUtils.requireId(categoryId, "分类 ID"));
+            if (skuIds.isEmpty()) {
+                return null;
+            }
+            wrapper.in(StockBalance::getSkuId, skuIds);
+        }
+        if (labId != null && !labId.isBlank()) {
+            List<Long> locationIds = locationIdsOfLab(IdUtils.requireId(labId, "实验室 ID"));
             if (locationIds.isEmpty()) {
-                return PageResult.of(List.of(), 0L, query.getPageNum(), query.getPageSize());
+                return null;
             }
             wrapper.in(StockBalance::getLocationId, locationIds);
         }
         wrapper.orderByDesc(StockBalance::getUpdateTime).orderByDesc(StockBalance::getId);
-        IPage<StockBalance> page = balanceMapper.selectPage(PageUtils.toPage(query), wrapper);
+        return wrapper;
+    }
 
-        List<StockBalance> balances = page.getRecords();
+    private List<StockBalanceVO> balanceVOsOf(List<StockBalance> balances) {
         Map<Long, MaterialSku> skuMap = skuMapOf(balances.stream().map(StockBalance::getSkuId).collect(Collectors.toSet()));
         Map<Long, StockLocation> locationMap = locationMapOf(
                 balances.stream().map(StockBalance::getLocationId).collect(Collectors.toSet()));
-        List<StockBalanceVO> records = balances.stream()
+        return balances.stream()
                 .map(balance -> toBalanceVO(balance, skuMap.get(balance.getSkuId()), locationMap.get(balance.getLocationId())))
                 .toList();
-        return PageResult.of(records, page.getTotal(), query.getPageNum(), query.getPageSize());
     }
 
     @Override
@@ -94,6 +126,13 @@ public class StockQueryServiceImpl implements StockQueryService {
         }
         if (query.getSkuId() != null && !query.getSkuId().isBlank()) {
             wrapper.eq(StockMovement::getSkuId, IdUtils.requireId(query.getSkuId(), "物料 ID"));
+        }
+        if (query.getCategoryId() != null && !query.getCategoryId().isBlank()) {
+            List<Long> skuIds = skuIdsOfCategory(IdUtils.requireId(query.getCategoryId(), "分类 ID"));
+            if (skuIds.isEmpty()) {
+                return PageResult.of(List.of(), 0L, query.getPageNum(), query.getPageSize());
+            }
+            wrapper.in(StockMovement::getSkuId, skuIds);
         }
         if (query.getDirection() != null) {
             wrapper.eq(StockMovement::getDirection, query.getDirection());
@@ -143,6 +182,13 @@ public class StockQueryServiceImpl implements StockQueryService {
         }
         if (query.getSkuId() != null && !query.getSkuId().isBlank()) {
             wrapper.eq(StockBalance::getSkuId, IdUtils.requireId(query.getSkuId(), "物料 ID"));
+        }
+        if (query.getCategoryId() != null && !query.getCategoryId().isBlank()) {
+            List<Long> skuIds = skuIdsOfCategory(IdUtils.requireId(query.getCategoryId(), "分类 ID"));
+            if (skuIds.isEmpty()) {
+                return PageResult.of(List.of(), 0L, query.getPageNum(), query.getPageSize());
+            }
+            wrapper.in(StockBalance::getSkuId, skuIds);
         }
         if (query.getLabId() != null && !query.getLabId().isBlank()) {
             List<Long> locationIds = locationIdsOfLab(IdUtils.requireId(query.getLabId(), "实验室 ID"));
@@ -287,6 +333,16 @@ public class StockQueryServiceImpl implements StockQueryService {
                         .select(StockLocation::getId)
                         .eq(StockLocation::getLabId, labId))
                 .stream().map(StockLocation::getId).toList();
+    }
+
+    /**
+     * 分类下全部物料 ID（精确匹配 category_id，与物料档案列表筛选口径一致；分类下无物料返回空集合）
+     */
+    private List<Long> skuIdsOfCategory(Long categoryId) {
+        return skuMapper.selectList(new LambdaQueryWrapper<MaterialSku>()
+                        .select(MaterialSku::getId)
+                        .eq(MaterialSku::getCategoryId, categoryId))
+                .stream().map(MaterialSku::getId).toList();
     }
 
     private Map<Long, MaterialSku> skuMapOf(Set<Long> skuIds) {

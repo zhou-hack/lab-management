@@ -12,9 +12,12 @@
         v-model="enabled"
         clearable
         placeholder="全部状态"
-        class="w140"
         @change="pager.search"
       >
+        <el-option
+          label="全部状态"
+          value=""
+        />
         <el-option
           label="启用"
           value="true"
@@ -31,6 +34,32 @@
       >
         新增分类
       </el-button>
+      <el-button
+        v-permission="'item:category:import'"
+        @click="importDialogRef.open()"
+      >
+        批量导入
+      </el-button>
+      <el-dropdown
+        v-permission="'item:category:export'"
+        @command="doExport"
+      >
+        <el-button>
+          导出<el-icon class="el-icon--right">
+            <arrow-down />
+          </el-icon>
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="xlsx">
+              Excel（.xlsx）
+            </el-dropdown-item>
+            <el-dropdown-item command="csv">
+              CSV（.csv）
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
       <el-button @click="pager.search">
         查询
       </el-button>
@@ -179,15 +208,30 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 批量导入分类 -->
+    <ImportDialog
+      ref="importDialogRef"
+      title="批量导入分类"
+      tips="模板 3 列（分类编码 / 分类名称 / 父分类编码）；父分类编码须已在本文件前文或系统中存在，编码冲突的行跳过并记入失败明细。"
+      :upload-fn="importCategories"
+      :template-fn="downloadCategoryImportTemplate"
+      fallback-template-name="物料分类导入模板"
+      @imported="onImported"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { ArrowDown } from '@element-plus/icons-vue'
 import {
   createCategory,
   deleteCategory,
+  downloadCategoryImportTemplate,
+  exportCategories,
+  importCategories,
   listEnabledCategories,
   pageCategories,
   updateCategory,
@@ -196,16 +240,19 @@ import {
 import { usePagedList } from '@/utils/usePagedList'
 import { confirmAction } from '@/utils/confirm'
 import { fmtShanghai } from '@/utils/format'
+import { saveBlobFile } from '@/utils/download'
 import PagerBar from '@/components/PagerBar.vue'
+import ImportDialog from '@/components/ImportDialog.vue'
 
 const keyword = ref('')
 const enabled = ref(null)
+const importDialogRef = ref(null)
 
 const pager = usePagedList((params) =>
   pageCategories({
     ...params,
     keyword: keyword.value || undefined,
-    enabled: enabled.value === null || enabled.value === undefined ? undefined : enabled.value
+    enabled: enabled.value || undefined
   })
 )
 
@@ -315,6 +362,25 @@ async function doDelete(row) {
   } catch {
     // 失败已由全局拦截器提示
   }
+}
+
+async function doExport(format) {
+  try {
+    const file = await exportCategories({
+      keyword: keyword.value || undefined,
+      enabled: enabled.value || undefined,
+      format
+    })
+    saveBlobFile(file, `物料分类导出.${format}`)
+    ElMessage.success('导出成功，文件已开始下载')
+  } catch {
+    // 失败已由全局拦截器提示
+  }
+}
+
+function onImported() {
+  pager.load()
+  loadAllCategories()
 }
 
 onMounted(() => {

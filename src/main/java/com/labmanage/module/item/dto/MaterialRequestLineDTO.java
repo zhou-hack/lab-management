@@ -23,6 +23,11 @@ public record MaterialRequestLineDTO(
         @NotNull(message = "申请量不能为空")
         @DecimalMin(value = "0", inclusive = false, message = "申请量必须大于 0")
         @Digits(integer = 15, fraction = 3, message = "申请量整数最多 15 位、小数最多 3 位")
-        BigDecimal requestedQty
+        BigDecimal requestedQty,
+
+        @Schema(description = "源申领行 ID（PROXY 学生代理代领必填：老师已审核源单的行）",
+                example = "1234567890123456789")
+        @Pattern(regexp = "^\\d{1,19}$", message = "源申领行 ID 格式无效")
+        String sourceLineId
 ) {
 }

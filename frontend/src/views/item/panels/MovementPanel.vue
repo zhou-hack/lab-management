@@ -4,19 +4,42 @@
       <LocationSelect
         v-model="query.locationId"
         placeholder="全部库位"
+        all-option
         @change="pager.search"
       />
+      <el-select
+        v-model="query.categoryId"
+        clearable
+        filterable
+        placeholder="全部分类"
+        @change="pager.search"
+      >
+        <el-option
+          label="全部分类"
+          value=""
+        />
+        <el-option
+          v-for="c in categories"
+          :key="c.id"
+          :label="c.categoryName"
+          :value="c.id"
+        />
+      </el-select>
       <SkuSelect
         v-model="query.skuId"
+        all-option
         @change="pager.search"
       />
       <el-select
         v-model="query.direction"
         clearable
         placeholder="全部方向"
-        class="w140"
         @change="pager.search"
       >
+        <el-option
+          label="全部方向"
+          value=""
+        />
         <el-option
           label="入库 IN"
           value="IN"
@@ -148,8 +171,8 @@
 </template>
 
 <script setup>
-import { onMounted, reactive } from 'vue'
-import { pageMovements } from '@/api/item'
+import { onMounted, reactive, ref } from 'vue'
+import { listEnabledCategories, pageMovements } from '@/api/item'
 import { usePagedList } from '@/utils/usePagedList'
 import { moveDirectionMap } from '@/utils/statusMap'
 import { fmtShanghai, formatQty, shanghaiToUtcIso } from '@/utils/format'
@@ -158,13 +181,15 @@ import StatusTag from '@/components/StatusTag.vue'
 import LocationSelect from '@/components/LocationSelect.vue'
 import SkuSelect from '@/components/SkuSelect.vue'
 
-const query = reactive({ locationId: null, skuId: null, direction: null, stockDocumentId: '', timeRange: null })
+const query = reactive({ locationId: null, categoryId: null, skuId: null, direction: null, stockDocumentId: '', timeRange: null })
+const categories = ref([])
 
 const pager = usePagedList((params) => {
   const range = query.timeRange || []
   return pageMovements({
     ...params,
     locationId: query.locationId || undefined,
+    categoryId: query.categoryId || undefined,
     skuId: query.skuId || undefined,
     direction: query.direction || undefined,
     stockDocumentId: query.stockDocumentId || undefined,
@@ -173,7 +198,18 @@ const pager = usePagedList((params) => {
   })
 })
 
-onMounted(pager.load)
+async function loadCategories() {
+  try {
+    categories.value = await listEnabledCategories()
+  } catch {
+    // 失败已由全局拦截器提示
+  }
+}
+
+onMounted(() => {
+  pager.load()
+  loadCategories()
+})
 
 defineExpose({ refresh: pager.load })
 </script>

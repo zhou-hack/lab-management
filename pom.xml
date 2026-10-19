@@ -112,6 +112,13 @@
             <version>${springdoc.version}</version>
         </dependency>
 
+        <!-- Apache POI（物料/分类 Excel 导入导出） -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

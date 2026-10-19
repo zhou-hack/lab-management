@@ -22,12 +22,13 @@ SET @root_id  := (SELECT id FROM sys_menu WHERE menu_code = 'M_ADMIN_ROOT'      
 UPDATE sys_menu      SET deleted = 1 WHERE id IN (@dir_id, @asset_id);
 UPDATE sys_role_menu SET deleted = 1 WHERE menu_id IN (@dir_id, @asset_id);
 
--- 2. 设备管理页上提为顶级单页
+-- 2. 设备管理页上提为顶级单页（component_key 必须为本地组件白名单键 EquipmentManage，
+--    与种子 3.8 节及前端 router/dynamic.js 一致，误填路由路径会导致菜单被白名单跳过）
 UPDATE sys_menu
 SET parent_id     = @root_id,
     menu_code     = 'C_EQUIPMENT_ADMIN',
     route_path    = '/admin/equipment',
-    component_key = '/admin/equipment',
+    component_key = 'EquipmentManage',
     sort_order    = 20
 WHERE id = @page_id;
 
