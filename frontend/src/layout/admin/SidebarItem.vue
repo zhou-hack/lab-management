@@ -59,14 +59,11 @@ const hasChildren = computed(() => visibleChildren.value.length > 0)
 /* 图标：componentKey 白名单优先，未命中按菜单名关键字兜底（规范 7.4） */
 const ICON_BY_KEY = {
   '/admin/home': HomeFilled,
-  '/admin/equipment': Monitor,
-  '/admin/equipment/model': Grid,
-  '/admin/equipment/asset': Notebook
+  '/admin/equipment': Monitor
 }
 
 const KEYWORD_ICONS = [
   ['首页', HomeFilled],
-  ['管理模块', Monitor],
   ['设备', Monitor],
   ['型号', Grid],
   ['台账', Notebook],

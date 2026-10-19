@@ -125,17 +125,25 @@ const avatarChar = computed(() => {
   return name.charAt(0)
 })
 
-// 后台菜单：取菜单树中 path 以 /admin 开头的子树（目录 M / 页面 C）
+// 后台侧栏（2026-10-19 三权级适配）：顶层 /admin 目录根（如「管理端」）解包为顶级入口，
+// 其余顶层节点（扁平 /admin 页面、用户端 /equipment 页面）原样渲染；
+// F 按钮与 /admin/home 节点不渲染（固定首页由布局自身渲染，规范 7.4）
 const adminMenus = computed(() => {
-  // 固定首页由布局自身渲染，后端下发的 /admin/home 节点去重（规范 7.4）
   const filterTree = (nodes) =>
     (nodes || [])
       .filter((n) => n.menuType !== 'F' && n.visible !== '1')
       .filter((n) => (n.path || n.componentKey) !== '/admin/home')
       .map((n) => ({ ...n, children: filterTree(n.children) }))
       .filter((n) => n.menuType === 'C' || n.children.length)
-  const adminRoot = (store.menus || []).find((m) => (m.path || '').startsWith('/admin'))
-  return adminRoot ? filterTree(adminRoot.children) : filterTree(store.menus)
+  const top = []
+  for (const node of filterTree(store.menus || [])) {
+    if (node.menuType === 'M' && (node.path || '').startsWith('/admin')) {
+      top.push(...node.children)
+    } else {
+      top.push(node)
+    }
+  }
+  return top
 })
 
 async function onUserCommand(command) {

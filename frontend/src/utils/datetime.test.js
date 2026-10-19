@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatSh } from './datetime'
+import { formatSh, toShOffsetIso } from './datetime'
 
 describe('formatSh', () => {
   it('UTC 出参按上海时区展示（三位毫秒 ISO → 墙钟）', () => {
@@ -22,5 +22,21 @@ describe('formatSh', () => {
 
   it('带 +08:00 数字偏移量同样可解析', () => {
     expect(formatSh('2026-10-13T09:00:00+08:00')).toBe('2026-10-13 09:00')
+  })
+})
+
+describe('toShOffsetIso', () => {
+  it('Date 按上海墙钟输出 +08:00 偏移入参', () => {
+    expect(toShOffsetIso(new Date('2026-10-13T01:00:00.000Z'))).toBe('2026-10-13T09:00:00+08:00')
+  })
+
+  it('UTC 16:00 输出为上海次日 00:00（跨日进位）', () => {
+    expect(toShOffsetIso(new Date('2026-10-13T16:00:00.000Z'))).toBe('2026-10-14T00:00:00+08:00')
+  })
+
+  it('非法输入返回 null', () => {
+    expect(toShOffsetIso(null)).toBeNull()
+    expect(toShOffsetIso('2026-10-13T09:00:00Z')).toBeNull()
+    expect(toShOffsetIso(new Date('invalid'))).toBeNull()
   })
 })

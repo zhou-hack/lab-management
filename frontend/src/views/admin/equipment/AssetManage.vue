@@ -37,14 +37,43 @@
         <el-button @click="search">
           查询
         </el-button>
-        <el-button
-          v-permission="'equipment:asset:create'"
-          type="primary"
-          class="asset_manage__toolbar_action"
-          @click="openCreate"
-        >
-          新增台账
-        </el-button>
+        <div class="asset_manage__toolbar_actions">
+          <el-button
+            v-permission="'equipment:asset:create'"
+            type="primary"
+            @click="openCreate"
+          >
+            新增台账
+          </el-button>
+          <el-dropdown
+            v-permission="['equipment:asset:import', 'equipment:asset:export']"
+            trigger="click"
+            @command="onIoCommand"
+          >
+            <el-button :loading="importing">
+              一键导入导出
+              <el-icon class="el-icon--right">
+                <ArrowDown />
+              </el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  v-permission="'equipment:asset:import'"
+                  command="import"
+                >
+                  导入 Excel
+                </el-dropdown-item>
+                <el-dropdown-item
+                  v-permission="'equipment:asset:export'"
+                  command="export"
+                >
+                  导出 Excel
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </div>
     </div>
 
@@ -544,11 +573,20 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 一键导入：隐藏文件选择框，点按钮唤起、选中后立即上传 -->
+    <input
+      ref="importInputRef"
+      class="asset_manage__file_input"
+      type="file"
+      accept=".xlsx,.xls"
+      @change="onImportFileChosen"
+    >
   </div>
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, h, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Files, Monitor } from '@element-plus/icons-vue'
 import {
@@ -556,6 +594,8 @@ import {
   createAsset,
   custodianOptions,
   deleteAsset,
+  exportAssets,
+  importAssets,
   pageAssets,
   pageModels,
   transferAsset,
@@ -713,6 +753,94 @@ async function load() {
 
 function search() {
   load()
+}
+
+/* ---------------- 一键导入 / 导出 ---------------- */
+
+const importInputRef = ref(null)
+const importing = ref(false)
+
+/** 「一键导入导出」下拉动作分发：导入直接唤起文件选择（选中即传），导出直接下载 */
+function onIoCommand(command) {
+  if (command === 'import') {
+    importInputRef.value?.click()
+  } else if (command === 'export') {
+    doExport()
+  }
+}
+
+/** 选中文件后立即导入；行级错误用消息框展示明细（VNode 渲染，避免 HTML 注入） */
+async function onImportFileChosen(event) {
+  const file = event.target.files && event.target.files[0]
+  event.target.value = ''
+  if (!file) {
+    return
+  }
+  importing.value = true
+  try {
+    const result = await importAssets(file)
+    if (result.success > 0) {
+      ElMessage.success(`导入成功 ${result.success} 条`)
+      load()
+    }
+    if (result.failed > 0) {
+      const errorList = h(
+        'ul',
+        {
+          style: {
+            margin: '10px 0 0',
+            padding: '0 0 0 20px',
+            textAlign: 'left',
+            lineHeight: '1.9',
+            maxHeight: '240px',
+            overflowY: 'auto'
+          }
+        },
+        result.errors.map((item, idx) => h('li', { key: idx }, `第 ${item.row} 行：${item.message}`))
+      )
+      await ElMessageBox.alert(
+        errorList,
+        `共解析 ${result.total} 行：成功 ${result.success} 条，失败 ${result.failed} 条`,
+        { type: 'warning', confirmButtonText: '知道了' }
+      ).catch(() => {})
+    }
+    if (result.success === 0 && result.failed === 0) {
+      ElMessage.info('未解析到有效数据行')
+    }
+  } catch {
+    // 失败提示由请求拦截器统一处理
+  } finally {
+    importing.value = false
+  }
+}
+
+/** 按当前筛选条件导出 xlsx 并触发浏览器下载 */
+async function doExport() {
+  try {
+    const params = {}
+    if (query.keyword.trim()) {
+      params.keyword = query.keyword.trim()
+    }
+    if (query.departmentId) {
+      params.departmentId = query.departmentId
+    }
+    if (query.status) {
+      params.status = query.status
+    }
+    const blob = await exportAssets(params)
+    const date = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' })
+      .format(new Date())
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `设备台账_${date}.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  } catch {
+    // 失败提示由请求拦截器统一处理
+  }
 }
 
 /* ---------------- 新增 ---------------- */
@@ -972,13 +1100,19 @@ watch(
   width: 140px;
 }
 
-/* 提高选择器特异性以覆盖 .el-button + .el-button 的相邻 margin */
-.asset_manage__toolbar .asset_manage__toolbar_action {
+/* 操作按钮组右对齐（提高特异性以覆盖 .el-button + .el-button 的相邻 margin） */
+.asset_manage__toolbar .asset_manage__toolbar_actions {
+  display: inline-flex;
   margin-left: auto;
 }
 
 .asset_manage__alert {
   margin-bottom: 16px;
+}
+
+/* 一键导入：隐藏的文件选择框 */
+.asset_manage__file_input {
+  display: none;
 }
 
 /* 加载骨架：模拟分组行位（规范 7.8） */

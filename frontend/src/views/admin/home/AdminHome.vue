@@ -222,8 +222,7 @@ import {
   Document,
   Grid,
   Location,
-  Monitor,
-  Notebook
+  Monitor
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import { pageAssets, pageModels } from '@/api/equipment'
@@ -345,18 +344,11 @@ const deptMax = computed(() => Math.max(1, ...deptAgg.value.map((i) => i.count))
 /* ---------- 功能入口：仅展示当前账号有列表权限的模块 ---------- */
 const ENTRIES = [
   {
-    path: '/admin/equipment/model',
+    path: '/admin/equipment',
     title: '设备管理',
-    sub: '型号码与规格参数 · 分类目录维护',
-    icon: Grid,
-    perms: ['equipment:model:list']
-  },
-  {
-    path: '/admin/equipment/asset',
-    title: '设备台账',
-    sub: '资产登记 · 迁移 · 定级',
-    icon: Notebook,
-    perms: ['equipment:asset:list']
+    sub: '型号规格 · 设备台账 · 分类目录',
+    icon: Monitor,
+    perms: ['equipment:model:list', 'equipment:asset:list']
   }
 ]
 
