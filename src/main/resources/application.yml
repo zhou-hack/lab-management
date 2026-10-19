@@ -12,6 +12,8 @@ spring:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
+    # record VO（无 setter）按构造参数名自动映射，JOIN 查询直接返回 record
+    arg-name-based-constructor-auto-mapping: true
   global-config:
     banner: false
   type-handlers-package: com.labmanage.common.handler
