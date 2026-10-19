@@ -154,10 +154,8 @@ VALUES
 (1101, 1, 1001, 1), (1102, 1, 1002, 1), (1103, 1, 1003, 1),
 (1104, 1, 1004, 1), (1105, 1, 1005, 1);
 
--- 管理员数据范围：ALL + WRITE（WRITE 含 READ；无目标 ID，scope_target_id 归一生成列=0）
-INSERT INTO sys_user_data_scope (id, user_id, scope_type, department_id, campus_id, building_id,
-                                 lab_id, access_mode, enabled)
-VALUES (1, 1, 'ALL', NULL, NULL, NULL, NULL, 'WRITE', 1);
+-- 管理员数据范围（ALL + WRITE，id=1）由独立脚本 sys_scope.sql 提供，本文件不重复插入，
+-- 避免全新建库按序执行时主键冲突（1062）。
 
 -- ############################################################################
 -- 模块二：统一单据与审批（实施分组 B）
@@ -798,9 +796,6 @@ INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component
 -- 页面：物料工作台（v0.1 整合为单页工作台 ItemWorkspace，内部分页签覆盖原 11 个页面入口；
 --       原页面菜单 153-158 / 180-183 停用保留，ACTION 按钮权限不受影响）
 (152, 151, 'ITEM_WORKSPACE',   '物料工作台', '/admin/item/workspace', 'ItemWorkspace', NULL, 'PAGE', 1, 1),
--- 页面：物料代领（2026-10-17 产品定稿：面向被授权学生=学生代理；仅 item:request:list(122)，
---       领取操作由后端按 assistant_grant 有效授权动态放行；未授权学生不可见/被拒）
-(205, 151, 'ITEM_ASSISTANT_PICKUP', '物料代领', '/admin/item/assistant_pickup', 'ItemAssistantPickup', 122, 'PAGE', 2, 1),
 (153, 151, 'ITEM_MATERIAL',    '物料档案', '/admin/item/material',    NULL, NULL, 'PAGE', 2, 0),
 (154, 151, 'ITEM_LOCATION',    '库位管理', '/admin/item/location',    NULL, NULL, 'PAGE', 3, 0),
 (155, 151, 'ITEM_DOCUMENT',    '库存单据', '/admin/item/document',    NULL, NULL, 'PAGE', 4, 0),
@@ -1085,6 +1080,9 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code, e
 -- ----------------------------------------------------------------------------
 INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
 -- 页面：申领管理 / 领用定额 / 物料结算 / 盘点管理（v0.1 并入物料工作台，停用保留）
+-- 页面：物料代领（2026-10-17 产品定稿：面向被授权学生=学生代理；仅 item:request:list(122)，
+--       领取操作由后端按 assistant_grant 有效授权动态放行；未授权学生不可见/被拒）
+(205, 151, 'ITEM_ASSISTANT_PICKUP', '物料代领', '/admin/item/assistant_pickup', 'ItemAssistantPickup', 122, 'PAGE', 2, 1),
 (180, 151, 'ITEM_REQUEST',     '申领管理', '/admin/item/request',     NULL, NULL, 'PAGE', 8,  0),
 (181, 151, 'ITEM_QUOTA',        '领用定额', '/admin/item/quota',        NULL, NULL, 'PAGE', 9,  0),
 (182, 151, 'ITEM_SETTLEMENT',   '物料结算', '/admin/item/settlement',   NULL, NULL, 'PAGE', 10, 0),
