@@ -36,8 +36,8 @@
 -- 7. 含可空列的组合唯一：用生成列归一
 --    （参照 stock_location.lab_key、stocktake.active_key 模式）。
 -- 8. 种子数据编号段（防冲突，勿占用他人段；新段先向数据库组长登记再使用）：
---      权限     sys_permission：      item 101-137，equipment 141-154，space 155-159，booking 3001-3004；
---      菜单     sys_menu：            item 151-199/205，equipment 202/204（200/203 已弃用），space 1001-1005，booking 3000-3003；
+--      权限     sys_permission：      item 101-137，equipment 141-154，space 155-159，booking 3001-3005；
+--      菜单     sys_menu：            item 151-199/205，equipment 202/204（200/203 已弃用），space 1001-1005，booking 3000-3004；
 --      权限绑定 sys_role_permission： item 201-237（学生代理 238-239），space 251-259，equipment 515-528，booking 3001-3010；
 --      菜单绑定 sys_role_menu：       item 301-349（学生代理 350），equipment 608/610（606/609 已弃用），space 1101-1105，booking 3001-3005。
 --    权限码规范 `模块:资源:操作`（如 item:material:create）；
@@ -1208,36 +1208,45 @@ CREATE TABLE lab_slot (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='场地占用槽（仅未释放记录参与冲突校验）';
 
 -- ----------------------------------------------------------------------------
--- 6.3 booking 权限（3001-3004，module_code='booking'）
+-- 6.3 booking 权限（3001-3005，module_code='booking'）
 -- ----------------------------------------------------------------------------
 INSERT INTO sys_permission (id, permission_code, permission_name, module_code, enabled) VALUES
 (3001, 'booking:lab:create',  '场地预约申请', 'booking', 1),
 (3002, 'booking:lab:list',    '场地预约记录', 'booking', 1),
 (3003, 'booking:lab:cancel',  '场地预约撤销', 'booking', 1),
-(3004, 'booking:lab:approve', '场地预约审批', 'booking', 1);
+(3004, 'booking:lab:approve', '场地预约审批', 'booking', 1),
+(3005, 'booking:lab:view',    '场地预约只读', 'booking', 1);
 
 -- ----------------------------------------------------------------------------
--- 6.4 booking 菜单（3000-3003；管理端目录+两页，用户端单页）
+-- 6.4 booking 菜单（3000-3004；管理端目录+两页，教师用户端单页 3003，学生只读页 3004）
+--     3004 与 3003 同一路径 /booking/labs、同一本地组件，但挂只读权限 3005，
+--     后端按角色下发——教师收到 3003，学生仅收到 3004。
 -- ----------------------------------------------------------------------------
 INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
 (3000, NULL, 'booking',          '场地预约', '/admin/booking',          NULL,              NULL, 'DIRECTORY', 30, 1),
 (3001, 3000, 'booking_all',      '预约管理', '/admin/booking/labs',     'BookingAdminList', 3002, 'PAGE',      1,  1),
 (3002, 3000, 'booking_approval', '预约审批', '/admin/booking/approval', 'BookingApproval',  3004, 'PAGE',      2,  1),
-(3003, NULL, 'booking_user',     '场地预约', '/booking/labs',           'BookingUserList',  3001, 'PAGE',      10, 1);
+(3003, NULL, 'booking_user',     '场地预约', '/booking/labs',           'BookingUserList',  3001, 'PAGE',      10, 1),
+(3004, NULL, 'booking_user_view','预约情况', '/booking/labs',           'BookingUserList',  3005, 'PAGE',      11, 1);
 
 -- ----------------------------------------------------------------------------
--- 6.5 角色绑定：ADMIN 全部（3001-3004 + 菜单 3000-3002）；
---     TEACHER/STUDENT 申请/记录/撤销（3001-3003 + 菜单 3003）
+-- 6.5 角色绑定（职责边界，2026-10-17 定稿；3005 只读三角色均授）
+--     ADMIN   仅 list+approve（3002/3004 + 菜单 3000-3002）：全量查看/统计/审批，不发起不撤销
+--     TEACHER create/list/cancel（3001-3003 + 菜单 3003）：发起上报/看本人结果/撤销
+--     STUDENT 仅 view 只读（3005 + 菜单 3004）：看预约情况/批准驳回结果/驳回原因，
+--             不能发起/撤销/审批
 -- ----------------------------------------------------------------------------
 INSERT INTO sys_role_permission (id, role_id, permission_id, enabled) VALUES
-(3001, 1, 3001, 1), (3002, 1, 3002, 1), (3003, 1, 3003, 1), (3004, 1, 3004, 1),
+(3001, 1, 3002, 1), (3002, 1, 3004, 1),
 (3005, 2, 3001, 1), (3006, 2, 3002, 1), (3007, 2, 3003, 1),
-(3008, 3, 3001, 1), (3009, 3, 3002, 1), (3010, 3, 3003, 1);
+(3008, 3, 3005, 1),
+(3009, 1, 3005, 1),
+(3010, 2, 3005, 1);
 
 INSERT INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
 (3001, 1, 3000, 1), (3002, 1, 3001, 1), (3003, 1, 3002, 1),
 (3004, 2, 3003, 1),
-(3005, 3, 3003, 1);
+(3005, 3, 3004, 1);
 
 -- ############################################################################
 -- 附注：v0.1 分支整合定稿
