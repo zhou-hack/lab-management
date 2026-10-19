@@ -1,6 +1,6 @@
 # 场地预约「权级流程」数据库部署说明
 
-- 对应脚本：`sql/booking_flow_deploy.sql`（幂等，可重复执行）
+- 对应脚本：`sql/migrations/booking_flow_deploy.sql`（幂等，可重复执行）
 - 版本日期：2026-10-17
 - 适用环境：dev、test 各自独立数据库，分别执行一次
 - 配套代码：`dev/space` 分支提交 `4a95035` 及之后版本（后端必须先于或同时部署）
@@ -38,7 +38,7 @@ mysqldump -u root -p --single-transaction --routines --triggers 目标库名 > b
 
 必须已存在：`sys_role`、`sys_permission`、`sys_menu`、`sys_role_permission`、
 `sys_role_menu`（RBAC）以及 `lab_booking`、`lab_slot`（预约模块，
-见 `sql/booking_deploy.sql`）。缺基础表脚本会直接报错。
+见 `sql/migrations/booking_deploy.sql`）。缺基础表脚本会直接报错。
 
 ### 3. 确认固定主键未被占用（预期全部为空）
 
@@ -65,7 +65,7 @@ SELECT id FROM sys_department WHERE id = 1;
 ## 三、执行（务必指定 utf8mb4）
 
 ```bash
-mysql -u root -p --default-character-set=utf8mb4 目标库名 < sql/booking_flow_deploy.sql
+mysql -u root -p --default-character-set=utf8mb4 目标库名 < sql/migrations/booking_flow_deploy.sql
 ```
 
 注意：不加 `--default-character-set=utf8mb4` 时，Windows 中文环境下菜单名
