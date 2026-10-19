@@ -80,3 +80,67 @@ export function transferAsset(id, data) {
 export function classifyAsset(id, data) {
   return request.put(`/equipment/assets/${id}/classification`, data)
 }
+
+/** 台账导出（xlsx，按当前筛选全量导出，返回 Blob） */
+export function exportAssets(params) {
+  return request.get('/equipment/assets/export', { params, responseType: 'blob' })
+}
+
+/** 台账导入（xlsx，导出文件即模板） */
+export function importAssets(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post('/equipment/assets/import', formData, { timeout: 60000 })
+}
+
+/* ---------------- 设备使用申请（三权级两级审批） ---------------- */
+
+/** 提交使用申请（学生须指定审批教师；教师普通设备免初审） */
+export function applyBooking(data) {
+  return request.post('/equipment/bookings', data)
+}
+
+/** 本人申请分页 */
+export function pageMyBookings(params) {
+  return request.get('/equipment/bookings/my', { params })
+}
+
+/** 撤销本人申请（仅借出前） */
+export function cancelBooking(id, data) {
+  return request.put(`/equipment/bookings/${id}/cancel`, data || {})
+}
+
+/** 教师待初审分页 */
+export function pageTeacherPending(params) {
+  return request.get('/equipment/bookings/teacher_pending', { params })
+}
+
+/** 教师初审（approve：普通即生效、贵重转终审；reject 意见必填） */
+export function teacherReview(id, data) {
+  return request.put(`/equipment/bookings/${id}/teacher_review`, data)
+}
+
+/** 全部申请分页（管理员） */
+export function pageAllBookings(params) {
+  return request.get('/equipment/bookings', { params })
+}
+
+/** 管理员终审/代批 */
+export function adminReview(id, data) {
+  return request.put(`/equipment/bookings/${id}/admin_review`, data)
+}
+
+/** 借出发放登记（设备置借出中） */
+export function checkoutBooking(id) {
+  return request.put(`/equipment/bookings/${id}/checkout`)
+}
+
+/** 归还登记（完好恢复空闲；损坏备注必填转维护中） */
+export function returnBooking(id, data) {
+  return request.put(`/equipment/bookings/${id}/return`, data)
+}
+
+/** 审批教师下拉（TEACHER 角色启用用户） */
+export function teacherOptions() {
+  return request.get('/equipment/bookings/teacher_options')
+}

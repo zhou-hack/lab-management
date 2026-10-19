@@ -425,25 +425,46 @@ const entries = computed(() => [
     path: openPaths.value.has('/admin/space/labs') ? '/admin/space/labs' : ''
   },
   {
-    name: '设备台账',
-    desc: '资产登记 · 迁移 · 定级',
-    icon: Notebook,
+    name: '设备管理',
+    desc: '型号规格 · 设备台账 · 分类目录',
+    icon: Monitor,
     tone: 'brand',
-    path: openPaths.value.has('/admin/equipment/asset') ? '/admin/equipment/asset' : ''
+    path: openPaths.value.has('/admin/equipment') ? '/admin/equipment' : ''
   },
   {
-    name: '设备型号',
-    desc: '型号码与规格参数',
-    icon: Grid,
-    tone: 'brand',
-    path: openPaths.value.has('/admin/equipment/model') ? '/admin/equipment/model' : ''
-  },
-  {
-    name: '设备分类',
-    desc: '多级分类树维护',
+    name: '设备目录',
+    desc: '浏览在架设备并发起使用申请',
     icon: Collection,
     tone: 'brand',
-    path: openPaths.value.has('/admin/equipment/category') ? '/admin/equipment/category' : ''
+    path: openPaths.value.has('/equipment/directory') ? '/equipment/directory' : ''
+  },
+  {
+    name: '我的设备申请',
+    desc: '申请进度 · 撤销 · 归还确认',
+    icon: Notebook,
+    tone: 'brand',
+    path: openPaths.value.has('/equipment/bookings/my') ? '/equipment/bookings/my' : ''
+  },
+  {
+    name: '设备申请初审',
+    desc: '教师初审学生设备申请',
+    icon: Grid,
+    tone: 'brand',
+    path: openPaths.value.has('/equipment/bookings/teacher') ? '/equipment/bookings/teacher' : ''
+  },
+  {
+    name: '设备使用审批',
+    desc: '终审代批 · 借出归还登记',
+    icon: DataLine,
+    tone: 'warn',
+    path: openPaths.value.has('/admin/equipment/bookings') ? '/admin/equipment/bookings' : ''
+  },
+  {
+    name: '物料代领',
+    desc: '学生代理领取已批物料',
+    icon: Box,
+    tone: 'warn',
+    path: openPaths.value.has('/admin/item/assistant_pickup') ? '/admin/item/assistant_pickup' : ''
   },
   {
     name: '物料工作台',
@@ -452,8 +473,6 @@ const entries = computed(() => [
     tone: 'warn',
     path: openPaths.value.has('/admin/item/workspace') ? '/admin/item/workspace' : ''
   },
-  { name: '器材借用', desc: '浏览并提交器材预约', icon: Tools, tone: 'muted', path: '' },
-  { name: '使用记录', desc: '借出归还与拍照留痕', icon: DataLine, tone: 'muted', path: '' },
   { name: '通知消息', desc: '审批与催办提醒', icon: Bell, tone: 'muted', path: '' }
 ].filter((entry) => entry.path || entry.tone === 'muted'))
 

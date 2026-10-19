@@ -30,8 +30,8 @@ import com.labmanage.module.equipment.mapper.EquipmentUsageMapper;
 import com.labmanage.module.equipment.service.BookingService;
 import com.labmanage.module.equipment.vo.BookingVO;
 import com.labmanage.module.equipment.vo.TeacherOptionVO;
-import com.labmanage.roles.user.entity.SysUser;
-import com.labmanage.roles.user.mapper.SysUserMapper;
+import com.labmanage.roles.entity.SysUser;
+import com.labmanage.roles.mapper.SysUserMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

@@ -24,9 +24,15 @@ const viewModules = {
   BookingAdminList: () => import('@/views/admin/booking/BookingList.vue'),
   BookingApproval: () => import('@/views/admin/booking/BookingApproval.vue'),
   BookingUserList: () => import('@/views/booking/BookingList.vue'),
-  // equipment 模块（型号/台账两菜单共用整合页，分类并入型号面板抽屉）
+  // equipment 模块（单页定稿：菜单 EquipmentManage；旧两菜单 key 保留兼容）
+  EquipmentManage: () => import('@/views/admin/equipment/EquipmentManage.vue'),
   EquipmentModel: () => import('@/views/admin/equipment/EquipmentManage.vue'),
   EquipmentAsset: () => import('@/views/admin/equipment/EquipmentManage.vue'),
+  // equipment 三权级设备使用申请（用户端三页 + 管理端审批页）
+  EquipmentDirectory: () => import('@/views/equipment/EquipmentDirectory.vue'),
+  MyEquipmentBookings: () => import('@/views/equipment/MyEquipmentBookings.vue'),
+  EquipmentTeacherApprove: () => import('@/views/equipment/EquipmentTeacherApprove.vue'),
+  EquipmentBookingManage: () => import('@/views/admin/equipment/EquipmentBookingManage.vue'),
   // item 模块（单工作台形态，内部分页签）
   ItemWorkspace: () => import('@/views/item/ItemWorkspace.vue')
 }
