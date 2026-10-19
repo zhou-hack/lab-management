@@ -6,8 +6,10 @@ import com.labmanage.module.equipment.dto.AssetCreateRequest;
 import com.labmanage.module.equipment.dto.AssetPageQuery;
 import com.labmanage.module.equipment.dto.AssetTransferRequest;
 import com.labmanage.module.equipment.dto.AssetUpdateRequest;
+import com.labmanage.module.equipment.vo.AssetImportResultVO;
 import com.labmanage.module.equipment.vo.AssetVO;
 import com.labmanage.module.equipment.vo.CustodianOptionVO;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -52,4 +54,15 @@ public interface AssetService {
      * 保管人下拉选项（全部启用用户）
      */
     List<CustodianOptionVO> custodianOptions();
+
+    /**
+     * 台账导出（xlsx，按查询条件全量导出；权限收敛规则与分页查询一致）
+     */
+    byte[] export(AssetPageQuery query);
+
+    /**
+     * 台账导入（xlsx；导出文件即模板，按表头列名解析；
+     * 行级校验错误跳过并报告，有效行批量入库）
+     */
+    AssetImportResultVO importAssets(MultipartFile file);
 }
