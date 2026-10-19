@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.labmanage.common.exception.BusinessException;
 import com.labmanage.common.result.PageResult;
+import com.labmanage.module.item.dto.StockBalanceExportQuery;
 import com.labmanage.module.item.dto.StockBalanceQuery;
 import com.labmanage.module.item.dto.StockBalanceWarningUpdateDTO;
 import com.labmanage.module.item.dto.StockWarningQuery;
@@ -71,6 +72,7 @@ class StockQueryServiceImplTest {
         MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "");
         TableInfoHelper.initTableInfo(assistant, StockBalance.class);
         TableInfoHelper.initTableInfo(assistant, com.labmanage.module.item.entity.StockLocation.class);
+        TableInfoHelper.initTableInfo(assistant, MaterialSku.class);
     }
 
     private StockBalance balance(long id, long locationId, long skuId, String qty, String safe, String target) {
@@ -155,6 +157,91 @@ class StockQueryServiceImplTest {
         doReturn(List.of()).when(locationMapper).selectList(any());
 
         PageResult<StockBalanceVO> result = service.pageBalance(query);
+
+        assertTrue(result.records().isEmpty());
+        assertEquals(0L, result.total());
+        verify(balanceMapper, never()).selectPage(any(), any());
+    }
+
+    // ==================== 物料分类筛选 ====================
+
+    private MaterialSku skuOfCategory(long id, long categoryId) {
+        MaterialSku sku = new MaterialSku();
+        sku.setId(id);
+        sku.setCategoryId(categoryId);
+        return sku;
+    }
+
+    @Test
+    void pageBalanceFiltersByCategorySkuIds() {
+        StockBalanceQuery query = new StockBalanceQuery();
+        query.setCategoryId("50");
+        doReturn(List.of(skuOfCategory(1, 50), skuOfCategory(2, 50))).when(skuMapper).selectList(any());
+        Page<StockBalance> page = new Page<>(1, 20);
+        page.setRecords(List.of(balance(1, 10, 1, "15", "10", "20")));
+        page.setTotal(1);
+        doReturn(page).when(balanceMapper).selectPage(any(), any());
+        doReturn(List.of()).when(skuMapper).selectByIds(any());
+
+        PageResult<StockBalanceVO> result = service.pageBalance(query);
+
+        assertEquals(1L, result.total());
+        assertEquals(1, result.records().size());
+        assertEquals("1", result.records().get(0).skuId());
+    }
+
+    @Test
+    void pageBalanceShortCircuitsWhenCategoryHasNoSkus() {
+        StockBalanceQuery query = new StockBalanceQuery();
+        query.setCategoryId("99");
+        doReturn(List.of()).when(skuMapper).selectList(any());
+
+        PageResult<StockBalanceVO> result = service.pageBalance(query);
+
+        assertTrue(result.records().isEmpty());
+        assertEquals(0L, result.total());
+        verify(balanceMapper, never()).selectPage(any(), any());
+    }
+
+    @Test
+    void listBalanceForExportFiltersByCategorySkuIds() {
+        StockBalanceExportQuery query = new StockBalanceExportQuery();
+        query.setCategoryId("50");
+        doReturn(List.of(skuOfCategory(2, 50))).when(skuMapper).selectList(any());
+        doReturn(List.of(balance(1, 10, 2, "8", "10", "20"))).when(balanceMapper).selectList(any());
+        doReturn(List.of()).when(skuMapper).selectByIds(any());
+        doReturn(List.of()).when(locationMapper).selectByIds(any());
+
+        List<StockBalanceVO> result = service.listBalanceForExport(query);
+
+        assertEquals(1, result.size());
+        assertEquals("2", result.get(0).skuId());
+    }
+
+    @Test
+    void pageWarningFiltersByCategorySkuIds() {
+        StockWarningQuery query = new StockWarningQuery();
+        query.setCategoryId("50");
+        doReturn(List.of(skuOfCategory(1, 50))).when(skuMapper).selectList(any());
+        Page<StockBalance> page = new Page<>(1, 20);
+        page.setRecords(List.of(balance(1, 10, 1, "5", "10", "20")));
+        page.setTotal(1);
+        doReturn(page).when(balanceMapper).selectPage(any(), any());
+        doReturn(List.of()).when(skuMapper).selectByIds(any());
+
+        PageResult<StockWarningVO> result = service.pageWarning(query);
+
+        assertEquals(1L, result.total());
+        assertEquals("1", result.records().get(0).skuId());
+    }
+
+    @Test
+    void pageWarningShortCircuitsWhenCategoryHasNoSkus() {
+        StockWarningQuery query = new StockWarningQuery();
+        query.setCategoryId("99");
+        doReturn(List.of()).when(skuMapper).selectList(any());
+
+        PageResult<StockWarningVO> result = service.pageWarning(query);
 
         assertTrue(result.records().isEmpty());
         assertEquals(0L, result.total());

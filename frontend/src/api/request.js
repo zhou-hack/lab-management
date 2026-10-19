@@ -1,16 +1,18 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { getToken } from '@/utils/token'
+import { resolveFileName } from '@/utils/download'
 
 /**
  * 统一 Axios 实例：
  * - baseURL 固定 /api/v1（与开发代理前缀一致）
  * - 请求拦截注入 Authorization: Bearer <token>
  * - 响应拦截解包 code/msg/data；401 清状态跳登录；403 提示无权限
+ * - blob 下载若收到 JSON 错误体（后端在响应提交前抛错），解析后走统一错误流程
  */
 const service = axios.create({
   baseURL: '/api/v1',
-  timeout: 10000
+  timeout: 60000
 })
 
 service.interceptors.request.use((config) => {
@@ -21,8 +23,43 @@ service.interceptors.request.use((config) => {
   return config
 })
 
+/**
+ * 统一错误码处理：40100 跳登录、40300 无权限、其余弹 msg，返回 reject
+ */
+function rejectWithError(code, msg) {
+  if (code === 40100) {
+    return handleUnauthorized(msg)
+  }
+  const message = msg || (code === 40300 ? '无权限' : '请求失败')
+  ElMessage.error(message)
+  return Promise.reject(new Error(message))
+}
+
+/**
+ * blob 响应是否为后端 JSON 错误体（下载接口失败时统一异常处理返回 JSON）
+ */
+function isJsonBlob(data) {
+  return data instanceof Blob && data.type && data.type.includes('application/json')
+}
+
 service.interceptors.response.use(
   (response) => {
+    if (response.config.responseType === 'blob') {
+      if (isJsonBlob(response.data)) {
+        return response.data
+          .text()
+          .then((text) => {
+            try {
+              const body = JSON.parse(text)
+              return rejectWithError(body.code, body.msg)
+            } catch {
+              return rejectWithError()
+            }
+          })
+      }
+      const disposition = response.headers && response.headers['content-disposition']
+      return { blob: response.data, fileName: resolveFileName(disposition, '') }
+    }
     const body = response.data
     if (!body || typeof body !== 'object' || !('code' in body)) {
       return body
@@ -30,15 +67,7 @@ service.interceptors.response.use(
     if (body.code === 0) {
       return body.data
     }
-    if (body.code === 40100) {
-      return handleUnauthorized(body.msg)
-    }
-    if (body.code === 40300) {
-      ElMessage.error(body.msg || '无权限')
-      return Promise.reject(new Error(body.msg || '无权限'))
-    }
-    ElMessage.error(body.msg || '请求失败')
-    return Promise.reject(new Error(body.msg || '请求失败'))
+    return rejectWithError(body.code, body.msg)
   },
   (error) => {
     const status = error.response && error.response.status
@@ -48,6 +77,16 @@ service.interceptors.response.use(
     if (status === 403) {
       ElMessage.error('无权限')
       return Promise.reject(error)
+    }
+    if (error.response && isJsonBlob(error.response.data)) {
+      return error.response.data.text().then((text) => {
+        try {
+          const body = JSON.parse(text)
+          return rejectWithError(body.code, body.msg)
+        } catch {
+          return rejectWithError()
+        }
+      })
     }
     const isTimeout = error.code === 'ECONNABORTED' || (error.message || '').includes('timeout')
     ElMessage.error(isTimeout ? '请求超时，请重试' : '网络异常，请稍后重试')

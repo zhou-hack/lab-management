@@ -14,6 +14,7 @@ import com.labmanage.module.item.entity.StockDocumentLine;
 import com.labmanage.module.item.entity.StockLocation;
 import com.labmanage.module.item.enums.MaterialRequestStatus;
 import com.labmanage.module.item.enums.MovementType;
+import com.labmanage.module.item.enums.RequestType;
 import com.labmanage.module.item.enums.StockDocumentStatus;
 import com.labmanage.module.item.mapper.MaterialQuotaMapper;
 import com.labmanage.module.item.mapper.MaterialRequestLineMapper;
@@ -22,6 +23,7 @@ import com.labmanage.module.item.mapper.MaterialSkuMapper;
 import com.labmanage.module.item.mapper.StockDocumentLineMapper;
 import com.labmanage.module.item.mapper.StockDocumentMapper;
 import com.labmanage.module.item.mapper.StockLocationMapper;
+import com.labmanage.module.item.mapper.SysUserRefMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -35,6 +37,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -42,12 +45,13 @@ import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * 物料申领服务单元测试（纯 Mockito：定额快照、审批校验、实发出库单生成）
+ * 物料申领服务单元测试（纯 Mockito：定额快照、两级审核、代理代领校验、实发出库单生成）
  */
 @ExtendWith(MockitoExtension.class)
 class MaterialRequestServiceImplTest {
@@ -72,6 +76,9 @@ class MaterialRequestServiceImplTest {
 
     @Mock
     private StockDocumentLineMapper documentLineMapper;
+
+    @Mock
+    private SysUserRefMapper sysUserRefMapper;
 
     @InjectMocks
     private MaterialRequestServiceImpl service;
@@ -114,19 +121,36 @@ class MaterialRequestServiceImplTest {
         return line;
     }
 
+    /** 本人申领创建 DTO（SELF） */
+    private MaterialRequestCreateDTO selfDto(String labBookingId, String scheduleOccurrenceId,
+                                             String offeringId, Integer participantCount,
+                                             Integer periodCount, String purpose,
+                                             List<MaterialRequestLineDTO> lines) {
+        return new MaterialRequestCreateDTO(null, "9", null, null, offeringId,
+                labBookingId, scheduleOccurrenceId, participantCount, periodCount, purpose,
+                "SELF", null, lines);
+    }
+
+    /** 学生代理代领创建 DTO（PROXY，单行） */
+    private MaterialRequestCreateDTO proxyDto(String sourceRequestId, String operatorId,
+                                              String sourceLineId, String skuId, String requestedQty) {
+        return new MaterialRequestCreateDTO(null, null, operatorId, null, null, null, null,
+                null, null, "代同学领取实验耗材", "PROXY", sourceRequestId,
+                List.of(new MaterialRequestLineDTO(skuId, new BigDecimal(requestedQty), sourceLineId)));
+    }
+
     private BusinessException assertBizError(int expectedCode, Runnable action) {
         BusinessException ex = assertThrows(BusinessException.class, action::run);
         assertEquals(expectedCode, ex.getCode());
         return ex;
     }
 
-    // ------------------------------------------------------------------ create
+    // ------------------------------------------------------------------ create（SELF）
 
     @Test
     void createRejectsBookingAndOccurrenceTogether() {
-        MaterialRequestCreateDTO dto = new MaterialRequestCreateDTO(
-                null, null, null, null, null, "300", "400",
-                30, 4, "实验课", List.of(new MaterialRequestLineDTO("1", BigDecimal.TEN)));
+        MaterialRequestCreateDTO dto = selfDto("300", "400", null, 30, 4, "实验课",
+                List.of(new MaterialRequestLineDTO("1", BigDecimal.TEN, null)));
 
         BusinessException ex = assertBizError(40000, () -> service.create(dto));
 
@@ -136,11 +160,9 @@ class MaterialRequestServiceImplTest {
 
     @Test
     void createRejectsDuplicateSkuLines() {
-        MaterialRequestCreateDTO dto = new MaterialRequestCreateDTO(
-                null, null, null, null, null, null, null,
-                30, 4, "实验课", List.of(
-                new MaterialRequestLineDTO("1", BigDecimal.TEN),
-                new MaterialRequestLineDTO("1", BigDecimal.ONE)));
+        MaterialRequestCreateDTO dto = selfDto(null, null, null, 30, 4, "实验课", List.of(
+                new MaterialRequestLineDTO("1", BigDecimal.TEN, null),
+                new MaterialRequestLineDTO("1", BigDecimal.ONE, null)));
 
         BusinessException ex = assertBizError(40000, () -> service.create(dto));
 
@@ -165,9 +187,8 @@ class MaterialRequestServiceImplTest {
         hazardous.setIsHazardous(1);
 
         when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(hazardous));
-        MaterialRequestCreateDTO dto = new MaterialRequestCreateDTO(
-                null, "9", null, null, "66", null, null,
-                30, 4, "有机化学实验", List.of(new MaterialRequestLineDTO("1", BigDecimal.TEN)));
+        MaterialRequestCreateDTO dto = selfDto(null, null, "66", 30, 4, "有机化学实验",
+                List.of(new MaterialRequestLineDTO("1", BigDecimal.TEN, null)));
 
         String id = service.create(dto);
 
@@ -181,22 +202,156 @@ class MaterialRequestServiceImplTest {
         assertEquals(1, saved.getRequiresExtraApproval());
         assertEquals(1, saved.getRequiresDualSign());
         // 批量插入前须预赋雪花 ID
-        org.junit.jupiter.api.Assertions.assertNotNull(saved.getId());
+        assertNotNull(saved.getId());
     }
 
-    // ----------------------------------------------------------------- approve
+    // ------------------------------------------------------------- create（PROXY 代领）
 
     @Test
-    void approveRejectsWhenNotDraft() {
-        when(requestMapper.selectById(555L)).thenReturn(request(555L, MaterialRequestStatus.APPROVED));
+    void proxyRejectsMissingSourceRequest() {
+        BusinessException ex = assertBizError(40000,
+                () -> service.create(proxyDto(null, "8", "11", "1", "5")));
 
-        assertBizError(40900, () -> service.approve("555", null));
-
-        verify(requestMapper, never()).casApprove(any(Long.class));
+        assertTrue(ex.getMessage().contains("不能新建空白申领"));
+        verifyNoInteractions(requestMapper);
     }
 
     @Test
-    void approveRejectsQtyOverRequest() {
+    void proxyRejectsSourceNotTeacherApproved() {
+        when(requestMapper.selectById(777L))
+                .thenReturn(selfWithStatus(777L, MaterialRequestStatus.APPROVED));
+
+        BusinessException ex = assertBizError(40000,
+                () -> service.create(proxyDto("777", "8", "11", "1", "5")));
+
+        assertTrue(ex.getMessage().contains("不可代领"));
+    }
+
+    private MaterialRequest selfWithStatus(long id, MaterialRequestStatus status) {
+        MaterialRequest source = request(id, status);
+        source.setRequestType(RequestType.SELF);
+        return source;
+    }
+
+    @Test
+    void proxyRejectsSourceNotSelfType() {
+        MaterialRequest proxyOrder = request(777L, MaterialRequestStatus.TEACHER_APPROVED);
+        proxyOrder.setRequestType(RequestType.PROXY);
+        when(requestMapper.selectById(777L)).thenReturn(proxyOrder);
+
+        BusinessException ex = assertBizError(40000,
+                () -> service.create(proxyDto("777", "8", "11", "1", "5")));
+
+        assertTrue(ex.getMessage().contains("不可代领"));
+    }
+
+    @Test
+    void proxyRejectsMissingOperator() {
+        when(requestMapper.selectById(777L))
+                .thenReturn(selfWithStatus(777L, MaterialRequestStatus.TEACHER_APPROVED));
+
+        assertBizError(40000, () -> service.create(proxyDto("777", null, "11", "1", "5")));
+    }
+
+    @Test
+    void proxyRejectsMissingSourceLine() {
+        when(requestMapper.selectById(777L))
+                .thenReturn(selfWithStatus(777L, MaterialRequestStatus.TEACHER_APPROVED));
+        when(requestLineMapper.selectByRequestId(777L))
+                .thenReturn(List.of(requestLine(11L, 1L, "10", "10", "2")));
+
+        BusinessException ex = assertBizError(40400,
+                () -> service.create(proxyDto("777", "8", "99", "1", "5")));
+
+        assertTrue(ex.getMessage().contains("源申领行不存在"));
+    }
+
+    @Test
+    void proxyRejectsSkuMismatch() {
+        when(requestMapper.selectById(777L))
+                .thenReturn(selfWithStatus(777L, MaterialRequestStatus.TEACHER_APPROVED));
+        when(requestLineMapper.selectByRequestId(777L))
+                .thenReturn(List.of(requestLine(11L, 1L, "10", "10", "2")));
+        when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(2L)));
+
+        BusinessException ex = assertBizError(40000,
+                () -> service.create(proxyDto("777", "8", "11", "2", "5")));
+
+        assertTrue(ex.getMessage().contains("物料不一致"));
+    }
+
+    @Test
+    void proxyRejectsQtyOverRemaining() {
+        when(requestMapper.selectById(777L))
+                .thenReturn(selfWithStatus(777L, MaterialRequestStatus.TEACHER_APPROVED));
+        // 源行：批准 10，实发 2；已被其他有效代领单占用 3 → 剩余可代领 5
+        when(requestLineMapper.selectByRequestId(777L))
+                .thenReturn(List.of(requestLine(11L, 1L, "10", "10", "2")));
+        when(requestLineMapper.sumOccupiedQtyBySourceLineIds(any())).thenReturn(List.of(
+                new MaterialRequestLineMapper.SourceLineOccupancy(11L, new BigDecimal("3"))));
+        when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L)));
+
+        BusinessException ex = assertBizError(40000,
+                () -> service.create(proxyDto("777", "8", "11", "1", "6")));
+
+        assertTrue(ex.getMessage().contains("剩余可代领量"));
+    }
+
+    @Test
+    void proxyCreatesBoundOrderInheritingSourceLine() {
+        when(requestMapper.selectById(777L))
+                .thenReturn(selfWithStatus(777L, MaterialRequestStatus.TEACHER_APPROVED));
+        MaterialRequestLine sourceLine = requestLine(11L, 1L, "10", "10", "2");
+        sourceLine.setQuotaQtySnapshot(new BigDecimal("6"));
+        sourceLine.setRequiresExtraApproval(1);
+        sourceLine.setRequiresDualSign(1);
+        when(requestLineMapper.selectByRequestId(777L)).thenReturn(List.of(sourceLine));
+        when(requestLineMapper.sumOccupiedQtyBySourceLineIds(any())).thenReturn(List.of(
+                new MaterialRequestLineMapper.SourceLineOccupancy(11L, new BigDecimal("3"))));
+        when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L)));
+        doAnswer(inv -> {
+            inv.getArgument(0, MaterialRequest.class).setId(888L);
+            return 1;
+        }).when(requestMapper).insert(any(MaterialRequest.class));
+
+        String id = service.create(proxyDto("777", "8", "11", "1", "5"));
+
+        assertEquals("888", id);
+        ArgumentCaptor<MaterialRequest> reqCaptor = ArgumentCaptor.forClass(MaterialRequest.class);
+        verify(requestMapper).insert(reqCaptor.capture());
+        MaterialRequest saved = reqCaptor.getValue();
+        // 创建即老师已审核（源单已过老师审核），直接交管理员终审；责任老师绑定源单归属老师
+        assertEquals(RequestType.PROXY, saved.getRequestType());
+        assertEquals(777L, saved.getSourceRequestId());
+        assertEquals(9L, saved.getOwnerTeacherId());
+        assertEquals(8L, saved.getOperatorId());
+        assertEquals(MaterialRequestStatus.TEACHER_APPROVED, saved.getStatus());
+
+        ArgumentCaptor<List<MaterialRequestLine>> linesCaptor =
+                ArgumentCaptor.forClass(List.class);
+        verify(requestLineMapper).insertBatch(linesCaptor.capture());
+        MaterialRequestLine savedLine = linesCaptor.getValue().get(0);
+        // 代领行绑定源行并继承定额快照与签批/双签标志
+        assertEquals(11L, savedLine.getSourceLineId());
+        assertEquals(new BigDecimal("6"), savedLine.getQuotaQtySnapshot());
+        assertEquals(1, savedLine.getRequiresExtraApproval());
+        assertEquals(1, savedLine.getRequiresDualSign());
+        assertNotNull(savedLine.getId());
+    }
+
+    // ------------------------------------------------------------------ 两级审核
+
+    @Test
+    void teacherApproveRejectsWhenNotDraft() {
+        when(requestMapper.selectById(555L)).thenReturn(request(555L, MaterialRequestStatus.TEACHER_APPROVED));
+
+        assertBizError(40900, () -> service.teacherApprove("555", null));
+
+        verify(requestMapper, never()).casTeacherApprove(any(Long.class));
+    }
+
+    @Test
+    void teacherApproveRejectsQtyOverRequest() {
         when(requestMapper.selectById(555L)).thenReturn(request(555L, MaterialRequestStatus.DRAFT));
         when(requestLineMapper.selectByRequestId(555L))
                 .thenReturn(List.of(requestLine(1L, 1L, "10", null, null)));
@@ -204,29 +359,91 @@ class MaterialRequestServiceImplTest {
         MaterialRequestApproveDTO dto = new MaterialRequestApproveDTO(
                 List.of(new MaterialRequestApproveDTO.ApproveLineDTO("1", new BigDecimal("11"))));
 
-        BusinessException ex = assertBizError(40000, () -> service.approve("555", dto));
+        BusinessException ex = assertBizError(40000, () -> service.teacherApprove("555", dto));
 
         assertTrue(ex.getMessage().contains("批准量不能超过申请量"));
     }
 
     @Test
-    void approveDefaultsUnspecifiedLinesToRequested() {
+    void teacherApproveDefaultsUnspecifiedLinesToRequested() {
         when(requestMapper.selectById(555L)).thenReturn(request(555L, MaterialRequestStatus.DRAFT));
         when(requestLineMapper.selectByRequestId(555L)).thenReturn(List.of(
                 requestLine(1L, 1L, "10", null, null),
                 requestLine(2L, 2L, "5", null, null)));
-        when(requestMapper.casApprove(555L)).thenReturn(1);
+        when(requestMapper.casTeacherApprove(555L)).thenReturn(1);
 
         MaterialRequestApproveDTO dto = new MaterialRequestApproveDTO(
                 List.of(new MaterialRequestApproveDTO.ApproveLineDTO("1", new BigDecimal("8"))));
 
-        assertDoesNotThrow(() -> service.approve("555", dto));
+        assertDoesNotThrow(() -> service.teacherApprove("555", dto));
 
         ArgumentCaptor<MaterialRequestLine> lineCaptor = ArgumentCaptor.forClass(MaterialRequestLine.class);
-        verify(requestLineMapper, org.mockito.Mockito.times(2)).updateById(lineCaptor.capture());
+        verify(requestLineMapper, times(2)).updateById(lineCaptor.capture());
         List<MaterialRequestLine> updated = lineCaptor.getAllValues();
         assertEquals(new BigDecimal("8"), updated.get(0).getApprovedQty());
         assertEquals(new BigDecimal("5"), updated.get(1).getApprovedQty());
+        verify(requestMapper).casTeacherApprove(555L);
+    }
+
+    @Test
+    void teacherRejectRejectsWhenNotDraft() {
+        when(requestMapper.selectById(555L)).thenReturn(request(555L, MaterialRequestStatus.TEACHER_APPROVED));
+        when(requestMapper.casTeacherReject(555L)).thenReturn(0);
+
+        assertBizError(40900, () -> service.teacherReject("555"));
+    }
+
+    @Test
+    void approveRejectsDraftWithoutTeacherReview() {
+        when(requestMapper.selectById(555L)).thenReturn(request(555L, MaterialRequestStatus.DRAFT));
+
+        assertBizError(40900, () -> service.approve("555", null));
+
+        verify(requestMapper, never()).casApprove(any(Long.class));
+    }
+
+    @Test
+    void approveFinalizesTeacherApprovedRequest() {
+        when(requestMapper.selectById(555L)).thenReturn(request(555L, MaterialRequestStatus.TEACHER_APPROVED));
+        when(requestLineMapper.selectByRequestId(555L))
+                .thenReturn(List.of(requestLine(1L, 1L, "10", "10", "0")));
+        when(requestMapper.casApprove(555L)).thenReturn(1);
+
+        assertDoesNotThrow(() -> service.approve("555", null));
+
+        ArgumentCaptor<MaterialRequestLine> lineCaptor = ArgumentCaptor.forClass(MaterialRequestLine.class);
+        verify(requestLineMapper).updateById(lineCaptor.capture());
+        assertEquals(new BigDecimal("10"), lineCaptor.getValue().getApprovedQty());
+        verify(requestMapper).casApprove(555L);
+    }
+
+    @Test
+    void approveKeepsTeacherApprovedQtyWhenLinesAbsent() {
+        when(requestMapper.selectById(555L)).thenReturn(request(555L, MaterialRequestStatus.TEACHER_APPROVED));
+        when(requestLineMapper.selectByRequestId(555L))
+                .thenReturn(List.of(requestLine(1L, 1L, "12", "10", "0")));
+        when(requestMapper.casApprove(555L)).thenReturn(1);
+
+        assertDoesNotThrow(() -> service.approve("555", null));
+
+        ArgumentCaptor<MaterialRequestLine> lineCaptor = ArgumentCaptor.forClass(MaterialRequestLine.class);
+        verify(requestLineMapper).updateById(lineCaptor.capture());
+        assertEquals(new BigDecimal("10"), lineCaptor.getValue().getApprovedQty());
+        verify(requestMapper).casApprove(555L);
+    }
+
+    @Test
+    void approveFallsBackToRequestedForProxyLineWithoutApprovedQty() {
+        when(requestMapper.selectById(555L)).thenReturn(request(555L, MaterialRequestStatus.TEACHER_APPROVED));
+        when(requestLineMapper.selectByRequestId(555L))
+                .thenReturn(List.of(requestLine(1L, 1L, "12", null, "0")));
+        when(requestMapper.casApprove(555L)).thenReturn(1);
+
+        assertDoesNotThrow(() -> service.approve("555", null));
+
+        ArgumentCaptor<MaterialRequestLine> lineCaptor = ArgumentCaptor.forClass(MaterialRequestLine.class);
+        verify(requestLineMapper).updateById(lineCaptor.capture());
+        assertEquals(new BigDecimal("12"), lineCaptor.getValue().getApprovedQty());
         verify(requestMapper).casApprove(555L);
     }
 
@@ -305,7 +522,7 @@ class MaterialRequestServiceImplTest {
         assertEquals(1L, savedLine.getRequestLineId());
         assertEquals(100L, savedLine.getFromLocationId());
         assertEquals(new BigDecimal("6"), savedLine.getQuantity());
-        org.junit.jupiter.api.Assertions.assertNotNull(savedLine.getId());
+        assertNotNull(savedLine.getId());
         assertEquals(1, savedLine.getLineNo());
     }
 }

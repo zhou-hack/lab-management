@@ -156,22 +156,47 @@ watch(
 
 <style>
 /* 物料工作台公共小样式（随工作台全局加载） */
+
+/* 顶部标签栏：标签宽度自适应文字完整展示，禁止压缩换行造成的截断；
+   窄屏溢出时 nav 保持内容实际宽度，Element Plus 据此自动渲染左右滚动箭头 */
+.ws-tabs .el-tabs__item {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 物料/库位远程搜索下拉（popper 挂载在 body，需全局样式）：
+   长选项「编码 · 名称」换行完整展示，不省略截断 */
+.item-select-popper .el-select-dropdown__item {
+  white-space: normal;
+  height: auto;
+  min-height: 34px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  line-height: 20px;
+  word-break: break-all;
+}
+
+/* 工具栏固定单行：所有筛选控件横排一行，窄屏放不下时横向滚动，绝不换行 */
 .toolbar {
   display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 8px;
   margin-bottom: 12px;
+  overflow-x: auto;
 }
 
-.toolbar .w140 {
-  width: 140px;
+/* 单行布局下控件按内容占宽、禁止压缩，避免文字被挤压遮挡 */
+.toolbar > * {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
-.toolbar .w160 {
-  width: 160px;
-}
-
-.toolbar .w200 {
-  width: 200px;
+/* 下拉宽度跟随选中项文字自适应（EP 默认 100% 会占满导致换行）；
+   最小保底防止箭头与短标签拥挤，选中长文本时自动撑宽 */
+.toolbar .el-select {
+  width: fit-content;
+  min-width: 96px;
 }
 
 .toolbar .w220 {

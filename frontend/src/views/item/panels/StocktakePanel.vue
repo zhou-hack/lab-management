@@ -5,9 +5,12 @@
         v-model="query.status"
         clearable
         placeholder="全部状态"
-        class="w140"
         @change="pager.search"
       >
+        <el-option
+          label="全部状态"
+          value=""
+        />
         <el-option
           v-for="(cfg, value) in stocktakeStatusMap"
           :key="value"
@@ -18,6 +21,7 @@
       <LocationSelect
         v-model="query.locationId"
         placeholder="全部库位"
+        all-option
         @change="pager.search"
       />
       <el-button
@@ -30,6 +34,26 @@
       <el-button @click="pager.search">
         查询
       </el-button>
+      <el-dropdown
+        v-permission="'item:stocktake:export'"
+        @command="doExport"
+      >
+        <el-button>
+          导出<el-icon class="el-icon--right">
+            <arrow-down />
+          </el-icon>
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="xlsx">
+              Excel（.xlsx）
+            </el-dropdown-item>
+            <el-dropdown-item command="csv">
+              CSV（.csv）
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
     </div>
 
     <el-table
@@ -82,7 +106,7 @@
       </el-table-column>
       <el-table-column
         label="操作"
-        width="320"
+        width="400"
         fixed="right"
       >
         <template #default="{ row }">
@@ -110,6 +134,15 @@
             @click="openCount(row)"
           >
             实盘录入
+          </el-button>
+          <el-button
+            v-if="row.status === 'COUNTING'"
+            v-permission="'item:stocktake:count'"
+            link
+            type="primary"
+            @click="openCountImport(row)"
+          >
+            批量回导
           </el-button>
           <el-button
             v-if="row.status === 'COUNTING'"
@@ -368,30 +401,47 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 盘点实盘批量回导 -->
+    <ImportDialog
+      ref="importDialogRef"
+      title="批量回导实盘"
+      tips="建议先用下方「下载模板」获取当前盘点单文件（已录入行带原值，支持中断续盘），填写实盘数与差异原因后回传；按 SKU 码定位行，实盘数与差异原因均空的行自动跳过（支持分批回导）。"
+      :upload-fn="uploadCountImport"
+      :template-fn="templateCountImport"
+      fallback-template-name="盘点快照"
+      @imported="pager.load"
+    />
   </div>
 </template>
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { ArrowDown } from '@element-plus/icons-vue'
 import {
   approveAdjustStocktake,
   cancelStocktake,
   completeStocktake,
   countStocktake,
   createStocktake,
+  exportStocktakeSnapshot,
+  exportStocktakes,
   getStocktake,
+  importStocktakeCount,
   pageStocktakes,
   startStocktake,
   submitReviewStocktake
 } from '@/api/item'
 import { usePagedList } from '@/utils/usePagedList'
 import { confirmAction } from '@/utils/confirm'
+import { saveBlobFile } from '@/utils/download'
 import { stocktakeStatusMap } from '@/utils/statusMap'
 import { fmtShanghai, formatQty, todayShanghai } from '@/utils/format'
 import PagerBar from '@/components/PagerBar.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import LocationSelect from '@/components/LocationSelect.vue'
+import ImportDialog from '@/components/ImportDialog.vue'
 
 const query = reactive({ status: null, locationId: null })
 
@@ -413,6 +463,36 @@ const createForm = reactive({ locationId: null, countDate: '' })
 const countVisible = ref(false)
 const countStocktakeId = ref(null)
 const countRows = ref([])
+
+const importDialogRef = ref(null)
+const countImportId = ref(null)
+
+function openCountImport(row) {
+  countImportId.value = row.id
+  importDialogRef.value.open()
+}
+
+function uploadCountImport(file) {
+  return importStocktakeCount(countImportId.value, file)
+}
+
+function templateCountImport(format) {
+  return exportStocktakeSnapshot(countImportId.value, format)
+}
+
+async function doExport(format) {
+  try {
+    const file = await exportStocktakes({
+      status: query.status || undefined,
+      locationId: query.locationId || undefined,
+      format
+    })
+    saveBlobFile(file, `盘点单导出.${format}`)
+    ElMessage.success('导出成功，文件已开始下载')
+  } catch {
+    // 失败已由全局拦截器提示
+  }
+}
 
 async function openDetail(id) {
   try {

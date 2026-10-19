@@ -36,10 +36,10 @@
 -- 7. 含可空列的组合唯一：用生成列归一
 --    （参照 stock_location.lab_key、stocktake.active_key 模式）。
 -- 8. 种子数据编号段（防冲突，勿占用他人段；新段先向数据库组长登记再使用）：
---      权限     sys_permission：      item 101-137，equipment 141-154，space 155-159；
---      菜单     sys_menu：            item 151-199，equipment 200-204，space 1001-1005；
---      权限绑定 sys_role_permission： item 201-237，space 251-259，equipment 515-528；
---      菜单绑定 sys_role_menu：       item 301-349，equipment 606-610，space 1101-1105。
+--      权限     sys_permission：      item 101-140（delete 138-140、导入导出 160-163、库存盘点导入导出 164-166），equipment 141-154，space 155-159，booking 3001-3004；
+--      菜单     sys_menu：            item 151-202/205-209/212-214（delete 200-202、导入导出 206-209、库存盘点导入导出 212-214），equipment 210-211，space 1001-1005，booking 3000-3003；
+--      权限绑定 sys_role_permission： item 201-240（delete 238-240）、245-250（导入导出 245-248、学生代理 249-250）、260-262（库存盘点导入导出），space 251-259，equipment 515-528，booking 3001-3010；
+--      菜单绑定 sys_role_menu：       item 301-352（delete 350-352）、357-364（导入导出 357-360、学生代理 361、库存盘点导入导出 362-364），equipment 608/610（606/609 已弃用），space 1101-1105，booking 3001-3005。
 --    权限码规范 `模块:资源:操作`（如 item:material:create）；
 --    module_code 用模块代号；菜单 ACTION 层 menu_code 即权限码。
 -- 9. 禁止：改他人分区的表结构/编号；DROP 既有表；改写已登记的历史种子。
@@ -132,7 +132,7 @@ INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component
                       permission_id, menu_type, sort_order, enabled)
 VALUES
 (1001, NULL, 'space',        '空间管理', '/admin/space',      NULL,                    NULL, 'DIRECTORY', 10, 1),
-(1002, 1001, 'space_labs',   '场地管理', '/admin/space/labs', 'admin/space/LabList',   NULL, 'PAGE',      1, 1),
+(1002, 1001, 'space_labs',   '场地管理', '/admin/space/labs', 'SpaceLabList',         NULL, 'PAGE',      1, 1),
 (1003, 1002, 'space_create', '新建场地', NULL,                NULL,                    157,  'ACTION',    1, 1),
 (1004, 1002, 'space_update', '编辑场地', NULL,                NULL,                    158,  'ACTION',    2, 1),
 (1005, 1002, 'space_delete', '删除场地', NULL,                NULL,                    159,  'ACTION',    3, 1);
@@ -285,8 +285,8 @@ ALTER TABLE biz_document
 --       equipment_location_history / equipment_booking / equipment_usage。
 --   产品定稿（2026-10-14）：纯管理员设备管理，无设备借用申请。
 --   → 借用两张表结构保留（历史与后续开放预留），但不登记借用权限/菜单/绑定。
---   种子：权限 141-154（分类/型号/台账）；菜单 200-204；
---         权限绑定 515-528；菜单绑定 606-610。
+--   种子：权限 141-154（分类/型号/台账）；菜单 202/204；
+--         权限绑定 515-528；菜单绑定 608/610。
 --   注：菜单原编号 161-170 与物料 151-179 冲突，整合时移至 200-204 段；
 --       借用权限（旧 155-161）与借用菜单 165-169/173 按产品定稿不再登记。
 -- ############################################################################
@@ -323,6 +323,7 @@ CREATE TABLE equipment_model (
     equipment_name        VARCHAR(128)  NOT NULL                COMMENT '设备名称',
     brand                 VARCHAR(128)  NULL                    COMMENT '品牌',
     specification         VARCHAR(500)  NOT NULL                COMMENT '规格说明',
+    quantity              INT           NOT NULL DEFAULT 0      COMMENT '数量（登记设备台数）',
     base_unit             VARCHAR(16)   NOT NULL                COMMENT '计量单位（台/套等）',
     reference_price       DECIMAL(18,2) NULL                    COMMENT '参考单价（MONEY；实际采购价见 equipment_asset）',
     expected_life_months  INT           NULL                    COMMENT '预计寿命（月）',
@@ -503,15 +504,15 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code) V
 (154, 'equipment:asset:classify',  '设备价值定级', 'equipment');
 
 -- ----------------------------------------------------------------------------
--- 3.8 equipment 菜单（200-204；原 161-170 与物料 151-179 冲突，移至 200 段；
---     借用菜单按产品定稿不登记）
+-- 3.8 equipment 菜单（210-211；2026-10-17 产品定稿：设备管理不要子菜单，
+--     直接 /admin/equipment 单页，型号与设备台账都在设备管理页内，不用分级；
+--     分类目录并入设备管理页抽屉，借用菜单按产品定稿不登记。
+--     注：原编号 202/204 与物料 delete 菜单 202（4.11 段，先登记于运行库）冲突，
+--     2026-10-17 移至 210-211）
 -- ----------------------------------------------------------------------------
 INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order) VALUES
-(200, NULL, 'M_EQUIPMENT_ADMIN',    '设备管理', '/admin',                    NULL,                         NULL, 'DIRECTORY', 20),
-(201, 200,  'C_EQUIPMENT_CATEGORY', '分类管理', '/admin/equipment/category', '/admin/equipment/category', 141,  'PAGE',      1),
-(202, 200,  'C_EQUIPMENT_MODEL',    '型号管理', '/admin/equipment/model',    '/admin/equipment/model',    145,  'PAGE',      2),
-(203, 200,  'C_EQUIPMENT_ASSET',    '设备台账', '/admin/equipment/asset',    '/admin/equipment/asset',    149,  'PAGE',      3),
-(204, 203,  'F_EQUIPMENT_ASSET_CREATE', '设备登记', NULL, NULL, 150, 'ACTION', 1);
+(210, NULL, 'C_EQUIPMENT_ADMIN',    '设备管理', '/admin/equipment',         'EquipmentManage', 149,  'PAGE',      20),
+(211, 210, 'F_EQUIPMENT_ASSET_CREATE', '设备登记', NULL, NULL, 150, 'ACTION', 1);
 
 -- ----------------------------------------------------------------------------
 -- 3.9 角色绑定：仅 ADMIN(1) 开放设备模块（14 项权限；老师/学生不绑定）
@@ -533,11 +534,8 @@ INSERT INTO sys_role_permission (id, role_id, permission_id) VALUES
 (528, 1, 154);
 
 INSERT INTO sys_role_menu (id, role_id, menu_id) VALUES
-(606, 1, 200),
-(607, 1, 201),
-(608, 1, 202),
-(609, 1, 203),
-(610, 1, 204);
+(608, 1, 210),
+(610, 1, 211);
 
 -- ############################################################################
 -- 模块四：物料管理模块 · 第一阶段（实施分组 C）
@@ -695,7 +693,7 @@ ALTER TABLE stock_document
         FOREIGN KEY (grant_id) REFERENCES assistant_grant (id);
 
 -- ----------------------------------------------------------------------------
--- 4.6 stock_document_line 库存单据行表（quantity > 0；出入方向由 movement_type 校验）
+-- 4.6 stock_document_line 库存单据行表（qty > 0；出入方向由 movement_type 校验）
 -- ----------------------------------------------------------------------------
 CREATE TABLE stock_document_line (
     id                    BIGINT        NOT NULL                COMMENT '主键（雪花 ID）',
@@ -704,7 +702,7 @@ CREATE TABLE stock_document_line (
     sku_id                BIGINT        NOT NULL                COMMENT '物料（→ material_sku.id）',
     from_location_id      BIGINT        NULL                    COMMENT '出库位（→ stock_location.id；ISSUE/调拨必填）',
     to_location_id        BIGINT        NULL                    COMMENT '入库位（→ stock_location.id；OPENING/PURCHASE_IN/RETURN_IN 必填）',
-    quantity              DECIMAL(18,3) NOT NULL                COMMENT '数量（> 0，精度不超过 SKU.quantity_scale）',
+    qty                   DECIMAL(18,3) NOT NULL                COMMENT '数量（> 0，精度不超过 SKU.quantity_scale）',
     unit_price_snapshot   DECIMAL(18,4) NULL                    COMMENT '单价快照（入库登记价格 / 过账时成本）',
     amount_snapshot       DECIMAL(18,2) NULL                    COMMENT '金额快照（数量 × 单价，两位小数）',
     request_line_id       BIGINT        NULL                    COMMENT '绑定申领行（→ material_request_line.id，本阶段直发领用为 NULL）',
@@ -724,7 +722,7 @@ CREATE TABLE stock_document_line (
     CONSTRAINT fk_item_stock_doc_line_from FOREIGN KEY (from_location_id) REFERENCES stock_location (id),
     CONSTRAINT fk_item_stock_doc_line_to FOREIGN KEY (to_location_id) REFERENCES stock_location (id),
     CONSTRAINT fk_item_stock_doc_line_issue FOREIGN KEY (original_issue_line_id) REFERENCES stock_document_line (id),
-    CONSTRAINT chk_item_stock_doc_line_qty CHECK (quantity > 0),
+    CONSTRAINT chk_item_stock_doc_line_qty CHECK (qty > 0),
     CONSTRAINT chk_item_stock_doc_line_deleted CHECK (deleted IN (0, 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='库存单据行表';
 
@@ -799,14 +797,18 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code, e
 INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
 -- 目录：物料管理
 (151, NULL, 'ITEM',            '物料管理', '/admin/item',             NULL, NULL, 'DIRECTORY', 50, 1),
--- 页面（挂目录 151）
-(152, 151, 'ITEM_CATEGORY',    '物料分类', '/admin/item/category',    NULL, NULL, 'PAGE', 1, 1),
-(153, 151, 'ITEM_MATERIAL',    '物料档案', '/admin/item/material',    NULL, NULL, 'PAGE', 2, 1),
-(154, 151, 'ITEM_LOCATION',    '库位管理', '/admin/item/location',    NULL, NULL, 'PAGE', 3, 1),
-(155, 151, 'ITEM_DOCUMENT',    '库存单据', '/admin/item/document',    NULL, NULL, 'PAGE', 4, 1),
-(156, 151, 'ITEM_BALANCE',     '库存余额', '/admin/item/balance',     NULL, NULL, 'PAGE', 5, 1),
-(157, 151, 'ITEM_LEDGER',      '库存台账', '/admin/item/ledger',      NULL, NULL, 'PAGE', 6, 1),
-(158, 151, 'ITEM_WARNING',     '库存预警', '/admin/item/warning',     NULL, NULL, 'PAGE', 7, 1),
+-- 页面：物料工作台（v0.1 整合为单页工作台 ItemWorkspace，内部分页签覆盖原 11 个页面入口；
+--       原页面菜单 153-158 / 180-183 停用保留，ACTION 按钮权限不受影响）
+(152, 151, 'ITEM_WORKSPACE',   '物料工作台', '/admin/item/workspace', 'ItemWorkspace', NULL, 'PAGE', 1, 1),
+-- 页面：物料代领（2026-10-17 产品定稿：面向被授权学生=学生代理；仅 item:request:list(122)，
+--       领取操作由后端按 assistant_grant 有效授权动态放行；未授权学生不可见/被拒）
+(205, 151, 'ITEM_ASSISTANT_PICKUP', '物料代领', '/admin/item/assistant_pickup', 'ItemAssistantPickup', 122, 'PAGE', 2, 1),
+(153, 151, 'ITEM_MATERIAL',    '物料档案', '/admin/item/material',    NULL, NULL, 'PAGE', 2, 0),
+(154, 151, 'ITEM_LOCATION',    '库位管理', '/admin/item/location',    NULL, NULL, 'PAGE', 3, 0),
+(155, 151, 'ITEM_DOCUMENT',    '库存单据', '/admin/item/document',    NULL, NULL, 'PAGE', 4, 0),
+(156, 151, 'ITEM_BALANCE',     '库存余额', '/admin/item/balance',     NULL, NULL, 'PAGE', 5, 0),
+(157, 151, 'ITEM_LEDGER',      '库存台账', '/admin/item/ledger',      NULL, NULL, 'PAGE', 6, 0),
+(158, 151, 'ITEM_WARNING',     '库存预警', '/admin/item/warning',     NULL, NULL, 'PAGE', 7, 0),
 -- 动作：物料分类（权限 101-104）
 (159, 152, 'item:category:list',   '物料分类查询', NULL, NULL, 101, 'ACTION', 1, 1),
 (160, 152, 'item:category:create', '物料分类新增', NULL, NULL, 102, 'ACTION', 2, 1),
@@ -857,6 +859,27 @@ INSERT INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
 (325, 1, 175, 1), (326, 1, 176, 1), (327, 1, 177, 1), (328, 1, 178, 1),
 (329, 1, 179, 1);
 
+-- ----------------------------------------------------------------------------
+-- 4.11 物料一阶段删除权限补登记（2026-10-17：权限 138-140、菜单 200-202、
+--      绑定 238-240、菜单绑定 350-352；分类/物料/库位 delete 权限码此前
+--      已在 Controller 使用，本段与运行库已执行数据一致）
+-- ----------------------------------------------------------------------------
+INSERT INTO sys_permission (id, permission_code, permission_name, module_code, enabled) VALUES
+(138, 'item:category:delete', '物料分类删除', 'item', 1),
+(139, 'item:material:delete', '物料档案删除', 'item', 1),
+(140, 'item:location:delete', '库位删除',     'item', 1);
+
+INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
+(200, 152, 'item:category:delete', '物料分类删除', NULL, NULL, 138, 'ACTION', 5, 1),
+(201, 153, 'item:material:delete', '物料档案删除', NULL, NULL, 139, 'ACTION', 5, 1),
+(202, 154, 'item:location:delete', '库位删除',     NULL, NULL, 140, 'ACTION', 5, 1);
+
+INSERT INTO sys_role_permission (id, role_id, permission_id, enabled) VALUES
+(238, 1, 138, 1), (239, 1, 139, 1), (240, 1, 140, 1);
+
+INSERT INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
+(350, 1, 200, 1), (351, 1, 201, 1), (352, 1, 202, 1);
+
 -- ############################################################################
 -- 模块五：物料管理模块 · 第二阶段（实施分组 C）
 --   表：material_request / material_request_line / material_quota /
@@ -880,7 +903,9 @@ CREATE TABLE material_request (
     participant_count     INT          NOT NULL DEFAULT 0      COMMENT '参与人数（非负）',
     period_count          INT          NOT NULL DEFAULT 0      COMMENT '课时数（非负）',
     purpose               TEXT         NULL                    COMMENT '用途',
-    status                VARCHAR(32)  NOT NULL DEFAULT 'DRAFT' COMMENT '状态：DRAFT/PENDING/APPROVED/PARTIALLY_FULFILLED/FULFILLED/REJECTED/CANCELLED',
+    request_type          VARCHAR(32)  NOT NULL DEFAULT 'SELF' COMMENT '申领类型：SELF 本人申领 / PROXY 学生代理代领（2026-10-19 两级审核定稿）',
+    source_request_id     BIGINT       NULL                    COMMENT '源申领单（代领时引用的老师已审核通过的申领单 → material_request.id）',
+    status                VARCHAR(32)  NOT NULL DEFAULT 'DRAFT' COMMENT '状态：DRAFT/TEACHER_APPROVED/APPROVED/PARTIALLY_FULFILLED/FULFILLED/REJECTED/CANCELLED；SELF 经 DRAFT→TEACHER_APPROVED（老师审核）→APPROVED（管理员终审）；PROXY 创建即 TEACHER_APPROVED，直接管理员终审',
     create_time           DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)) COMMENT '创建时间（UTC）',
     update_time           DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间（UTC）',
     deleted               TINYINT      NOT NULL DEFAULT 0      COMMENT '逻辑删除：0正常 1删除',
@@ -890,14 +915,21 @@ CREATE TABLE material_request (
     UNIQUE KEY uk_item_request_doc (document_id),
     KEY idx_item_request_owner (owner_teacher_id, status, create_time),
     KEY idx_item_request_grant (grant_id),
+    KEY idx_item_request_source (source_request_id),
     CONSTRAINT chk_item_request_participant CHECK (participant_count >= 0),
     CONSTRAINT chk_item_request_period CHECK (period_count >= 0),
     CONSTRAINT chk_item_request_deleted CHECK (deleted IN (0, 1)),
+    CONSTRAINT chk_item_request_type CHECK (request_type IN ('SELF', 'PROXY')),
+    CONSTRAINT chk_item_request_source CHECK (
+        (request_type = 'SELF') OR (source_request_id IS NOT NULL)
+    ),
     CONSTRAINT chk_item_request_status CHECK (status IN
-        ('DRAFT', 'PENDING', 'APPROVED', 'PARTIALLY_FULFILLED', 'FULFILLED', 'REJECTED', 'CANCELLED')),
+        ('DRAFT', 'TEACHER_APPROVED', 'PENDING', 'APPROVED', 'PARTIALLY_FULFILLED', 'FULFILLED', 'REJECTED', 'CANCELLED')),
     CONSTRAINT chk_item_request_booking CHECK (
         (lab_booking_id IS NULL) OR (schedule_occurrence_id IS NULL)
-    )
+    ),
+    CONSTRAINT fk_item_request_source
+        FOREIGN KEY (source_request_id) REFERENCES material_request (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='物料申领单表';
 
 -- 补全 material_request.grant_id 跨模块外键（目标表见 assistant_grant.sql）
@@ -915,9 +947,10 @@ CREATE TABLE material_request_line (
     requested_qty         DECIMAL(18,3) NOT NULL               COMMENT '申请量（> 0）',
     quota_qty_snapshot    DECIMAL(18,3) NOT NULL DEFAULT 0     COMMENT '定额快照（参与人数 × 课时 × 每人每课时定额；缺定额记 0，须老师确认）',
     requires_extra_approval TINYINT     NOT NULL DEFAULT 0    COMMENT '超定额：1是 0否（进入老师签批阶段）',
-    requires_dual_sign    TINYINT       NOT NULL DEFAULT 0    COMMENT '双人签字：1是 0否（危险/高价值物料）',
+    requires_dual_sign    TINYINT     NOT NULL DEFAULT 0    COMMENT '双人签字：1是 0否（危险/高价值物料）',
+    source_line_id         BIGINT      NULL                  COMMENT '源申领行（代领时引用的老师已审核单行 → material_request_line.id）',
     approved_qty          DECIMAL(18,3) NULL                   COMMENT '批准量（审批时写入，不超过申请量）',
-    fulfilled_qty         DECIMAL(18,3) NOT NULL DEFAULT 0    COMMENT '实发量（过账回写，不超过批准量）',
+    fulfilled_qty         DECIMAL(18,3) NOT NULL DEFAULT 0     COMMENT '实发量（过账回写，不超过批准量）',
     create_time           DATETIME(3)   NOT NULL DEFAULT (UTC_TIMESTAMP(3)) COMMENT '创建时间（UTC）',
     update_time           DATETIME(3)   NOT NULL DEFAULT (UTC_TIMESTAMP(3)) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间（UTC）',
     deleted               TINYINT       NOT NULL DEFAULT 0     COMMENT '逻辑删除：0正常 1删除',
@@ -926,8 +959,10 @@ CREATE TABLE material_request_line (
     PRIMARY KEY (id),
     UNIQUE KEY uk_item_request_line (request_id, sku_id),
     KEY idx_item_request_line_sku (sku_id),
+    KEY idx_item_request_line_source (source_line_id),
     CONSTRAINT fk_item_request_line_request FOREIGN KEY (request_id) REFERENCES material_request (id),
     CONSTRAINT fk_item_request_line_sku FOREIGN KEY (sku_id) REFERENCES material_sku (id),
+    CONSTRAINT fk_item_request_line_source FOREIGN KEY (source_line_id) REFERENCES material_request_line (id),
     CONSTRAINT chk_item_request_line_qty CHECK (requested_qty > 0),
     CONSTRAINT chk_item_request_line_quota CHECK (quota_qty_snapshot >= 0),
     CONSTRAINT chk_item_request_line_fulfilled CHECK (fulfilled_qty >= 0 AND fulfilled_qty <= requested_qty),
@@ -967,7 +1002,7 @@ CREATE TABLE material_settlement (
     id              BIGINT        NOT NULL                COMMENT '主键（雪花 ID）',
     issue_line_id   BIGINT        NOT NULL                COMMENT '原出库行（→ stock_document_line.id）',
     settlement_type VARCHAR(32)   NOT NULL                COMMENT '结算类型：RETURNED 归还 / CONSUMED 耗用 / LOST 丢失 / DAMAGED 损坏',
-    quantity        DECIMAL(18,3) NOT NULL                COMMENT '本次结算量（> 0）',
+    qty             DECIMAL(18,3) NOT NULL                COMMENT '本次结算量（> 0）',
     operator_id     BIGINT        NULL                    COMMENT '经办人（→ sys_user.id；登录模块接入后由会话写入）',
     settled_at      DATETIME(3)   NOT NULL                COMMENT '结算时间（UTC）',
     return_line_id  BIGINT        NULL                    COMMENT '对应归还行（→ stock_document_line.id，同归还行唯一）',
@@ -984,7 +1019,7 @@ CREATE TABLE material_settlement (
     KEY idx_item_settlement_doc (document_id),
     CONSTRAINT fk_item_settlement_issue FOREIGN KEY (issue_line_id) REFERENCES stock_document_line (id),
     CONSTRAINT fk_item_settlement_return FOREIGN KEY (return_line_id) REFERENCES stock_document_line (id),
-    CONSTRAINT chk_item_settlement_qty CHECK (quantity > 0),
+    CONSTRAINT chk_item_settlement_qty CHECK (qty > 0),
     CONSTRAINT chk_item_settlement_type CHECK (settlement_type IN ('RETURNED', 'CONSUMED', 'LOST', 'DAMAGED')),
     CONSTRAINT chk_item_settlement_deleted CHECK (deleted IN (0, 1)),
     CONSTRAINT chk_item_settlement_return_type CHECK (
@@ -1084,11 +1119,11 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code, e
 -- 5.8 物料二阶段菜单（180-199：页面 180-183 挂目录 151；动作 184-199 挂对应页面）
 -- ----------------------------------------------------------------------------
 INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
--- 页面：申领管理 / 领用定额 / 物料结算 / 盘点管理（挂目录 151）
-(180, 151, 'ITEM_REQUEST',     '申领管理', '/admin/item/request',     NULL, NULL, 'PAGE', 8,  1),
-(181, 151, 'ITEM_QUOTA',        '领用定额', '/admin/item/quota',        NULL, NULL, 'PAGE', 9,  1),
-(182, 151, 'ITEM_SETTLEMENT',   '物料结算', '/admin/item/settlement',   NULL, NULL, 'PAGE', 10, 1),
-(183, 151, 'ITEM_STOCKTAKE',    '盘点管理', '/admin/item/stocktake',    NULL, NULL, 'PAGE', 11, 1),
+-- 页面：申领管理 / 领用定额 / 物料结算 / 盘点管理（v0.1 并入物料工作台，停用保留）
+(180, 151, 'ITEM_REQUEST',     '申领管理', '/admin/item/request',     NULL, NULL, 'PAGE', 8,  0),
+(181, 151, 'ITEM_QUOTA',        '领用定额', '/admin/item/quota',        NULL, NULL, 'PAGE', 9,  0),
+(182, 151, 'ITEM_SETTLEMENT',   '物料结算', '/admin/item/settlement',   NULL, NULL, 'PAGE', 10, 0),
+(183, 151, 'ITEM_STOCKTAKE',    '盘点管理', '/admin/item/stocktake',    NULL, NULL, 'PAGE', 11, 0),
 -- 动作：申领管理（权限 122-126）
 (184, 180, 'item:request:list',       '申领单查询',   NULL, NULL, 122, 'ACTION', 1, 1),
 (185, 180, 'item:request:create',     '申领单创建',   NULL, NULL, 123, 'ACTION', 2, 1),
@@ -1126,9 +1161,196 @@ INSERT INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
 (342, 1, 192, 1), (343, 1, 193, 1), (344, 1, 194, 1), (345, 1, 195, 1),
 (346, 1, 196, 1), (347, 1, 197, 1), (348, 1, 198, 1), (349, 1, 199, 1);
 
+-- ----------------------------------------------------------------------------
+-- 学生代理（被授权学生，role=STUDENT）物料代领绑定（2026-10-17 产品定稿）
+--   权限：item:request:list(122) + item:request:issue(126)；
+--   菜单：物料代领 205。可见性/可操作由后端按 assistant_grant 有效授权动态控制，
+--   未授权学生即使登录也因无有效授权被拒（接口侧再校验，前端仅做入口展示）。
+--   注：原绑定编号 238-239/350 与 delete 段（4.11，先登记于运行库）冲突，
+--   2026-10-17 移至 249-250/361。
+-- ----------------------------------------------------------------------------
+INSERT INTO sys_role_permission (id, role_id, permission_id, enabled) VALUES
+(249, 3, 122, 1), (250, 3, 126, 1);
+
+INSERT INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
+(361, 3, 205, 1);
+
+-- ----------------------------------------------------------------------------
+-- 5.10 物料批量导入/导出（2026-10-17：权限 160-163、菜单 206-209、
+--      绑定 245-248、菜单绑定 357-360；xlsx/csv 两种格式，模板与导出文件
+--      表头前 N 列一致可直接回导；物料与分类各 import/export 两个权限码，
+--      模板下载复用 import 权限）
+-- ----------------------------------------------------------------------------
+INSERT INTO sys_permission (id, permission_code, permission_name, module_code, enabled) VALUES
+(160, 'item:material:import', '物料批量导入',     'item', 1),
+(161, 'item:material:export', '物料批量导出',     'item', 1),
+(162, 'item:category:import', '物料分类批量导入', 'item', 1),
+(163, 'item:category:export', '物料分类批量导出', 'item', 1);
+
+INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
+(206, 152, 'item:category:import', '物料分类批量导入', NULL, NULL, 162, 'ACTION', 6, 1),
+(207, 152, 'item:category:export', '物料分类批量导出', NULL, NULL, 163, 'ACTION', 7, 1),
+(208, 153, 'item:material:import', '物料批量导入',     NULL, NULL, 160, 'ACTION', 6, 1),
+(209, 153, 'item:material:export', '物料批量导出',     NULL, NULL, 161, 'ACTION', 7, 1);
+
+INSERT INTO sys_role_permission (id, role_id, permission_id, enabled) VALUES
+(245, 1, 160, 1), (246, 1, 161, 1), (247, 1, 162, 1), (248, 1, 163, 1);
+
+INSERT INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
+(357, 1, 206, 1), (358, 1, 207, 1), (359, 1, 208, 1), (360, 1, 209, 1);
+
+-- ----------------------------------------------------------------------------
+-- 5.11 库存余额 + 盘点导入/导出（2026-10-17：权限 164-166、菜单 212-214、
+--      绑定 260-262、菜单绑定 362-364；库存余额导出报表 + 期初导入生成
+--      OPENING 草稿单（走既有审批过账，不直接改写余额）；盘点快照导出 +
+--      实盘回导（复用 count 状态机，权限复用 item:stocktake:count）
+-- ----------------------------------------------------------------------------
+INSERT INTO sys_permission (id, permission_code, permission_name, module_code, enabled) VALUES
+(164, 'item:balance:import',   '期初余额批量导入', 'item', 1),
+(165, 'item:balance:export',   '库存余额导出',     'item', 1),
+(166, 'item:stocktake:export', '盘点快照导出',     'item', 1);
+
+INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
+(212, 156, 'item:balance:import',   '期初余额批量导入', NULL, NULL, 164, 'ACTION', 3, 1),
+(213, 156, 'item:balance:export',   '库存余额导出',     NULL, NULL, 165, 'ACTION', 4, 1),
+(214, 183, 'item:stocktake:export', '盘点快照导出',     NULL, NULL, 166, 'ACTION', 6, 1);
+
+INSERT INTO sys_role_permission (id, role_id, permission_id, enabled) VALUES
+(260, 1, 164, 1), (261, 1, 165, 1), (262, 1, 166, 1);
+
+INSERT INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
+(362, 1, 212, 1), (363, 1, 213, 1), (364, 1, 214, 1);
+
+-- ----------------------------------------------------------------------------
+-- 5.12 申领两级审核 + 学生代理代领（2026-10-19：权限 167、菜单 215、
+--      绑定 263-266、菜单绑定 365-369；
+--      SELF 本人申领经 DRAFT→TEACHER_APPROVED（老师审核）→APPROVED（管理员终审）；
+--      PROXY 学生代理代领只能引用老师已审核通过的源申领单（request_type=SELF、
+--      status=TEACHER_APPROVED）并按源行剩余可代领量领取，创建即 TEACHER_APPROVED，
+--      绑定责任老师（owner_teacher_id=源单归属老师）与代领人（operator_id），
+--      直接交由管理员终审；老师审核动作权限独立为 item:request:teacher_approve，
+--      角色绑定：教师(2) 122/167 + 工作台；学生(3) 补 123 + 工作台；管理员(1) 补 167）
+-- ----------------------------------------------------------------------------
+INSERT INTO sys_permission (id, permission_code, permission_name, module_code, enabled) VALUES
+(167, 'item:request:teacher_approve', '申领单老师审核', 'item', 1);
+
+INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
+(215, 180, 'item:request:teacher_approve', '申领单老师审核', NULL, NULL, 167, 'ACTION', 6, 1);
+
+INSERT INTO sys_role_permission (id, role_id, permission_id, enabled) VALUES
+(263, 2, 122, 1), (264, 2, 167, 1),
+(265, 3, 123, 1), (266, 1, 167, 1);
+
+INSERT INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
+(365, 2, 152, 1), (366, 2, 215, 1),
+(367, 3, 152, 1), (368, 3, 185, 1),
+(369, 1, 215, 1);
+
 -- ############################################################################
--- 附注：移除借用功能（2026-10-14 产品定稿：纯管理员设备管理，无设备借用）
---   本文件已按定稿不登记借用权限/菜单（借用两张表结构保留见模块三）。
+-- 模块六：场地预约模块（v0.1 整合自 dev/space 分支预约实现）
+--   表：lab_booking / lab_slot。
+--   一期简化审批链：PENDING → APPROVED / REJECTED / CANCELLED，
+--   背书字段（endorse_*）结构预留、流程暂不启用；
+--   占用槽 lab_slot 仅未释放记录参与时段冲突校验（半开区间 [start_at, end_at)）。
+--   种子：权限 3001-3004；菜单 3000-3003；权限绑定 3001-3010；菜单绑定 3001-3005。
+-- ############################################################################
+
+-- ----------------------------------------------------------------------------
+-- 6.1 lab_booking 场地预约单
+-- ----------------------------------------------------------------------------
+CREATE TABLE lab_booking (
+    id                 BIGINT       NOT NULL                COMMENT '主键（雪花 ID）',
+    lab_id             BIGINT       NOT NULL                COMMENT '预约场地（→ lab.id）',
+    applicant_id       BIGINT       NOT NULL                COMMENT '申请人（→ sys_user.id）',
+    purpose            VARCHAR(512) NOT NULL                COMMENT '用途说明',
+    participant_count  INT          NOT NULL                COMMENT '参与人数（>0，且不超过场地容量）',
+    start_at           DATETIME(3)  NOT NULL                COMMENT '预约开始（UTC）',
+    end_at             DATETIME(3)  NOT NULL                COMMENT '预约结束（UTC）',
+    status             VARCHAR(32)  NOT NULL                COMMENT '状态：PENDING待审批/APPROVED已批准/REJECTED已驳回/CANCELLED已取消',
+    endorse_teacher_id BIGINT       NULL                    COMMENT '背书老师（→ sys_user.id，一期简化流程预留）',
+    endorse_at         DATETIME(3)  NULL                    COMMENT '背书时间（UTC，预留）',
+    endorse_comment    VARCHAR(512) NULL                    COMMENT '背书意见（预留）',
+    reject_reason      VARCHAR(512) NULL                    COMMENT '驳回原因',
+    cancel_reason      VARCHAR(512) NULL                    COMMENT '取消原因',
+    cancel_type        VARCHAR(32)  NULL                    COMMENT '取消类型：MANUAL人工/FORCE强制',
+    cancelled_at       DATETIME(3)  NULL                    COMMENT '取消时间（UTC）',
+    create_time        DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)) COMMENT '创建时间（UTC）',
+    update_time        DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间（UTC）',
+    deleted            TINYINT      NOT NULL DEFAULT 0      COMMENT '逻辑删除：0正常 1删除',
+    create_user_id     BIGINT       NULL                    COMMENT '创建人（→ sys_user.id，审计字段不建外键）',
+    update_user_id     BIGINT       NULL                    COMMENT '最后操作人（→ sys_user.id）',
+    PRIMARY KEY (id),
+    KEY idx_lab_booking_applicant (applicant_id, create_time),
+    KEY idx_lab_booking_lab_status (lab_id, status, start_at),
+    CONSTRAINT fk_lab_booking_lab FOREIGN KEY (lab_id) REFERENCES lab (id),
+    CONSTRAINT fk_lab_booking_applicant FOREIGN KEY (applicant_id) REFERENCES sys_user (id),
+    CONSTRAINT chk_lab_booking_status CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED')),
+    CONSTRAINT chk_lab_booking_count CHECK (participant_count > 0),
+    CONSTRAINT chk_lab_booking_window CHECK (start_at < end_at),
+    CONSTRAINT chk_lab_booking_deleted CHECK (deleted IN (0, 1))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='场地预约单（一期简化审批，背书字段预留）';
+
+-- ----------------------------------------------------------------------------
+-- 6.2 lab_slot 场地占用槽（批准时写入，取消/结束时释放）
+-- ----------------------------------------------------------------------------
+CREATE TABLE lab_slot (
+    id              BIGINT       NOT NULL                COMMENT '主键（雪花 ID）',
+    lab_id          BIGINT       NOT NULL                COMMENT '占用场地（→ lab.id）',
+    booking_id      BIGINT       NOT NULL                COMMENT '来源预约（→ lab_booking.id，唯一）',
+    start_at        DATETIME(3)  NOT NULL                COMMENT '占用开始（UTC）',
+    end_at          DATETIME(3)  NOT NULL                COMMENT '占用结束（UTC）',
+    released_at     DATETIME(3)  NULL                    COMMENT '释放时间（UTC；NULL 表示占用中）',
+    release_reason  VARCHAR(512) NULL                    COMMENT '释放原因',
+    create_time     DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)) COMMENT '创建时间（UTC）',
+    update_time     DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间（UTC）',
+    deleted         TINYINT      NOT NULL DEFAULT 0      COMMENT '逻辑删除：0正常 1删除',
+    create_user_id  BIGINT       NULL                    COMMENT '创建人（→ sys_user.id，审计字段不建外键）',
+    update_user_id  BIGINT       NULL                    COMMENT '最后操作人（→ sys_user.id）',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_lab_slot_booking (booking_id),
+    KEY idx_lab_slot_conflict (lab_id, released_at, start_at, end_at),
+    CONSTRAINT fk_lab_slot_lab FOREIGN KEY (lab_id) REFERENCES lab (id),
+    CONSTRAINT fk_lab_slot_booking FOREIGN KEY (booking_id) REFERENCES lab_booking (id),
+    CONSTRAINT chk_lab_slot_window CHECK (start_at < end_at),
+    CONSTRAINT chk_lab_slot_deleted CHECK (deleted IN (0, 1))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='场地占用槽（仅未释放记录参与冲突校验）';
+
+-- ----------------------------------------------------------------------------
+-- 6.3 booking 权限（3001-3004，module_code='booking'）
+-- ----------------------------------------------------------------------------
+INSERT INTO sys_permission (id, permission_code, permission_name, module_code, enabled) VALUES
+(3001, 'booking:lab:create',  '场地预约申请', 'booking', 1),
+(3002, 'booking:lab:list',    '场地预约记录', 'booking', 1),
+(3003, 'booking:lab:cancel',  '场地预约撤销', 'booking', 1),
+(3004, 'booking:lab:approve', '场地预约审批', 'booking', 1);
+
+-- ----------------------------------------------------------------------------
+-- 6.4 booking 菜单（3000-3003；管理端目录+两页，用户端单页）
+-- ----------------------------------------------------------------------------
+INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
+(3000, NULL, 'booking',          '场地预约', '/admin/booking',          NULL,              NULL, 'DIRECTORY', 30, 1),
+(3001, 3000, 'booking_all',      '预约管理', '/admin/booking/labs',     'BookingAdminList', 3002, 'PAGE',      1,  1),
+(3002, 3000, 'booking_approval', '预约审批', '/admin/booking/approval', 'BookingApproval',  3004, 'PAGE',      2,  1),
+(3003, NULL, 'booking_user',     '场地预约', '/booking/labs',           'BookingUserList',  3001, 'PAGE',      10, 1);
+
+-- ----------------------------------------------------------------------------
+-- 6.5 角色绑定：ADMIN 全部（3001-3004 + 菜单 3000-3002）；
+--     TEACHER/STUDENT 申请/记录/撤销（3001-3003 + 菜单 3003）
+-- ----------------------------------------------------------------------------
+INSERT INTO sys_role_permission (id, role_id, permission_id, enabled) VALUES
+(3001, 1, 3001, 1), (3002, 1, 3002, 1), (3003, 1, 3003, 1), (3004, 1, 3004, 1),
+(3005, 2, 3001, 1), (3006, 2, 3002, 1), (3007, 2, 3003, 1),
+(3008, 3, 3001, 1), (3009, 3, 3002, 1), (3010, 3, 3003, 1);
+
+INSERT INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
+(3001, 1, 3000, 1), (3002, 1, 3001, 1), (3003, 1, 3002, 1),
+(3004, 2, 3003, 1),
+(3005, 3, 3003, 1);
+
+-- ############################################################################
+-- 附注：v0.1 分支整合定稿
+--   本文件整合场地（单表 lab）、统一单据、设备台账（无借用）、物料库存与场地预约
+--   五个模块；菜单 component_key 统一大驼峰，与前端 router/dynamic.js 白名单一致。
 --   曾执行过旧版种子（借用权限 155-161、借用菜单 165-169/173、
 --   设备菜单旧编号 161-170、绑定 529-535/611）的库，请用独立的
 --   「移除借用功能清理.sql」做增量清理——该脚本的 ID 基于旧编号，

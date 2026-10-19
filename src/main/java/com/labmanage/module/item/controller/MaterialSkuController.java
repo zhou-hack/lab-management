@@ -4,14 +4,22 @@ import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.item.dto.MaterialSkuCreateDTO;
+import com.labmanage.module.item.dto.MaterialSkuExportQuery;
 import com.labmanage.module.item.dto.MaterialSkuQuery;
 import com.labmanage.module.item.dto.MaterialSkuUpdateDTO;
 import com.labmanage.module.item.service.MaterialSkuService;
+import com.labmanage.module.item.service.MaterialTransferService;
+import com.labmanage.module.item.transfer.FileFormat;
+import com.labmanage.module.item.transfer.TransferFile;
+import com.labmanage.module.item.vo.ImportResultVO;
 import com.labmanage.module.item.vo.MaterialSkuVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,6 +29,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 /**
  * 物料档案管理
@@ -31,9 +43,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class MaterialSkuController {
 
     private final MaterialSkuService skuService;
+    private final MaterialTransferService transferService;
 
-    public MaterialSkuController(MaterialSkuService skuService) {
+    public MaterialSkuController(MaterialSkuService skuService, MaterialTransferService transferService) {
         this.skuService = skuService;
+        this.transferService = transferService;
     }
 
     @Operation(summary = "分页查询物料")
@@ -82,5 +96,41 @@ public class MaterialSkuController {
     public Result<Void> delete(@Parameter(description = "物料 ID") @PathVariable String id) {
         skuService.delete(id);
         return Result.success();
+    }
+
+    @Operation(summary = "批量导入物料（xlsx/csv，编码冲突与非法行跳过并返回失败明细）")
+    @SaCheckPermission("item:material:import")
+    @PostMapping("/import")
+    public Result<ImportResultVO> importSkus(
+            @Parameter(description = "导入文件（.xlsx / .csv）") @RequestParam("file") MultipartFile file) {
+        return Result.success(transferService.importSkus(file));
+    }
+
+    @Operation(summary = "导出物料（按筛选条件导出全部匹配行，xlsx/csv）")
+    @SaCheckPermission("item:material:export")
+    @GetMapping("/export")
+    public void export(@Valid MaterialSkuExportQuery query, HttpServletResponse response) throws IOException {
+        TransferFile file = transferService.exportSkus(query);
+        writeTransferFile(file, response);
+    }
+
+    @Operation(summary = "下载物料导入模板（xlsx/csv，仅表头）")
+    @SaCheckPermission("item:material:import")
+    @GetMapping("/import-template")
+    public void importTemplate(
+            @Parameter(description = "模板格式：xlsx / csv") @RequestParam(defaultValue = "xlsx") String format,
+            HttpServletResponse response) throws IOException {
+        TransferFile file = transferService.skuImportTemplate(FileFormat.fromFileName("t." + format));
+        writeTransferFile(file, response);
+    }
+
+    private void writeTransferFile(TransferFile file, HttpServletResponse response) throws IOException {
+        response.setContentType(file.contentType());
+        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                .filename(file.fileName(), StandardCharsets.UTF_8)
+                .build()
+                .toString());
+        response.setContentLength(file.content().length);
+        response.getOutputStream().write(file.content());
     }
 }

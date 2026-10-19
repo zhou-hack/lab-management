@@ -4,11 +4,29 @@ import { getToken, setToken, removeToken } from '@/utils/token'
 import { registerDynamicRoutes, removeDynamicRoutes } from '@/router/dynamic'
 
 /** 开发环境测试账号数据（后端接入后删除） */
+
+/** 模拟管理员物料权限（与运行库管理员角色绑定一致，仅浏览器联调用；后端接入后删除） */
+const ADMIN_ITEM_PERMS = [
+  'item:category:list', 'item:category:create', 'item:category:update',
+  'item:category:enable', 'item:category:delete', 'item:category:import', 'item:category:export',
+  'item:material:list', 'item:material:create', 'item:material:update',
+  'item:material:enable', 'item:material:delete', 'item:material:import', 'item:material:export',
+  'item:location:list', 'item:location:create', 'item:location:update',
+  'item:location:enable', 'item:location:delete',
+  'item:balance:import', 'item:balance:export',
+  'item:stocktake:export', 'item:stocktake:count',
+  // 申领两级审核 + 代理代领（管理员全部单据终审，含老师审核动作）
+  'item:request:list', 'item:request:create', 'item:request:teacher_approve',
+  'item:request:approve', 'item:request:cancel', 'item:request:issue'
+]
+
 const TEST_PROFILES = {
   STUDENT: {
     userInfo: { realName: '测试学生', username: '20230001' },
     roles: ['STUDENT'],
-    perms: ['my:page'],
+    // 与运行库学生角色绑定一致：申领查询(122)、申领创建(123)、实发出库(126)；
+    // 学生可发起本人申领与代理代领，无审批权限
+    perms: ['my:page', 'item:request:list', 'item:request:create', 'item:request:issue'],
     menus: [
       {
         menuId: 100,
@@ -22,7 +40,9 @@ const TEST_PROFILES = {
   TEACHER: {
     userInfo: { realName: '测试老师', username: 'T1001' },
     roles: ['TEACHER'],
-    perms: ['my:page', 'tApprove:page'],
+    // 与运行库教师角色绑定一致：申领查询(122)、老师审核(167)；
+    // 审核学生个人申领单据；代领单据绑定其为责任老师，无需再次审批
+    perms: ['my:page', 'tApprove:page', 'item:request:list', 'item:request:teacher_approve'],
     menus: [
       {
         menuId: 200,
@@ -36,7 +56,7 @@ const TEST_PROFILES = {
   ADMIN: {
     userInfo: { realName: '测试管理员', username: 'admin' },
     roles: ['ADMIN'],
-    perms: ['dashboard:view', 'equipment:edit'],
+    perms: ['dashboard:view', 'equipment:edit', ...ADMIN_ITEM_PERMS],
     menus: [
       {
         menuId: 300,

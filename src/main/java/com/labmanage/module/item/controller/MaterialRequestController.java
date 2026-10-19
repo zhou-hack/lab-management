@@ -10,6 +10,8 @@ import com.labmanage.module.item.dto.MaterialRequestQuery;
 import com.labmanage.module.item.service.MaterialRequestService;
 import com.labmanage.module.item.vo.MaterialRequestDetailVO;
 import com.labmanage.module.item.vo.MaterialRequestVO;
+import com.labmanage.module.item.vo.ProxyLineVO;
+import com.labmanage.module.item.vo.ProxySourceVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,10 +23,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 /**
- * 物料申领管理（申领 → 审批 → 实发出库）
+ * 物料申领管理（申领 → 两级审核 → 实发出库）
  */
-@Tag(name = "物料申领管理", description = "申领单登记、审批与实发；批准不扣库存，实发走库存单据过账回写")
+@Tag(name = "物料申领管理", description = "申领单登记、两级审核与实发；本人申领经老师审核+管理员终审，"
+        + "学生代理代领只能引用老师已审核通过的源单并直接交管理员终审；批准不扣库存，实发走库存单据过账回写")
 @RestController
 @RequestMapping("/api/v1/material-requests")
 public class MaterialRequestController {
@@ -35,31 +40,59 @@ public class MaterialRequestController {
         this.requestService = requestService;
     }
 
-    @Operation(summary = "登记申领单（草稿）",
-            description = "自动取开课定额快照并计算定额量（参与人数 × 课时 × 每人每课时定额）；"
-                    + "超定额标记 requires_extra_approval，危险/高价值物料标记 requires_dual_sign；返回申领单 ID")
+    @Operation(summary = "登记申领单（本人申领 / 学生代理代领）",
+            description = "requestType=SELF 本人申领登记草稿，自动取开课定额快照并计算定额量"
+                    + "（参与人数 × 课时 × 每人每课时定额），超定额标记 requires_extra_approval，"
+                    + "危险/高价值物料标记 requires_dual_sign；requestType=PROXY 学生代理代领"
+                    + "必须指定老师已审核通过的源申领单（sourceRequestId），行上 sourceLineId"
+                    + " 绑定源申领行并校验不超过源行剩余可代领量（批准量 − 实发量 − 已占用量），"
+                    + "创建即 TEACHER_APPROVED 直接交管理员终审；返回申领单 ID")
     @SaCheckPermission("item:request:create")
     @PostMapping
     public Result<String> create(@Valid @RequestBody MaterialRequestCreateDTO dto) {
         return Result.success(requestService.create(dto));
     }
 
-    @Operation(summary = "分页查询申领单")
+    @Operation(summary = "分页查询申领单",
+            description = "支持按状态与申领类型（SELF 本人申领 / PROXY 学生代理代领）过滤，"
+                    + "行上带责任老师与代领人姓名")
     @SaCheckPermission("item:request:list")
     @GetMapping("/page")
     public Result<PageResult<MaterialRequestVO>> page(@Valid MaterialRequestQuery query) {
         return Result.success(requestService.page(query));
     }
 
-    @Operation(summary = "申领单详情（含申领行）")
+    @Operation(summary = "申领单详情（含申领行）",
+            description = "含申领类型、源申领单、责任老师与代领人姓名")
     @SaCheckPermission("item:request:list")
     @GetMapping("/{id}")
     public Result<MaterialRequestDetailVO> get(@Parameter(description = "申领单 ID") @PathVariable String id) {
         return Result.success(requestService.get(id));
     }
 
-    @Operation(summary = "审批申领单（草稿 → 已批准）",
-            description = "逐行写批准量（不超过申请量，未指定的行按申请量批准）；批准不扣库存")
+    @Operation(summary = "老师审核申领单（草稿 → 老师已审核）",
+            description = "本人申领第一级审核：逐行写批准量（不超过申请量，未指定的行按申请量批准），"
+                    + "审核通过后交管理员终审；学生代理代领单不经过本环节")
+    @SaCheckPermission("item:request:teacher_approve")
+    @PostMapping("/{id}/teacher-approve")
+    public Result<Void> teacherApprove(@Parameter(description = "申领单 ID") @PathVariable String id,
+                                       @Valid @RequestBody(required = false) MaterialRequestApproveDTO dto) {
+        requestService.teacherApprove(id, dto);
+        return Result.success();
+    }
+
+    @Operation(summary = "老师审核拒绝申领单（草稿 → 已拒绝）")
+    @SaCheckPermission("item:request:teacher_approve")
+    @PostMapping("/{id}/teacher-reject")
+    public Result<Void> teacherReject(@Parameter(description = "申领单 ID") @PathVariable String id) {
+        requestService.teacherReject(id);
+        return Result.success();
+    }
+
+    @Operation(summary = "管理员终审申领单（老师已审核 → 已批准）",
+            description = "第二级审核（终审）：本人申领与代理代领单均由管理员终审；"
+                    + "逐行写批准量（不超过申请量），未指定的行保持既有批准量"
+                    + "（老师已审核的单保持老师批准量，代领行按申请量）；批准不扣库存")
     @SaCheckPermission("item:request:approve")
     @PostMapping("/{id}/approve")
     public Result<Void> approve(@Parameter(description = "申领单 ID") @PathVariable String id,
@@ -68,12 +101,31 @@ public class MaterialRequestController {
         return Result.success();
     }
 
-    @Operation(summary = "拒绝申领单（草稿 → 已拒绝）")
+    @Operation(summary = "管理员终审拒绝申领单（老师已审核 → 已拒绝）")
     @SaCheckPermission("item:request:approve")
     @PostMapping("/{id}/reject")
     public Result<Void> reject(@Parameter(description = "申领单 ID") @PathVariable String id) {
         requestService.reject(id);
         return Result.success();
+    }
+
+    @Operation(summary = "学生代理代领源申领单分页",
+            description = "查询老师已审核通过（TEACHER_APPROVED）的本人申领单作为可代领源单，"
+                    + "支持按责任老师、实验室过滤；行上带责任老师姓名")
+    @SaCheckPermission("item:request:create")
+    @GetMapping("/proxy-sources")
+    public Result<PageResult<ProxySourceVO>> proxySources(@Valid MaterialRequestQuery query) {
+        return Result.success(requestService.proxySources(query));
+    }
+
+    @Operation(summary = "源申领单行（含剩余可代领量）",
+            description = "代领表单选择源单后加载行：剩余可代领量 = 批准量 − 实发量 − "
+                    + "已被有效代领单（未取消、未拒绝）占用的申请量；行上 sourceLineId 为代领提交参数")
+    @SaCheckPermission("item:request:create")
+    @GetMapping("/proxy-sources/{id}/lines")
+    public Result<List<ProxyLineVO>> proxyLines(
+            @Parameter(description = "源申领单 ID") @PathVariable String id) {
+        return Result.success(requestService.proxyLines(id));
     }
 
     @Operation(summary = "取消申领单（未实发才可取消）")

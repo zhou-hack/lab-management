@@ -115,6 +115,15 @@ public class MaterialQuotaServiceImpl implements MaterialQuotaService {
         if (query.getSkuId() != null && !query.getSkuId().isBlank()) {
             wrapper.eq(MaterialQuota::getSkuId, IdUtils.requireId(query.getSkuId(), "物料 ID"));
         }
+        if (query.getCategoryId() != null && !query.getCategoryId().isBlank()) {
+            List<Long> categorySkuIds = skuMapper.selectList(new LambdaQueryWrapper<MaterialSku>()
+                            .eq(MaterialSku::getCategoryId, IdUtils.requireId(query.getCategoryId(), "分类 ID")))
+                    .stream().map(MaterialSku::getId).toList();
+            if (categorySkuIds.isEmpty()) {
+                return PageResult.of(List.of(), 0L, query.getPageNum(), query.getPageSize());
+            }
+            wrapper.in(MaterialQuota::getSkuId, categorySkuIds);
+        }
         wrapper.orderByDesc(MaterialQuota::getId);
         IPage<MaterialQuota> page = quotaMapper.selectPage(PageUtils.toPage(query), wrapper);
 

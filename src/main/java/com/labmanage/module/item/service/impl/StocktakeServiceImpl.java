@@ -9,6 +9,7 @@ import com.labmanage.common.result.ResultCode;
 import com.labmanage.common.utils.PageUtils;
 import com.labmanage.module.item.dto.StocktakeCountDTO;
 import com.labmanage.module.item.dto.StocktakeCreateDTO;
+import com.labmanage.module.item.dto.StocktakeExportQuery;
 import com.labmanage.module.item.dto.StocktakeQuery;
 import com.labmanage.module.item.entity.MaterialSku;
 import com.labmanage.module.item.entity.StockBalance;
@@ -126,27 +127,41 @@ public class StocktakeServiceImpl implements StocktakeService {
 
     @Override
     public PageResult<StocktakeVO> page(StocktakeQuery query) {
+        LambdaQueryWrapper<Stocktake> wrapper = stocktakeWrapper(query.getLocationId(), query.getStatus());
+        IPage<Stocktake> page = stocktakeMapper.selectPage(PageUtils.toPage(query), wrapper);
+        return PageResult.of(stocktakeVOsOf(page.getRecords()), page.getTotal(), query.getPageNum(), query.getPageSize());
+    }
+
+    @Override
+    public List<StocktakeVO> listForExport(StocktakeExportQuery query) {
+        LambdaQueryWrapper<Stocktake> wrapper = stocktakeWrapper(query.getLocationId(), query.getStatus());
+        return stocktakeVOsOf(stocktakeMapper.selectList(wrapper));
+    }
+
+    /** 分页与导出共用的筛选条件（库位/状态） */
+    private LambdaQueryWrapper<Stocktake> stocktakeWrapper(String locationId, StocktakeStatus status) {
         LambdaQueryWrapper<Stocktake> wrapper = new LambdaQueryWrapper<>();
-        if (query.getLocationId() != null && !query.getLocationId().isBlank()) {
-            wrapper.eq(Stocktake::getLocationId, IdUtils.requireId(query.getLocationId(), "库位 ID"));
+        if (locationId != null && !locationId.isBlank()) {
+            wrapper.eq(Stocktake::getLocationId, IdUtils.requireId(locationId, "库位 ID"));
         }
-        if (query.getStatus() != null) {
-            wrapper.eq(Stocktake::getStatus, query.getStatus());
+        if (status != null) {
+            wrapper.eq(Stocktake::getStatus, status);
         }
         wrapper.orderByDesc(Stocktake::getId);
-        IPage<Stocktake> page = stocktakeMapper.selectPage(PageUtils.toPage(query), wrapper);
+        return wrapper;
+    }
 
-        List<Stocktake> records = page.getRecords();
+    /** 共用 VO 转换（补库位名称） */
+    private List<StocktakeVO> stocktakeVOsOf(List<Stocktake> records) {
         Set<Long> locationIds = records.stream().map(Stocktake::getLocationId).collect(Collectors.toSet());
         Map<Long, StockLocation> locationMap = locationIds.isEmpty() ? Map.of()
                 : locationMapper.selectByIds(locationIds).stream()
                         .collect(Collectors.toMap(StockLocation::getId, location -> location));
-        List<StocktakeVO> vos = records.stream()
+        return records.stream()
                 .map(e -> StocktakeVO.from(e,
                         locationMap.containsKey(e.getLocationId())
                                 ? locationMap.get(e.getLocationId()).getLocationName() : null))
                 .toList();
-        return PageResult.of(vos, page.getTotal(), query.getPageNum(), query.getPageSize());
     }
 
     @Override

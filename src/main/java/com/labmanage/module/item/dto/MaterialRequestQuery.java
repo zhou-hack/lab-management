@@ -2,6 +2,7 @@ package com.labmanage.module.item.dto;
 
 import com.labmanage.common.core.BasePageQuery;
 import com.labmanage.module.item.enums.MaterialRequestStatus;
+import com.labmanage.module.item.enums.RequestType;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
@@ -12,6 +13,9 @@ public class MaterialRequestQuery extends BasePageQuery {
 
     @Schema(description = "状态", example = "APPROVED")
     private MaterialRequestStatus status;
+
+    @Schema(description = "申领类型：SELF 本人申领 / PROXY 学生代理代领", example = "SELF")
+    private RequestType requestType;
 
     @Schema(description = "领用实验室 ID", example = "1234567890123456789")
     private String labId;
@@ -28,6 +32,14 @@ public class MaterialRequestQuery extends BasePageQuery {
 
     public void setStatus(MaterialRequestStatus status) {
         this.status = status;
+    }
+
+    public RequestType getRequestType() {
+        return requestType;
+    }
+
+    public void setRequestType(RequestType requestType) {
+        this.requestType = requestType;
     }
 
     public String getLabId() {
