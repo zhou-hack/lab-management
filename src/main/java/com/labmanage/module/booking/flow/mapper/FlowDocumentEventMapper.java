@@ -11,10 +11,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 单据事件 Mapper（追加型历史，不提供更新/删除）
+ * 单据事件 Mapper（追加型历史，不提供更新/删除；
+ * 命名加 Flow 前缀避免与 module/document 同名 Mapper 的 bean 冲突）
  */
 @Mapper
-public interface DocumentEventMapper extends BaseMapper<DocumentEvent> {
+public interface FlowDocumentEventMapper extends BaseMapper<DocumentEvent> {
 
     /** 单据全量事件，按发生时间升序（详情时间线）。 */
     @Select("SELECT * FROM document_event WHERE document_id = #{documentId} AND deleted = 0 "

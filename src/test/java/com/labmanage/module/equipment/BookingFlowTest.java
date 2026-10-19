@@ -82,6 +82,9 @@ class BookingFlowTest {
     private String teacherToken;
     private String studentToken;
 
+    /** BeforeAll 中止（库不可达）时 AfterAll 不再触碰数据源 */
+    private boolean databaseReady;
+
     /** 流程中产生的申请单 ID（用例间传递） */
     private String normalBookingId;
     private String valuableBookingId;
@@ -90,11 +93,15 @@ class BookingFlowTest {
     void prepare() {
         checkDatabaseAvailable();
         seed();
+        databaseReady = true;
         restClient = RestClient.builder().baseUrl("http://localhost:" + port).build();
     }
 
     @AfterAll
     void cleanup() {
+        if (!databaseReady) {
+            return;
+        }
         cleanupTestDocuments();
         jdbcTemplate.update("DELETE FROM equipment_asset WHERE id BETWEEN 910000000000000101 AND 910000000000000199");
         jdbcTemplate.update("DELETE FROM equipment_model WHERE id BETWEEN 910000000000000201 AND 910000000000000299");

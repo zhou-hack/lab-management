@@ -8,7 +8,7 @@ import com.labmanage.module.equipment.dto.BookingCancelRequest;
 import com.labmanage.module.equipment.dto.BookingPageQuery;
 import com.labmanage.module.equipment.dto.BookingReturnRequest;
 import com.labmanage.module.equipment.dto.BookingReviewRequest;
-import com.labmanage.module.equipment.service.BookingService;
+import com.labmanage.module.equipment.service.EquipmentBookingService;
 import com.labmanage.module.equipment.vo.BookingVO;
 import com.labmanage.module.equipment.vo.TeacherOptionVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -30,11 +30,11 @@ import java.util.List;
 @Tag(name = "设备管理-使用申请")
 @RestController
 @RequestMapping("/api/v1/equipment/bookings")
-public class BookingController {
+public class EquipmentBookingController {
 
-    private final BookingService bookingService;
+    private final EquipmentBookingService bookingService;
 
-    public BookingController(BookingService bookingService) {
+    public EquipmentBookingController(EquipmentBookingService bookingService) {
         this.bookingService = bookingService;
     }
 

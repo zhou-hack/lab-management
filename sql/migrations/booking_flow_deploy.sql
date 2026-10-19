@@ -102,7 +102,16 @@ INSERT IGNORE INTO sys_permission (id, permission_code, permission_name, module_
 INSERT IGNORE INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
 (3004, NULL, 'booking_user_view', '预约情况', '/booking/labs', 'BookingUserList', 3005, 'PAGE', 11, 1);
 
--- 6) 授权：STUDENT(3) 仅 view 权限 + 只读菜单；ADMIN/TEACHER 顺带授予 view 不影响写权限
+-- 6) 安全兜底：先回收再授权（旧库同 ID 残留会让 INSERT IGNORE 跳过新绑定，
+--    回收后又把旧行删掉导致绑定缺失，顺序不可颠倒）
+DELETE FROM sys_role_permission
+WHERE role_id = 3 AND permission_id IN (3001, 3002, 3003, 3004);
+DELETE FROM sys_role_permission
+WHERE role_id = 1 AND permission_id IN (3001, 3003);
+DELETE FROM sys_role_menu
+WHERE role_id = 3 AND menu_id IN (3000, 3001, 3002, 3003);
+
+-- 7) 授权：STUDENT(3) 仅 view 权限 + 只读菜单；ADMIN/TEACHER 顺带授予 view 不影响写权限
 INSERT IGNORE INTO sys_role_permission (id, role_id, permission_id, enabled) VALUES
 (3008, 3, 3005, 1),
 (3009, 1, 3005, 1),
@@ -111,12 +120,6 @@ INSERT IGNORE INTO sys_role_permission (id, role_id, permission_id, enabled) VAL
 INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
 (3005, 3, 3004, 1);
 
--- 7) 安全兜底：学生若历史上被误授予写/审批权限，一律回收（幂等）
-DELETE FROM sys_role_permission
-WHERE role_id = 3 AND permission_id IN (3001, 3003, 3004);
-DELETE FROM sys_role_menu
-WHERE role_id = 3 AND menu_id IN (3000, 3001, 3002, 3003);
-
 -- 8) 部署后人工校验：
 -- SELECT role_id, permission_id FROM sys_role_permission WHERE permission_id BETWEEN 3001 AND 3005 ORDER BY role_id, permission_id;
--- 预期：学生(3) 仅 3005；教师(2) 3001/3002/3003/3005；管理员(1) 3001-3005。
+-- 预期：学生(3) 仅 3005；教师(2) 3001/3002/3003/3005；管理员(1) 3002/3004/3005。

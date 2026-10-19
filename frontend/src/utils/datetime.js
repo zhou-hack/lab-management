@@ -155,7 +155,7 @@ export function toShOffsetIso(date) {
     return null
   }
   const options = {
-    timeZone: SH_TZ,
+    timeZone: SHANGHAI,
     hour12: false,
     year: 'numeric',
     month: '2-digit',

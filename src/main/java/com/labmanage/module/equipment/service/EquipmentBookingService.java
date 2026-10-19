@@ -14,7 +14,7 @@ import java.util.List;
 /**
  * 设备使用申请服务（三权级：学生/教师申请，教师初审，管理员终审与借出归还）
  */
-public interface BookingService {
+public interface EquipmentBookingService {
 
     /** 提交使用申请（一台一单；学生待教师初审，教师普通单直接通过、贵重单转管理员终审） */
     void apply(BookingApplyRequest request);

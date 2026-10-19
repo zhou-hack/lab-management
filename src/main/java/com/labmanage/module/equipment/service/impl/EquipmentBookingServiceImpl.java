@@ -27,7 +27,7 @@ import com.labmanage.module.equipment.enums.ValueLevel;
 import com.labmanage.module.equipment.mapper.EquipmentAssetMapper;
 import com.labmanage.module.equipment.mapper.EquipmentBookingMapper;
 import com.labmanage.module.equipment.mapper.EquipmentUsageMapper;
-import com.labmanage.module.equipment.service.BookingService;
+import com.labmanage.module.equipment.service.EquipmentBookingService;
 import com.labmanage.module.equipment.vo.BookingVO;
 import com.labmanage.module.equipment.vo.TeacherOptionVO;
 import com.labmanage.roles.entity.SysUser;
@@ -48,7 +48,7 @@ import java.util.UUID;
  * 时段重叠以 [start_at, end_at) 与 APPROVED/CHECKED_OUT 单相交判定。
  */
 @Service
-public class BookingServiceImpl implements BookingService {
+public class EquipmentBookingServiceImpl implements EquipmentBookingService {
 
     /** 统一单据类型：设备使用申请 */
     private static final String DOC_TYPE_EQUIPMENT_BOOKING = "EQUIPMENT_BOOKING";
@@ -63,7 +63,7 @@ public class BookingServiceImpl implements BookingService {
     private final DocumentEventMapper eventMapper;
     private final SysUserMapper userMapper;
 
-    public BookingServiceImpl(EquipmentAssetMapper assetMapper,
+    public EquipmentBookingServiceImpl(EquipmentAssetMapper assetMapper,
                                EquipmentBookingMapper bookingMapper,
                                EquipmentUsageMapper usageMapper,
                                BizDocumentMapper documentMapper,

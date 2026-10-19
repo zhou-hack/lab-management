@@ -12,18 +12,18 @@ USE lab_management;
 
 SET NAMES utf8mb4;
 
-INSERT INTO sys_permission (id, permission_code, permission_name, module_code, enabled) VALUES
+INSERT IGNORE INTO sys_permission (id, permission_code, permission_name, module_code, enabled) VALUES
 (164, 'item:balance:import',   '期初余额批量导入', 'item', 1),
 (165, 'item:balance:export',   '库存余额导出',     'item', 1),
 (166, 'item:stocktake:export', '盘点快照导出',     'item', 1);
 
-INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
+INSERT IGNORE INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
 (212, 156, 'item:balance:import',   '期初余额批量导入', NULL, NULL, 164, 'ACTION', 3, 1),
 (213, 156, 'item:balance:export',   '库存余额导出',     NULL, NULL, 165, 'ACTION', 4, 1),
 (214, 183, 'item:stocktake:export', '盘点快照导出',     NULL, NULL, 166, 'ACTION', 6, 1);
 
-INSERT INTO sys_role_permission (id, role_id, permission_id, enabled) VALUES
+INSERT IGNORE INTO sys_role_permission (id, role_id, permission_id, enabled) VALUES
 (260, 1, 164, 1), (261, 1, 165, 1), (262, 1, 166, 1);
 
-INSERT INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
+INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
 (362, 1, 212, 1), (363, 1, 213, 1), (364, 1, 214, 1);

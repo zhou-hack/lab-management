@@ -12,20 +12,20 @@ USE lab_management;
 
 SET NAMES utf8mb4;
 
-INSERT INTO sys_permission (id, permission_code, permission_name, module_code, enabled) VALUES
+INSERT IGNORE INTO sys_permission (id, permission_code, permission_name, module_code, enabled) VALUES
 (160, 'item:material:import', '物料批量导入',     'item', 1),
 (161, 'item:material:export', '物料批量导出',     'item', 1),
 (162, 'item:category:import', '物料分类批量导入', 'item', 1),
 (163, 'item:category:export', '物料分类批量导出', 'item', 1);
 
-INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
+INSERT IGNORE INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
 (206, 152, 'item:category:import', '物料分类批量导入', NULL, NULL, 162, 'ACTION', 6, 1),
 (207, 152, 'item:category:export', '物料分类批量导出', NULL, NULL, 163, 'ACTION', 7, 1),
 (208, 153, 'item:material:import', '物料批量导入',     NULL, NULL, 160, 'ACTION', 6, 1),
 (209, 153, 'item:material:export', '物料批量导出',     NULL, NULL, 161, 'ACTION', 7, 1);
 
-INSERT INTO sys_role_permission (id, role_id, permission_id, enabled) VALUES
+INSERT IGNORE INTO sys_role_permission (id, role_id, permission_id, enabled) VALUES
 (245, 1, 160, 1), (246, 1, 161, 1), (247, 1, 162, 1), (248, 1, 163, 1);
 
-INSERT INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
+INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
 (357, 1, 206, 1), (358, 1, 207, 1), (359, 1, 208, 1), (360, 1, 209, 1);

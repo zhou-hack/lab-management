@@ -244,8 +244,7 @@ import {
   Grid,
   Location,
   Monitor,
-  Notebook,
-  Tools
+  Notebook
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import { pageAssets, pageModels } from '@/api/equipment'

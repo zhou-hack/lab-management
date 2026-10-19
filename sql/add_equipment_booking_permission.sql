@@ -120,29 +120,49 @@ SELECT 621, 3, 219, 1 WHERE NOT EXISTS (SELECT 1 FROM sys_role_menu WHERE id = 6
 
 -- 5. 教师/学生演示账号（仅开发/测试环境；生产库不得执行本段）
 --    密码与 admin 相同：admin123 的 BCrypt 哈希（见 计算机网络实训室种子数据.sql）
+--    注：用户 id 取 3/4（id=1 admin、id=2 opsadmin 已被预置账号占用）；
+--    名单按 person_no/phone 幂等解析，命中既有名单行（如 docx 期初导入）直接复用
 -- 5.1 预录名单（RBAC 定稿：学生/老师首登须匹配 sys_person_roster）
 INSERT INTO sys_person_roster (id, person_no, person_type, real_name, phone, department_id, enabled)
 SELECT 101, 'T001', 'TEACHER', '王老师', '13800000001', 1, 1
-WHERE NOT EXISTS (SELECT 1 FROM sys_person_roster WHERE id = 101);
+WHERE NOT EXISTS (SELECT 1 FROM sys_person_roster
+                  WHERE id = 101 OR person_no = 'T001' OR phone = '13800000001');
 
 INSERT INTO sys_person_roster (id, person_no, person_type, real_name, phone, department_id, enabled)
 SELECT 102, 'S001', 'STUDENT', '张同学', '13900000001', 1, 1
-WHERE NOT EXISTS (SELECT 1 FROM sys_person_roster WHERE id = 102);
+WHERE NOT EXISTS (SELECT 1 FROM sys_person_roster
+                  WHERE id = 102 OR person_no = 'S001' OR phone = '13900000001');
 
--- 5.2 用户建档（id 固定小 ID 2/3；密码 admin123，部署前必须替换）
+-- 5.1.1 解析名单行 id（优先 person_no，兜底 phone）
+SET @roster_t := (SELECT id FROM sys_person_roster
+                  WHERE (person_no = 'T001' OR phone = '13800000001') AND deleted = 0
+                  ORDER BY (person_no = 'T001') DESC, id LIMIT 1);
+SET @roster_s := (SELECT id FROM sys_person_roster
+                  WHERE (person_no = 'S001' OR phone = '13900000001') AND deleted = 0
+                  ORDER BY (person_no = 'S001') DESC, id LIMIT 1);
+
+-- 5.2 用户建档（id 固定小 ID 3/4；密码 admin123，部署前必须替换；
+--     同手机号或同账号名用户已存在（如实库 docx 期初账号）时跳过，复用既有账号）
 INSERT INTO sys_user (id, roster_id, user_type, real_name, account_name, phone, person_no, department_id, password_hash, password_changed_at)
-SELECT 2, 101, 'TEACHER', '王老师', 'teacher1', '13800000001', 'T001', 1,
+SELECT 3, r.id, 'TEACHER', r.real_name, 'teacher1', r.phone, r.person_no, 1,
        '$2a$10$XV8quUrmu3w9j86DSh5kY.cXgNZLtFBFqBT858uAz99zke4FZee.y', UTC_TIMESTAMP(3)
-WHERE NOT EXISTS (SELECT 1 FROM sys_user WHERE id = 2);
+FROM sys_person_roster r
+WHERE r.id = @roster_t AND NOT EXISTS (SELECT 1 FROM sys_user WHERE id = 3)
+  AND NOT EXISTS (SELECT 1 FROM sys_user u WHERE u.phone = r.phone OR u.account_name = 'teacher1');
 
 INSERT INTO sys_user (id, roster_id, user_type, real_name, account_name, phone, person_no, department_id, password_hash, password_changed_at)
-SELECT 3, 102, 'STUDENT', '张同学', 'student1', '13900000001', 'S001', 1,
+SELECT 4, r.id, 'STUDENT', r.real_name, 'student1', r.phone, r.person_no, 1,
        '$2a$10$XV8quUrmu3w9j86DSh5kY.cXgNZLtFBFqBT858uAz99zke4FZee.y', UTC_TIMESTAMP(3)
-WHERE NOT EXISTS (SELECT 1 FROM sys_user WHERE id = 3);
+FROM sys_person_roster r
+WHERE r.id = @roster_s AND NOT EXISTS (SELECT 1 FROM sys_user WHERE id = 4)
+  AND NOT EXISTS (SELECT 1 FROM sys_user u WHERE u.phone = r.phone OR u.account_name = 'student1');
 
--- 5.3 角色绑定（TEACHER=2 / STUDENT=3）
+-- 5.3 角色绑定（TEACHER=2 / STUDENT=3；绑定 id 3/4，id=1/2 已被 admin/opsadmin 占用；
+--     用户因复用既有账号跳过时绑定同步跳过）
 INSERT INTO sys_user_role (id, user_id, role_id, enabled)
-SELECT 2, 2, 2, 1 WHERE NOT EXISTS (SELECT 1 FROM sys_user_role WHERE id = 2);
+SELECT 3, 3, 2, 1 WHERE NOT EXISTS (SELECT 1 FROM sys_user_role WHERE id = 3)
+  AND EXISTS (SELECT 1 FROM sys_user WHERE id = 3);
 
 INSERT INTO sys_user_role (id, user_id, role_id, enabled)
-SELECT 3, 3, 3, 1 WHERE NOT EXISTS (SELECT 1 FROM sys_user_role WHERE id = 3);
+SELECT 4, 4, 3, 1 WHERE NOT EXISTS (SELECT 1 FROM sys_user_role WHERE id = 4)
+  AND EXISTS (SELECT 1 FROM sys_user WHERE id = 4);
