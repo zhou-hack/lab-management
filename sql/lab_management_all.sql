@@ -499,7 +499,18 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code) V
 (151, 'equipment:asset:update',    '设备台账修改', 'equipment'),
 (152, 'equipment:asset:delete',    '设备台账删除', 'equipment'),
 (153, 'equipment:asset:transfer',  '设备迁移登记', 'equipment'),
-(154, 'equipment:asset:classify',  '设备价值定级', 'equipment');
+(154, 'equipment:asset:classify',  '设备价值定级', 'equipment'),
+-- 三权级设备使用申请与台账导入导出（2026-10-19 定稿，固定设备管理分支）
+(160, 'equipment:asset:import',    '设备台账导入', 'equipment'),
+(161, 'equipment:asset:export',    '设备台账导出', 'equipment'),
+(162, 'equipment:booking:apply',         '设备使用申请',     'equipment'),
+(163, 'equipment:booking:list_own',      '本人设备申请查询', 'equipment'),
+(164, 'equipment:booking:cancel',        '撤销本人设备申请', 'equipment'),
+(165, 'equipment:booking:teacher_review', '设备申请教师初审', 'equipment'),
+(166, 'equipment:booking:admin_review',  '设备申请终审代批', 'equipment'),
+(167, 'equipment:booking:checkout',      '设备借出发放登记', 'equipment'),
+(168, 'equipment:booking:return',        '设备归还登记',     'equipment'),
+(169, 'equipment:booking:list_all',      '设备申请全量查询', 'equipment');
 
 -- ----------------------------------------------------------------------------
 -- 3.8 equipment 菜单（200、202；2026-10-17 产品定稿：设备管理不要子菜单，
@@ -508,10 +519,19 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code) V
 -- ----------------------------------------------------------------------------
 INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order) VALUES
 (202, NULL, 'C_EQUIPMENT_ADMIN',    '设备管理', '/admin/equipment',         'EquipmentManage', 149,  'PAGE',      20),
-(204, 202,  'F_EQUIPMENT_ASSET_CREATE', '设备登记', NULL, NULL, 150, 'ACTION', 1);
+(204, 202,  'F_EQUIPMENT_ASSET_CREATE', '设备登记', NULL, NULL, 150, 'ACTION', 1),
+-- 三权级：台账导入导出动作 + 用户端目录/我的申请/教师初审 + 管理端使用审批
+(206, 202,  'equipment:asset:import',  '设备导入', NULL, NULL, 160, 'ACTION', 2),
+(207, 202,  'equipment:asset:export',  '设备导出', NULL, NULL, 161, 'ACTION', 3),
+(208, NULL, 'C_EQUIPMENT_DIRECTORY',    '设备目录',     '/equipment/directory',       'EquipmentDirectory',      149, 'PAGE', 21),
+(209, NULL, 'C_EQUIPMENT_MY_BOOKING',   '我的设备申请', '/equipment/bookings/my',     'MyEquipmentBookings',    163, 'PAGE', 22),
+(210, NULL, 'C_EQUIPMENT_TEACHER_REVIEW', '设备申请初审', '/equipment/bookings/teacher', 'EquipmentTeacherApprove', 165, 'PAGE', 23),
+(211, NULL, 'C_EQUIPMENT_BOOKING_ADMIN', '设备使用审批', '/admin/equipment/bookings', 'EquipmentBookingManage', 166, 'PAGE', 24);
 
 -- ----------------------------------------------------------------------------
--- 3.9 角色绑定：仅 ADMIN(1) 开放设备模块（14 项权限；老师/学生不绑定）
+-- 3.9 角色绑定：分类/型号/台账维护仅 ADMIN(1)；三权级（2026-10-19 定稿）
+--     ADMIN 导入导出+终审/借出/归还/全量查询；TEACHER 目录+申请/本人查/撤销/初审；
+--     STUDENT 目录+申请/本人查/撤销
 -- ----------------------------------------------------------------------------
 INSERT INTO sys_role_permission (id, role_id, permission_id) VALUES
 (515, 1, 141),
@@ -527,11 +547,35 @@ INSERT INTO sys_role_permission (id, role_id, permission_id) VALUES
 (525, 1, 151),
 (526, 1, 152),
 (527, 1, 153),
-(528, 1, 154);
+(528, 1, 154),
+-- 三权级绑定：ADMIN 导入导出+终审/借出/归还/全量；TEACHER 目录+申请/初审；STUDENT 目录+申请
+(529, 1, 160),
+(530, 1, 161),
+(531, 1, 166),
+(532, 1, 167),
+(533, 1, 168),
+(534, 1, 169),
+(535, 2, 149),
+(536, 2, 162),
+(537, 2, 163),
+(538, 2, 164),
+(539, 2, 165),
+(540, 3, 149),
+(541, 3, 162),
+(542, 3, 163),
+(543, 3, 164);
 
 INSERT INTO sys_role_menu (id, role_id, menu_id) VALUES
 (608, 1, 202),
-(610, 1, 204);
+(610, 1, 204),
+(611, 1, 206),
+(612, 1, 207),
+(616, 1, 211),
+(617, 2, 208),
+(618, 2, 209),
+(619, 2, 210),
+(620, 3, 208),
+(621, 3, 209);
 
 -- ############################################################################
 -- 模块四：物料管理模块 · 第一阶段（实施分组 C）
