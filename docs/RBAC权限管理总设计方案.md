@@ -1,7 +1,7 @@
 # RBAC 权限管理总设计方案
 
 > 定位：权限体系的总体设计文档，向下衔接三份既有文档——[权限清单.md](权限清单.md)（PRD 功能矩阵）、[数据库设计.md](数据库设计.md) 4.1/4.6/4.9 节（表结构评审稿 v1.0）、[RBAC实施清单.md](RBAC实施清单.md)（权限/菜单/认证契约登记）。冲突时以数据库设计.md 为准，登记类细节以 RBAC实施清单.md 为准。
-> 版本：v1.0；整理日期：2026-10-15；状态：system 模块已落地并通过应用级验证，业务模块（space/asset/booking/item/maintain/report）随实施分组 A→E 补充。
+> 版本：v1.0；整理日期：2026-10-15；状态：system 模块已落地并通过应用级验证；space 模块于 2026-10-20 整体下线；业务模块（asset/booking/item/maintain/report）随实施分组 B→E 补充（原依赖 space 表的设计待重新评审）。
 
 ---
 
@@ -67,11 +67,11 @@
 
 | 角色 | id | 定位 | 权限来源 | 创建方式 | 数据范围 |
 | --- | --- | --- | --- | --- | --- |
-| ADMIN | 1 | 设备处业务管理员 | 静态绑定 24 项 system 权限（1-22, 26-27） | 用户管理页 createAdmin（绑固定角色） | 受 sys_user_data_scope 约束，无行即零范围 |
+| ADMIN | 1 | 设备处业务管理员 | 静态绑定 26 项 system 权限（1-22, 26-27, 29-30） | 用户管理页 createAdmin（绑固定角色） | 受 sys_user_data_scope 约束，无行即零范围 |
 | TEACHER | 2 | 授课老师 | 静态绑定助理授权 3 项（23-25）+ 业务模块增量 | 名单首登自动建档派生 | 本人 + 课程名单计算，不可登记范围行 |
 | STUDENT | 3 | 在校学生 | 业务模块增量 | 名单首登自动建档派生 | 仅本人数据 |
 | ASSISTANT | 4 | 老师助理（附加角色） | 不持久化，由有效 assistant_grant 动态计算 | 老师授权产生，到期/撤销自动还原 | 授权范围（OFFERING/LAB + ISSUE/RETURN） |
-| OPS_ADMIN | 5 | 最高级运维管理员 | 静态绑定全部权限（当前 40 项：system 1-28 + space 1000-1011；后续模块新增权限随各自脚本同步绑定） | 仅 SQL 预置（sql/sys_ops_role.sql），页面不可创建；其权限绑定锁定不可页面调整（40900），其余 4 个预置角色的权限绑定可由运维管理员整集替换（system:role:assign） | 不受范围约束（面向全系统数据与配置；实现层豁免见 SysScopeServiceImpl.isOpsAdmin） |
+| OPS_ADMIN | 5 | 最高级运维管理员 | 静态绑定全部权限（当前 30 项：system 1-30；后续模块新增权限随各自脚本同步绑定） | 仅 SQL 预置（sql/sys_ops_role.sql），页面不可创建；其权限绑定锁定不可页面调整（40900），其余 4 个预置角色的权限绑定可由运维管理员整集替换（system:role:assign） | 不受范围约束（面向全系统数据与配置；实现层豁免见 SysScopeServiceImpl.isOpsAdmin） |
 
 层级关系：OPS_ADMIN 为最高级运维角色，普通 ADMIN 无法通过任何页面操作创建或提升账号为 OPS_ADMIN；ASSISTANT 附加在 STUDENT 之上，授权期内同时持有 STUDENT + ASSISTANT。
 
@@ -82,7 +82,6 @@
 | module_code | 模块 | ID 段 | 状态 |
 | --- | --- | --- | --- |
 | system | 身份、组织、权限、日志、策略 | 1–999 | 已出 SQL 并落地 |
-| space | 校区、楼栋、实验室、课程排课 | 1000–1999 | 分组 A |
 | asset | 器材台账、工位 | 2000–2999 | 分组 B |
 | booking | 场地预约、器材借用、使用台账 | 3000–3999 | 分组 C |
 | item | 物料、配件库存 | 4000–4999 | 分组 D |
@@ -144,7 +143,7 @@
 | 规则 | 内容 |
 | --- | --- |
 | 适用对象 | 仅 ADMIN 类型用户；学生/老师范围由本人+课程名单+有效助理授权计算，不可登记范围行 |
-| scope_type | ALL / DEPARTMENT（一期）；CAMPUS / BUILDING / LAB 随空间模块开放 |
+| scope_type | ALL / DEPARTMENT（一期）；CAMPUS / BUILDING / LAB 为预留类型（空间功能已下线，不开放） |
 | access_mode | READ / WRITE；WRITE 蕴含 READ |
 | 存储 | 唯一键 (user_id, scope_type, access_mode, scope_target_id)，scope_target_id 为生成列归一（ALL 行目标为 NULL 也可去重）；同目标 READ/WRITE 可各存一行，升降级=增删行 |
 | 匹配 | ALL 行匹配任意请求；DEPARTMENT 精确匹配，不向下继承子部门 |
@@ -280,11 +279,11 @@ RBAC 核心 11 表（sql/sys_rbac.sql）：sys_department、sys_person_roster、
 | 锁定限流、会话分时长、动态 ASSISTANT 装配 | ✅ 已落地并验证 |
 | 用户/名单（含 CSV 导出与批量导入）/组织/角色只读/数据范围/预约限制/操作日志/参数配置 | ✅ 已落地并验证 |
 | 助理授权（创建/撤销/审计 + 权限缓存失效闭环） | ✅ 已落地并验证（范围表已建，业务接入待分组 B→E） |
-| OPS_ADMIN 运维角色 | ✅ 已落地并验证；2026-10-15 由运维子集调整为全部权限；2026-10-17 增至 42 项并新增角色权限整集替换（system:role:assign，锁 OPS_ADMIN 角色） |
+| OPS_ADMIN 运维角色 | ✅ 已落地并验证；2026-10-15 由运维子集调整为全部权限；2026-10-17 新增角色权限整集替换（system:role:assign，锁 OPS_ADMIN 角色）；2026-10-20 空间功能下线后回至 30 项 |
 | 敏感端点二级认证强制执行（checkSafe + 40101 + 前端确认弹窗重试） | ✅ 已落地并验证（策略发布等敏感端点接入） |
-| 空间模块（校区/楼栋/实验室/开放规则 + 空间数据范围 CAMPUS/BUILDING/LAB） | ✅ 已落地并验证（27/27 项 E2E，权限 ID 1000–1011） |
-| course/schedule 教学基础与 asset/booking/item/maintain/report 权限登记 | ⬜ 随分组 B→E |
-| 助理授权范围（OFFERING/LAB + ISSUE/RETURN）业务接入 | ⬜ lab 已建表；OFFERING 依赖 course_offering，领用/归还接入随分组 D |
+| 空间模块（校区/楼栋/实验室/开放规则） | ❌ 已于 2026-10-20 整体下线（模块代码、页面、权限 1000–1011、菜单 1000–1002、四表全部移除；CAMPUS/BUILDING/LAB 范围类型回退为预留） |
+| course/schedule 教学基础与 asset/booking/item/maintain/report 权限登记 | ⬜ 随分组 B→E（原依赖 space 表的设计待重新评审） |
+| 助理授权范围（OFFERING/LAB + ISSUE/RETURN）业务接入 | ⬜ OFFERING 依赖 course_offering；LAB 目标随空间功能下线暂不可用，领用/归还接入随分组 D 重新评审 |
 | 自定义角色、字段级权限、SSO/人脸识别 | ⬜ 一期不做（二期预留 SSO） |
 
 ---
@@ -294,5 +293,5 @@ RBAC 核心 11 表（sql/sys_rbac.sql）：sys_department、sys_person_roster、
 1. 运维账号保护已实现：目标用户持有 OPS_ADMIN 角色时，编辑/启停/重置仅 OPS_ADMIN 本人可操作（SysUserServiceImpl.requireOpsAdminOperator，普通管理员调用返回 40300），普通 ADMIN 无法接管 opsadmin 账号；OPS_ADMIN 对普通账号的编辑/启停/重置不受此限（停用/重置本人仍被 40900 拦截）。
 2. 会话缓存按会话隔离：助理授权在未来时刻生效的，学生已在线会话不会到点自动获得助理身份，需重新登录（授权创建时的踢会话只保证创建时点之后的重登生效）。
 3. 短信验证码为单实例内存存储+模拟通道；多实例部署需迁共享存储并接真实通道。
-4. 数据范围类型 ALL/DEPARTMENT 已随 roles 模块开放；CAMPUS/BUILDING/LAB 类型已随空间模块开放（写操作按所属部门校验，见 SystemScope / module.space 实现）。部门精确匹配不继承。
+4. 数据范围类型仅 ALL/DEPARTMENT 开放（写操作按所属部门校验）；CAMPUS/BUILDING/LAB 为预留类型，已随 2026-10-20 空间功能下线不再开放。部门精确匹配不继承。
 5. 跨归口只读（显式 READ 行）规则已定，READ 行的页面化发放随业务模块可见性需求接入。

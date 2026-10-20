@@ -69,7 +69,7 @@ const staticRoutes = [
 const KNOWN_PAGE_PATHS = new Set([
   '/system/user', '/system/roster', '/system/department', '/system/role', '/system/scope',
   '/system/restriction', '/system/log', '/system/policy', '/system/grant',
-  '/space/campus', '/space/lab', '/grant'
+  '/grant'
 ])
 
 const APP_TITLE = '实验室设备管理系统'

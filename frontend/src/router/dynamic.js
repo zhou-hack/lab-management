@@ -20,8 +20,6 @@ const viewModules = {
   SystemLog: { layout: 'admin', load: () => import('@/views/admin/system/SystemLog.vue') },
   SystemPolicy: { layout: 'admin', load: () => import('@/views/admin/system/SystemPolicy.vue') },
   SystemGrantAudit: { layout: 'admin', load: () => import('@/views/admin/system/SystemGrantAudit.vue') },
-  SpaceCampus: { layout: 'admin', load: () => import('@/views/admin/space/SpaceCampus.vue') },
-  SpaceLab: { layout: 'admin', load: () => import('@/views/admin/space/SpaceLab.vue') },
   GrantManage: { layout: 'front', load: () => import('@/views/front/grant/GrantManage.vue') }
 }
 

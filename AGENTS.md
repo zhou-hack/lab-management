@@ -46,14 +46,14 @@
 
 ## 数据库与实体（Final）
 
-- Schema 以 [docs/数据库设计.md](docs/数据库设计.md)（评审稿 v1.0）为准；建表脚本按模块放 `sql/`，RBAC 已定稿为 [sql/sys_rbac.sql](sql/sys_rbac.sql)（11 张表：部门、名单、用户、角色、权限、菜单、三组关联、数据范围、预约限制）。后续模块脚本按实施分组 A→E 补充，不另行设计。
+- Schema 以 [docs/数据库设计.md](docs/数据库设计.md)（评审稿 v1.0）为准；建表脚本按模块放 `sql/`，RBAC 已定稿为 [sql/sys_rbac.sql](sql/sys_rbac.sql)（11 张表：部门、名单、用户、角色、权限、菜单、三组关联、数据范围、预约限制）。space 模块（校区/楼栋/实验室）已于 2026-10-20 整体下线；后续模块脚本按实施分组 B→E 补充，原依赖 space 表的设计待重新评审。
 - 主键统一雪花 ID：`BIGINT`（MyBatis-Plus `ASSIGN_ID`），接口序列化为字符串，避免 JavaScript 精度损失；关联字段同类型。初始数据使用固定小 ID（如角色 1-4、管理员 1），与雪花 ID 不冲突。
 - 公共字段：`id/create_time/update_time/deleted/create_user_id/update_user_id`；当前 `BaseEntity` 已覆盖前四项，后续接入数据库时补齐操作者字段。`version` 仅余额等需并发控制的可变表使用，从 0 起条件更新递增。
 - 时间列 `DATETIME(3)` 存 UTC，列默认值 `UTC_TIMESTAMP(3)`；会话 `+00:00` 时 `ON UPDATE CURRENT_TIMESTAMP(3)` 即 UTC。
 - 类型记号：`CODE=VARCHAR(64)`、`NAME=VARCHAR(128)`、`SHORT=VARCHAR(32)`（Java 枚举映射，不用 MySQL ENUM）、`BOOL=TINYINT`（仅 0/1，加 CHECK）、`QTY=DECIMAL(18,3)`、`MONEY=DECIMAL(18,2)`、`PRICE=DECIMAL(18,4)`、`DATE=DATE`（纯日期）、`CLOCK=TIME(0)`（上海本地节次）。
-- 外键默认 `RESTRICT`，不级联删除历史业务；审计字段 `create_user_id/update_user_id` 不建外键（避免组织/用户循环依赖）；跨模块引用（如 `campus_id`、`source_document_id`）只建列与索引，外键由所属模块脚本补充。
+- 外键默认 `RESTRICT`，不级联删除历史业务；审计字段 `create_user_id/update_user_id` 不建外键（避免组织/用户循环依赖）；跨模块引用（如 `source_document_id`）只建列与索引，外键由所属模块脚本补充；`sys_user_data_scope` 与 `assistant_grant_scope` 的 campus/building/lab 列为预留（空间功能已于 2026-10-20 下线），不建外键。
 - 唯一与删除：业务码、学工号逻辑删除后不复用；关系表保持一行唯一（组合唯一建索引），不用 `(业务键, deleted)` 解决重复创建；含可空列的目标去重使用生成列归一（参照 `sys_user_data_scope.scope_target_id`）。
-- RBAC 定稿规则：预置角色 `ADMIN/TEACHER/STUDENT/ASSISTANT/OPS_ADMIN`；学生/老师首登须匹配 `sys_person_roster` 预录名单，不能自行提升身份；`ASSISTANT` 不持久化到 `sys_user_role`，由有效 `assistant_grant` 动态计算；`OPS_ADMIN`（运维管理员）为最高级运维角色，仅 SQL 预置不开放页面创建，绑定全部权限（后续模块新增权限随各自脚本同步绑定），不受数据范围约束，opsadmin 账号仅 OPS_ADMIN 本人可编辑/启停/重置；角色本身仍 SQL 预置不可增删，但 OPS_ADMIN 角色权限绑定锁定不可页面调整（40900），其余 4 个预置角色的权限绑定可由运维管理员整集替换（`system:role:assign` 仅绑 OPS_ADMIN，变更踢该角色持有者会话）；管理员数据范围用 `sys_user_data_scope`（ALL/DEPARTMENT/CAMPUS/BUILDING/LAB + READ/WRITE），无范围记录不自动授予全校数据。
+- RBAC 定稿规则：预置角色 `ADMIN/TEACHER/STUDENT/ASSISTANT/OPS_ADMIN`；学生/老师首登须匹配 `sys_person_roster` 预录名单，不能自行提升身份；`ASSISTANT` 不持久化到 `sys_user_role`，由有效 `assistant_grant` 动态计算；`OPS_ADMIN`（运维管理员）为最高级运维角色，仅 SQL 预置不开放页面创建，绑定全部权限（后续模块新增权限随各自脚本同步绑定），不受数据范围约束，opsadmin 账号仅 OPS_ADMIN 本人可编辑/启停/重置；角色本身仍 SQL 预置不可增删，但 OPS_ADMIN 角色权限绑定锁定不可页面调整（40900），其余 4 个预置角色的权限绑定可由运维管理员整集替换（`system:role:assign` 仅绑 OPS_ADMIN，变更踢该角色持有者会话）；管理员数据范围用 `sys_user_data_scope`（一期开放 ALL/DEPARTMENT + READ/WRITE；CAMPUS/BUILDING/LAB 预留不开放），无范围记录不自动授予全校数据。
 - 初始数据：预置部门"设备处"（id=1）、5 个角色、管理员 `admin`（id=1）与运维管理员 `opsadmin`（id=2）（密码哈希均为占位值，部署前必须替换并强制首登修改）；权限与菜单初始数据由业务模块脚本按 `模块:资源:操作` 规范登记。
 - 权限标识规范 `模块:资源:操作`（如 `item:material:create`），前后端一致，登记在 `sys_permission`。
 

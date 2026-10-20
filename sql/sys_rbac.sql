@@ -16,8 +16,8 @@
 --   * MySQL 8.4.11 LTS， InnoDB / utf8mb4 / utf8mb4_0900_ai_ci；
 --   * 服务端与连接会话时区均为 +00:00（Connector/J 参数 connectionTimeZone=UTC
 --     &forceConnectionTimeZoneToSession=true），此时 CURRENT_TIMESTAMP 即 UTC；
---   * 跨模块引用（campus/building/lab/biz_document）只建列与索引，外键由所属
---     模块脚本补充（实施分组 A 的空间表、分组 B 的单据表）；
+--   * 跨模块引用只建列与索引，外键由所属模块脚本补充（分组 B 的单据表）；
+--     campus/building/lab 为预留列（空间功能已下线），不建外键；
 --   * 审计字段 create_user_id/update_user_id 统一不建外键，避免组织/用户表
 --     循环依赖；其值由服务端写入 sys_user.id，系统任务为 NULL。
 -- 初始数据：预置部门（设备处）、4 个角色（第 5 个角色 OPS_ADMIN 见增量脚本
@@ -250,16 +250,16 @@ CREATE TABLE sys_user_role (
 -- ----------------------------------------------------------------------------
 -- 10. sys_user_data_scope 用户数据范围表
 --     仅管理员写范围按归口授权；ALL 不填目标 ID，其余类型恰好填写对应目标。
---     campus_id/building_id/lab_id 为跨模块引用，外键由对应模块脚本补充。
+--     campus_id/building_id/lab_id 为预留列（空间功能已下线），不建外键。
 -- ----------------------------------------------------------------------------
 CREATE TABLE sys_user_data_scope (
     id            BIGINT      NOT NULL                COMMENT '主键',
     user_id       BIGINT      NOT NULL                COMMENT '用户 ID（→ sys_user.id）',
     scope_type    VARCHAR(32) NOT NULL                COMMENT '范围类型：ALL/DEPARTMENT/CAMPUS/BUILDING/LAB',
     department_id BIGINT      NULL                    COMMENT '目标部门（→ sys_department.id，scope_type=DEPARTMENT 时必填）',
-    campus_id     BIGINT      NULL                    COMMENT '目标校区（→ campus.id，跨模块，外键由空间模块补充）',
-    building_id   BIGINT      NULL                    COMMENT '目标楼栋（→ building.id，跨模块，外键由空间模块补充）',
-    lab_id        BIGINT      NULL                    COMMENT '目标实验室（→ lab.id，跨模块，外键由空间模块补充）',
+    campus_id     BIGINT      NULL                    COMMENT '目标校区（预留，空间功能已下线，不建外键）',
+    building_id   BIGINT      NULL                    COMMENT '目标楼栋（预留，空间功能已下线，不建外键）',
+    lab_id        BIGINT      NULL                    COMMENT '目标实验室（预留，空间功能已下线，不建外键）',
     access_mode   VARCHAR(32) NOT NULL                COMMENT '操作级别：READ/WRITE（WRITE 含 READ）',
     -- 目标去重键：MySQL 唯一索引允许多个 NULL，用生成列将四目标归一为非空键
     scope_target_id BIGINT GENERATED ALWAYS AS (COALESCE(department_id, campus_id, building_id, lab_id, 0)) STORED COMMENT '范围目标归一键（生成列，勿写）',

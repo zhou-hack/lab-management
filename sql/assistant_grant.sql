@@ -9,7 +9,8 @@
 --      一笔代办必须明确选用一条授权；
 --   3. 范围表 OFFERING/LAB 目标恰一非空（CHECK），生成列归一后
 --      (grant_id, scope_type, scope_target_id, action_code) 唯一；
---   4. offering_id / lab_id 为跨模块引用，只建列与索引，外键由教学/空间模块脚本补充。
+--   4. offering_id / lab_id 为跨模块引用，只建列与索引；offering_id 外键由
+--      教学模块脚本补充，lab_id 预留（空间功能已下线）不建外键。
 -- 执行前提：sys_rbac.sql 已执行（依赖 sys_user）；时区约定同 sys_rbac.sql。
 -- ============================================================================
 
@@ -50,7 +51,7 @@ CREATE TABLE assistant_grant_scope (
     grant_id      BIGINT      NOT NULL                COMMENT '授权（→ assistant_grant.id）',
     scope_type    VARCHAR(32) NOT NULL                COMMENT '范围类型：OFFERING/LAB',
     offering_id   BIGINT      NULL                    COMMENT '目标开课（→ course_offering.id，跨模块，外键由教学模块补充）',
-    lab_id        BIGINT      NULL                    COMMENT '目标实验室（→ lab.id，跨模块，外键由空间模块补充）',
+    lab_id        BIGINT      NULL                    COMMENT '目标实验室（预留，空间功能已下线，不建外键）',
     action_code   VARCHAR(64) NOT NULL                COMMENT '动作：ISSUE/RETURN',
     scope_target_id BIGINT GENERATED ALWAYS AS (COALESCE(offering_id, lab_id, 0)) STORED COMMENT '范围目标归一键（生成列，勿写）',
     create_time   DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)) COMMENT '创建时间（UTC）',

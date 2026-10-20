@@ -13,12 +13,13 @@
 | module_code | 模块 | 设计依据（数据库设计） | 初始数据 ID 段 |
 | --- | --- | --- | --- |
 | system | 身份、组织、权限、日志、策略 | 4.1 / 4.6 / 4.9 | 1–999 |
-| space | 校区、楼栋、实验室、课程排课 | 4.2 | 1000–1999 |
 | asset | 器材台账、工位 | 4.3 | 2000–2999 |
 | booking | 场地预约、器材借用、使用台账 | 4.4 / 4.5 | 3000–3999 |
 | item | 物料、配件库存 | 4.7 | 4000–4999 |
 | maintain | 损坏、保养、报废 | 4.8 | 5000–5999 |
 | report | 看板与报表 | 8 | 6000–6999 |
+
+> space 模块（校区/楼栋/实验室/课程排课，原 1000–1999 段）已于 2026-10-20 整体下线移除；段号留废不再使用，后续模块勿复用。
 
 各模块的权限/菜单/角色绑定初始数据随本模块建表脚本登记；system 模块初始数据已在 [sql/sys_rbac.sql](../sql/sys_rbac.sql)。
 
@@ -45,21 +46,9 @@ OPS_ADMIN（运维管理员）为最高级预置运维角色，仅 SQL 预置不
 | system:grant:list / create / revoke | 助理授权（老师本人） | TEACHER / OPS_ADMIN |
 | system:grant:audit | 助理授权全局审计 | ADMIN / OPS_ADMIN |
 
-### 2.2 space 模块（空间部分已随 [sql/space.sql](../sql/space.sql) 登记）
+### 2.2 space 模块（已于 2026-10-20 整体下线）
 
-| permission_code | 名称 | 归属角色 |
-| --- | --- | --- |
-| space:campus:list / create / update / enable | 校区管理 | ADMIN / OPS_ADMIN |
-| space:building:list / create / update / enable | 楼栋管理 | ADMIN / OPS_ADMIN |
-| space:lab:list | 实验室目录 | ADMIN / TEACHER / STUDENT（只读目录）/ OPS_ADMIN |
-| space:lab:create / update / enable | 实验室台账 | ADMIN / OPS_ADMIN |
-| space:course:list | 课程列表 | TEACHER / ADMIN |
-| space:course:create / update / enable | 课程维护 | ADMIN |
-| space:course:import | 排课导入 | ADMIN |
-| space:schedule:view | 教室使用表（课表+预约周视图） | ADMIN |
-
-> 落地状态：campus/building/lab 三组共 12 项权限（ID 1000–1011）已登记；course/schedule 权限随教学基础部分另行登记。
-> TEACHER/STUDENT 一期仅绑定 space:lab:list 权限、不登记菜单；其只读实验室目录页随分组 B 预约模块以学生端布局落地。
+space:campus/building/lab 共 12 项权限（ID 1000–1011）及其角色绑定、菜单 1000–1002 已随功能下线全部移除；sql/space.sql 已删除，段号留废。
 
 ### 2.3 asset 模块
 
@@ -140,15 +129,9 @@ OPS_ADMIN（运维管理员）为最高级预置运维角色，仅 SQL 预置不
 | system_grant_audit | 助理授权审计 | /system/grant | SystemGrantAudit | system:grant:audit | ADMIN / OPS_ADMIN |
 | grant_manage | 助理管理（老师端） | /grant | GrantManage | system:grant:list | TEACHER |
 
-### 3.1 space 模块（已随 [sql/space.sql](../sql/space.sql) 登记）
+### 3.1 space 模块（已于 2026-10-20 整体下线）
 
-| menu_code | 名称 | route_path | component_key | 绑定权限 | 归属角色 |
-| --- | --- | --- | --- | --- | --- |
-| space（目录） | 空间管理 | /space | — | — | ADMIN / OPS_ADMIN |
-| space_campus | 校区楼栋 | /space/campus | SpaceCampus | space:campus:list | ADMIN / OPS_ADMIN |
-| space_lab | 实验室目录 | /space/lab | SpaceLab | space:lab:list | ADMIN / OPS_ADMIN |
-
-> TEACHER/STUDENT 仅绑定 space:lab:list 权限、不登记菜单；两个页面一期挂管理端布局，学生/老师端只读实验室目录页随分组 B 预约模块以学生端布局另行登记。
+space 目录及 space_campus / space_lab 两个页面菜单（ID 1000–1002）已随功能下线全部移除。
 
 ---
 
