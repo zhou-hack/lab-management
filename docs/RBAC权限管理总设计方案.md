@@ -181,13 +181,19 @@ OPS_ADMIN 绑定全部权限但不登记、也不需要范围行：`SysScopeServ
 | --- | --- |
 | 时长上限 | 单笔最长 366 天（一学年） |
 | 时间校验 | end_at > start_at 且 end_at > 当前时间（UTC 毫秒截断） |
+| 授权权力 | 创建时至少选择一项（当前仅物料领取 MATERIAL_ISSUE），未知类型 40000 |
 | 撤销 | 仅授权本人可撤，仅 ACTIVE 可撤；重复撤销 40900，他人撤销 40300 |
 | 审计 | 创建/撤销写 sys_operation_log；撤销人/撤销时间落行 |
 | 缓存失效 | 创建与撤销均踢学生会话（见 4.3） |
 
-### 6.3 范围表（待实施分组 A 接入）
+### 6.3 范围表（授权权力）
 
-assistant_grant_scope 已建表：OFFERING / LAB 恰一非空 + action_code（ISSUE/RETURN），生成列 scope_target_id 归一去重；同一授权同一目标同一动作唯一。目标表 course_offering / lab 随分组 A 落地后，创建授权时选择范围；代办接口逐次校验"助理身份有效 + 范围覆盖目标 + 动作匹配"。范围表为空期间的语义：一期授权不含范围，助理增量权限随物料模块登记后生效。
+assistant_grant_scope 表达授权权力，一单可含多种：
+
+- **MATERIAL（已开放，2026-10-20 起）**：物料领取（领还一体），无目标，action_code 固定 ISSUE_RETURN；创建授权时勾选，列表/详情按行聚合展示。
+- **OFFERING / LAB（预留）**：课程/实验室级领还（恰一目标非空 + ISSUE/RETURN），随教学模块落地开放；LAB 目标随空间功能下线暂不可用。
+
+同一授权同一类型同一目标同一动作唯一（生成列 scope_target_id 归一去重）；CHECK 保证 MATERIAL 行无目标且与 ISSUE_RETURN 配对。代办接口随物料模块落地后逐次校验「助理身份有效 + 授权含对应权力 + 范围覆盖目标」。
 
 ### 6.4 授权溯源
 

@@ -77,6 +77,25 @@
           </template>
         </el-table-column>
         <el-table-column
+          label="授权权力"
+          min-width="120"
+        >
+          <template #default="{ row }">
+            <el-tag
+              v-for="cap in row.capabilities || []"
+              :key="cap"
+              size="small"
+              class="grant_page__cap"
+            >
+              {{ capabilityLabel(cap) }}
+            </el-tag>
+            <span
+              v-if="!row.capabilities || row.capabilities.length === 0"
+              class="t-hint"
+            >—</span>
+          </template>
+        </el-table-column>
+        <el-table-column
           label="授权期限"
           min-width="300"
         >
@@ -223,6 +242,16 @@
             style="width: 100%"
           />
         </el-form-item>
+        <el-form-item
+          label="授权权力"
+          prop="capabilities"
+        >
+          <el-checkbox-group v-model="createForm.capabilities">
+            <el-checkbox value="MATERIAL_ISSUE">
+              物料领取
+            </el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
         <el-form-item label="授权说明">
           <el-input
             v-model="createForm.reason"
@@ -294,6 +323,22 @@
             {{ formatInstant(detailRow.revokedAt) }}
           </el-descriptions-item>
         </template>
+        <el-descriptions-item label="授权权力">
+          <template v-if="detailRow.capabilities && detailRow.capabilities.length > 0">
+            <el-tag
+              v-for="cap in detailRow.capabilities"
+              :key="cap"
+              size="small"
+              class="grant_page__cap"
+            >
+              {{ capabilityLabel(cap) }}
+            </el-tag>
+          </template>
+          <span
+            v-else
+            class="t-hint"
+          >—</span>
+        </el-descriptions-item>
         <el-descriptions-item label="授权说明">
           {{ detailRow.reason || '—' }}
         </el-descriptions-item>
@@ -319,6 +364,9 @@ const submitting = ref(false)
 
 const statusLabel = (s) => ({ ACTIVE: '生效中', REVOKED: '已撤销', EXPIRED: '已过期' })[s] || s
 const statusTag = (s) => ({ ACTIVE: 'success', REVOKED: 'danger', EXPIRED: 'info' })[s] || 'info'
+
+/** 授权权力展示名（与后端范围行能力码一致，后续新增类型在此扩展） */
+const capabilityLabel = (c) => ({ MATERIAL_ISSUE: '物料领取' })[c] || c
 
 /** 剩余有效期（endAt 为带 Z 的 UTC 字符串，可直接解析比较） */
 function remainMs(row) {
@@ -377,14 +425,21 @@ function reset() {
 // ---------- 新建授权 ----------
 const createVisible = ref(false)
 const createFormRef = ref()
-const createForm = reactive({ studentId: null, startAt: '', endAt: '', reason: '' })
+const createForm = reactive({ studentId: null, startAt: '', endAt: '', capabilities: ['MATERIAL_ISSUE'], reason: '' })
 const studentOptions = ref([])
 const studentLoading = ref(false)
 
 const createRules = {
   studentId: [{ required: true, message: '请选择学生', trigger: 'change' }],
   startAt: [{ required: true, message: '请选择开始时间', trigger: 'change' }],
-  endAt: [{ required: true, message: '请选择结束时间', trigger: 'change' }]
+  endAt: [{ required: true, message: '请选择结束时间', trigger: 'change' }],
+  capabilities: [{
+    required: true,
+    type: 'array',
+    min: 1,
+    message: '请至少选择一项授权权力',
+    trigger: 'change'
+  }]
 }
 
 async function searchStudents(keyword) {
@@ -400,6 +455,7 @@ function openCreate() {
   createForm.studentId = null
   createForm.startAt = ''
   createForm.endAt = ''
+  createForm.capabilities = ['MATERIAL_ISSUE']
   createForm.reason = ''
   studentOptions.value = []
   createVisible.value = true
@@ -417,6 +473,7 @@ async function submitCreate() {
       studentId: createForm.studentId,
       startAt: toUtcIso(createForm.startAt),
       endAt: toUtcIso(createForm.endAt),
+      capabilities: createForm.capabilities,
       reason: createForm.reason || null
     })
     ElMessage.success('已授权；若学生当前在线需重新登录，生效期内自动获得助理身份')
@@ -479,5 +536,9 @@ onMounted(load)
 .grant_page__soon {
   color: var(--el-color-warning);
   font-weight: 600;
+}
+
+.grant_page__cap + .grant_page__cap {
+  margin-left: 6px;
 }
 </style>

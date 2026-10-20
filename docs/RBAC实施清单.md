@@ -27,7 +27,7 @@
 
 ## 二、权限标识登记
 
-「归属角色」为初始绑定；ASSISTANT 为附加角色，由有效 assistant_grant 动态计算，按授权范围与动作（ISSUE/RETURN）生效。
+「归属角色」为初始绑定；ASSISTANT 为附加角色，由有效 assistant_grant 动态计算；授权权力落 assistant_grant_scope（当前开放 MATERIAL_ISSUE 物料领取，OFFERING/LAB 预留）。
 OPS_ADMIN（运维管理员）为最高级预置运维角色，仅 SQL 预置不开放页面创建，绑定全部已登记权限（后续模块新增权限随各自脚本同步绑定 OPS_ADMIN），不受数据范围约束。
 
 ### 2.1 system 模块（已出初始 SQL）
