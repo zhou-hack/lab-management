@@ -22,7 +22,7 @@
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
-        <sa-token.version>1.46.0</sa-token.version>
+        <jjwt.version>0.12.6</jjwt.version>
         <mysql.version>26.7.0</mysql.version>
         <knife4j.version>4.5.0</knife4j.version>
         <springdoc.version>3.1.1</springdoc.version>
@@ -60,11 +60,23 @@
             <version>${mybatis-plus.version}</version>
         </dependency>
 
-        <!-- Sa-Token -->
+        <!-- JWT（HS256 签发/校验 access+refresh token；0.12.6 为 2026-10 核实的最新稳定版） -->
         <dependency>
-            <groupId>cn.dev33</groupId>
-            <artifactId>sa-token-spring-boot4-starter</artifactId>
-            <version>${sa-token.version}</version>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>${jjwt.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
         </dependency>
 
         <!-- BCrypt 密码散列（版本由 Spring Boot 依赖管理控制） -->

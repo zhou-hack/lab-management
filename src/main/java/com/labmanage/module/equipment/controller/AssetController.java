@@ -1,6 +1,6 @@
 package com.labmanage.module.equipment.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.equipment.dto.AssetClassifyRequest;
@@ -51,21 +51,21 @@ public class AssetController {
     }
 
     @Operation(summary = "台账分页查询（无维护权限时收敛为在架目录视图）")
-    @SaCheckPermission("equipment:asset:list")
+    @RequirePermission("equipment:asset:list")
     @GetMapping
     public Result<PageResult<AssetVO>> page(AssetPageQuery query) {
         return Result.success(assetService.page(query));
     }
 
     @Operation(summary = "保管人下拉选项（全部启用用户）")
-    @SaCheckPermission("equipment:asset:list")
+    @RequirePermission("equipment:asset:list")
     @GetMapping("/custodian-options")
     public Result<List<CustodianOptionVO>> custodianOptions() {
         return Result.success(assetService.custodianOptions());
     }
 
     @Operation(summary = "新增台账")
-    @SaCheckPermission("equipment:asset:create")
+    @RequirePermission("equipment:asset:create")
     @PostMapping
     public Result<Void> create(@Valid @RequestBody AssetCreateRequest request) {
         assetService.create(request);
@@ -73,7 +73,7 @@ public class AssetController {
     }
 
     @Operation(summary = "修改台账")
-    @SaCheckPermission("equipment:asset:update")
+    @RequirePermission("equipment:asset:update")
     @PutMapping("/{id}")
     public Result<Void> update(@PathVariable String id, @Valid @RequestBody AssetUpdateRequest request) {
         assetService.update(id, request);
@@ -81,7 +81,7 @@ public class AssetController {
     }
 
     @Operation(summary = "删除台账")
-    @SaCheckPermission("equipment:asset:delete")
+    @RequirePermission("equipment:asset:delete")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable String id) {
         assetService.delete(id);
@@ -89,7 +89,7 @@ public class AssetController {
     }
 
     @Operation(summary = "迁移登记")
-    @SaCheckPermission("equipment:asset:transfer")
+    @RequirePermission("equipment:asset:transfer")
     @PutMapping("/{id}/transfer")
     public Result<Void> transfer(@PathVariable String id, @Valid @RequestBody AssetTransferRequest request) {
         assetService.transfer(id, request);
@@ -97,7 +97,7 @@ public class AssetController {
     }
 
     @Operation(summary = "价值定级")
-    @SaCheckPermission("equipment:asset:classify")
+    @RequirePermission("equipment:asset:classify")
     @PutMapping("/{id}/classification")
     public Result<Void> classify(String id, @Valid @RequestBody AssetClassifyRequest request) {
         assetService.classify(id, request);
@@ -105,7 +105,7 @@ public class AssetController {
     }
 
     @Operation(summary = "台账导出（xlsx，按当前筛选全量导出，导出文件可作导入模板）")
-    @SaCheckPermission("equipment:asset:export")
+    @RequirePermission("equipment:asset:export")
     @GetMapping("/export")
     public ResponseEntity<byte[]> export(AssetPageQuery query) {
         byte[] bytes = assetService.export(query);
@@ -121,7 +121,7 @@ public class AssetController {
     }
 
     @Operation(summary = "台账导入（xlsx，按表头列名解析；行级错误跳过并在结果中报告）")
-    @SaCheckPermission("equipment:asset:import")
+    @RequirePermission("equipment:asset:import")
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<AssetImportResultVO> importAssets(@RequestParam("file") MultipartFile file) {
         return Result.success(assetService.importAssets(file));

@@ -1,6 +1,6 @@
 package com.labmanage.module.item.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.item.dto.StockLocationCreateDTO;
@@ -37,21 +37,21 @@ public class StockLocationController {
     }
 
     @Operation(summary = "分页查询库位")
-    @SaCheckPermission("item:location:list")
+    @RequirePermission("item:location:list")
     @GetMapping("/page")
     public Result<PageResult<StockLocationVO>> page(@Valid StockLocationQuery query) {
         return Result.success(locationService.page(query));
     }
 
     @Operation(summary = "库位详情")
-    @SaCheckPermission("item:location:list")
+    @RequirePermission("item:location:list")
     @GetMapping("/{id}")
     public Result<StockLocationVO> get(@Parameter(description = "库位 ID") @PathVariable String id) {
         return Result.success(locationService.get(id));
     }
 
     @Operation(summary = "新增库位")
-    @SaCheckPermission("item:location:create")
+    @RequirePermission("item:location:create")
     @PostMapping
     public Result<Void> create(@Valid @RequestBody StockLocationCreateDTO dto) {
         locationService.create(dto);
@@ -59,7 +59,7 @@ public class StockLocationController {
     }
 
     @Operation(summary = "修改库位")
-    @SaCheckPermission("item:location:update")
+    @RequirePermission("item:location:update")
     @PutMapping
     public Result<Void> update(@Valid @RequestBody StockLocationUpdateDTO dto) {
         locationService.update(dto);
@@ -67,7 +67,7 @@ public class StockLocationController {
     }
 
     @Operation(summary = "启用/停用库位")
-    @SaCheckPermission("item:location:enable")
+    @RequirePermission("item:location:enable")
     @PutMapping("/{id}/status")
     public Result<Void> updateStatus(
             @Parameter(description = "库位 ID") @PathVariable String id,
@@ -77,7 +77,7 @@ public class StockLocationController {
     }
 
     @Operation(summary = "删除库位（逻辑删除；被库存余额/单据明细/进行中盘点引用时拒绝）")
-    @SaCheckPermission("item:location:delete")
+    @RequirePermission("item:location:delete")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@Parameter(description = "库位 ID") @PathVariable String id) {
         locationService.delete(id);

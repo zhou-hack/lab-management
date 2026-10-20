@@ -1,6 +1,6 @@
 package com.labmanage.module.equipment.service.impl;
 
-import cn.dev33.satoken.stp.StpUtil;
+import com.labmanage.common.utils.SecurityUtils;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.labmanage.common.exception.BusinessException;
@@ -80,7 +80,7 @@ public class EquipmentBookingServiceImpl implements EquipmentBookingService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void apply(BookingApplyRequest request) {
-        long userId = StpUtil.getLoginIdAsLong();
+        long userId = SecurityUtils.currentUserId();
         SysUser applicant = requireEnabledUser(userId, "申请人账号不存在或已停用");
         String userType = applicant.getUserType();
 
@@ -167,7 +167,7 @@ public class EquipmentBookingServiceImpl implements EquipmentBookingService {
 
     @Override
     public PageResult<BookingVO> myBookings(BookingPageQuery query) {
-        query.setApplicantId(StpUtil.getLoginIdAsLong());
+        query.setApplicantId(SecurityUtils.currentUserId());
         query.setTeacherId(null);
         return PageUtils.toPageResult(bookingMapper.selectBookingPage(toPage(query), query));
     }
@@ -176,7 +176,7 @@ public class EquipmentBookingServiceImpl implements EquipmentBookingService {
     @Transactional(rollbackFor = Exception.class)
     public void cancel(String id, BookingCancelRequest request) {
         EquipmentBooking booking = requireBooking(Ids.parse(id));
-        if (!Objects.equals(booking.getApplicantId(), StpUtil.getLoginIdAsLong())) {
+        if (!Objects.equals(booking.getApplicantId(), SecurityUtils.currentUserId())) {
             throw new BusinessException(ResultCode.FORBIDDEN.getCode(), "只能撤销本人申请");
         }
         if (booking.getStatus() != BookingStatus.PENDING_TEACHER
@@ -190,12 +190,12 @@ public class EquipmentBookingServiceImpl implements EquipmentBookingService {
         booking.setCancelledAt(Instant.now());
         bookingMapper.updateById(booking);
         writeEvent(booking.getDocumentId(), "CANCEL", from.name(), BookingStatus.CANCELLED.name(),
-                StpUtil.getLoginIdAsLong(), "USER", request.reason());
+                SecurityUtils.currentUserId(), "USER", request.reason());
     }
 
     @Override
     public PageResult<BookingVO> teacherPending(BookingPageQuery query) {
-        query.setTeacherId(StpUtil.getLoginIdAsLong());
+        query.setTeacherId(SecurityUtils.currentUserId());
         query.setApplicantId(null);
         query.setStatus(BookingStatus.PENDING_TEACHER);
         return PageUtils.toPageResult(bookingMapper.selectBookingPage(toPage(query), query));
@@ -204,7 +204,7 @@ public class EquipmentBookingServiceImpl implements EquipmentBookingService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void teacherReview(String id, BookingReviewRequest request) {
-        long reviewerId = StpUtil.getLoginIdAsLong();
+        long reviewerId = SecurityUtils.currentUserId();
         EquipmentBooking booking = bookingMapper.selectByIdForUpdate(Ids.parse(id));
         if (booking == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "申请单不存在");
@@ -248,7 +248,7 @@ public class EquipmentBookingServiceImpl implements EquipmentBookingService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void adminReview(String id, BookingReviewRequest request) {
-        long reviewerId = StpUtil.getLoginIdAsLong();
+        long reviewerId = SecurityUtils.currentUserId();
         EquipmentBooking booking = bookingMapper.selectByIdForUpdate(Ids.parse(id));
         if (booking == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "申请单不存在");
@@ -288,7 +288,7 @@ public class EquipmentBookingServiceImpl implements EquipmentBookingService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void checkout(String id) {
-        long operatorId = StpUtil.getLoginIdAsLong();
+        long operatorId = SecurityUtils.currentUserId();
         // 锁序与申请一致：先设备行后申请单，避免死锁
         EquipmentBooking booking = bookingMapper.selectByIdForUpdate(Ids.parse(id));
         if (booking == null) {
@@ -337,7 +337,7 @@ public class EquipmentBookingServiceImpl implements EquipmentBookingService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void returnAsset(String id, BookingReturnRequest request) {
-        long operatorId = StpUtil.getLoginIdAsLong();
+        long operatorId = SecurityUtils.currentUserId();
         EquipmentBooking booking = bookingMapper.selectByIdForUpdate(Ids.parse(id));
         if (booking == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "申请单不存在");

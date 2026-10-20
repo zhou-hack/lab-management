@@ -1,6 +1,6 @@
 package com.labmanage.roles.service.impl;
 
-import cn.dev33.satoken.stp.StpUtil;
+import com.labmanage.common.utils.SecurityUtils;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.labmanage.common.exception.BusinessException;
@@ -177,10 +177,10 @@ public class SysScopeServiceImpl implements SysScopeService {
      * 仅豁免范围写校验，接口权限码仍由 @SaCheckPermission 独立控制。
      */
     private boolean isOpsAdmin() {
-        return StpUtil.getRoleList().contains(RoleCode.OPS_ADMIN.name());
+        return SecurityUtils.currentRoles().contains(RoleCode.OPS_ADMIN.name());
     }
 
     private Long currentUserId() {
-        return StpUtil.getLoginIdAsLong();
+        return SecurityUtils.currentUserId();
     }
 }

@@ -1,6 +1,6 @@
 package com.labmanage.roles.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.log.OperationLog;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
@@ -39,14 +39,14 @@ public class SystemRestrictionController {
     }
 
     @Operation(summary = "预约限制分页列表")
-    @SaCheckPermission("system:restriction:list")
+    @RequirePermission("system:restriction:list")
     @GetMapping
     public Result<PageResult<RestrictionPageItemVO>> page(@Valid RestrictionPageQueryDTO query) {
         return Result.success(restrictionService.page(query));
     }
 
     @Operation(summary = "被限制用户下拉（启用中全部类型）")
-    @SaCheckPermission("system:restriction:create")
+    @RequirePermission("system:restriction:create")
     @GetMapping("/user_options")
     public Result<List<UserOptionVO>> userOptions(
             @RequestParam(required = false) @Size(max = 32, message = "关键字长度不能超过 32") String keyword) {
@@ -54,7 +54,7 @@ public class SystemRestrictionController {
     }
 
     @Operation(summary = "手工新增预约限制")
-    @SaCheckPermission("system:restriction:create")
+    @RequirePermission("system:restriction:create")
     @OperationLog(moduleCode = "system", actionCode = "system:restriction:create", targetTable = "user_booking_restriction")
     @PostMapping
     public Result<Void> create(@Valid @RequestBody RestrictionCreateDTO dto) {
@@ -63,7 +63,7 @@ public class SystemRestrictionController {
     }
 
     @Operation(summary = "撤销预约限制")
-    @SaCheckPermission("system:restriction:revoke")
+    @RequirePermission("system:restriction:revoke")
     @OperationLog(moduleCode = "system", actionCode = "system:restriction:revoke", targetTable = "user_booking_restriction", targetId = "#id")
     @PutMapping("/{id}/revoke")
     public Result<Void> revoke(@PathVariable Long id) {

@@ -1,6 +1,6 @@
 package com.labmanage.module.equipment.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.equipment.dto.CategoryCreateRequest;
 import com.labmanage.module.equipment.dto.CategoryUpdateRequest;
@@ -35,14 +35,14 @@ public class CategoryController {
     }
 
     @Operation(summary = "分类树查询（全量，含停用节点）")
-    @SaCheckPermission("equipment:category:list")
+    @RequirePermission("equipment:category:list")
     @GetMapping
     public Result<List<CategoryTreeVO>> tree() {
         return Result.success(categoryService.tree());
     }
 
     @Operation(summary = "新增分类")
-    @SaCheckPermission("equipment:category:create")
+    @RequirePermission("equipment:category:create")
     @PostMapping
     public Result<Void> create(@Valid @RequestBody CategoryCreateRequest request) {
         categoryService.create(request);
@@ -50,7 +50,7 @@ public class CategoryController {
     }
 
     @Operation(summary = "修改分类")
-    @SaCheckPermission("equipment:category:update")
+    @RequirePermission("equipment:category:update")
     @PutMapping("/{id}")
     public Result<Void> update(@PathVariable String id, @Valid @RequestBody CategoryUpdateRequest request) {
         categoryService.update(id, request);
@@ -58,7 +58,7 @@ public class CategoryController {
     }
 
     @Operation(summary = "删除分类")
-    @SaCheckPermission("equipment:category:delete")
+    @RequirePermission("equipment:category:delete")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable String id) {
         categoryService.delete(id);

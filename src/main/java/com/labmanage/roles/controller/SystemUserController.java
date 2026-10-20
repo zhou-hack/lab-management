@@ -1,7 +1,7 @@
 package com.labmanage.roles.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
-import cn.dev33.satoken.stp.StpUtil;
+import com.labmanage.common.security.RequirePermission;
+import com.labmanage.common.utils.SecurityUtils;
 import com.labmanage.common.log.OperationLog;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
@@ -39,21 +39,21 @@ public class SystemUserController {
     }
 
     @Operation(summary = "用户分页列表")
-    @SaCheckPermission("system:user:list")
+    @RequirePermission("system:user:list")
     @GetMapping
     public Result<PageResult<UserPageItemVO>> page(@Valid UserPageQueryDTO query) {
         return Result.success(sysUserService.page(query));
     }
 
     @Operation(summary = "用户详情")
-    @SaCheckPermission("system:user:get")
+    @RequirePermission("system:user:get")
     @GetMapping("/{id}")
     public Result<UserDetailVO> detail(@PathVariable Long id) {
         return Result.success(sysUserService.detail(id));
     }
 
     @Operation(summary = "创建管理员账号（首登强制改密）")
-    @SaCheckPermission("system:user:create")
+    @RequirePermission("system:user:create")
     @OperationLog(moduleCode = "system", actionCode = "system:user:create", targetTable = "sys_user")
     @PostMapping
     public Result<UserDetailVO> create(@Valid @RequestBody UserCreateDTO dto) {
@@ -61,7 +61,7 @@ public class SystemUserController {
     }
 
     @Operation(summary = "编辑用户资料")
-    @SaCheckPermission("system:user:update")
+    @RequirePermission("system:user:update")
     @OperationLog(moduleCode = "system", actionCode = "system:user:update", targetTable = "sys_user", targetId = "#id")
     @PutMapping("/{id}")
     public Result<UserDetailVO> update(@PathVariable Long id, @Valid @RequestBody UserUpdateDTO dto) {
@@ -69,7 +69,7 @@ public class SystemUserController {
     }
 
     @Operation(summary = "启用/停用用户（停用踢出会话，启用解除锁定）")
-    @SaCheckPermission("system:user:enable")
+    @RequirePermission("system:user:enable")
     @OperationLog(moduleCode = "system", actionCode = "system:user:enable", targetTable = "sys_user", targetId = "#id")
     @PutMapping("/{id}/enabled")
     public Result<Void> updateEnabled(@PathVariable Long id, @Valid @RequestBody UserEnabledDTO dto) {
@@ -78,11 +78,11 @@ public class SystemUserController {
     }
 
     @Operation(summary = "重置用户密码（强制首登改密并踢出会话；敏感操作需二级认证）")
-    @SaCheckPermission("system:user:reset_password")
+    @RequirePermission("system:user:reset_password")
     @OperationLog(moduleCode = "system", actionCode = "system:user:reset_password", targetTable = "sys_user", targetId = "#id")
     @PutMapping("/{id}/password_reset")
     public Result<Void> resetPassword(@PathVariable Long id, @Valid @RequestBody UserPasswordResetDTO dto) {
-        StpUtil.checkSafe();
+        SecurityUtils.checkSafe();
         sysUserService.resetPassword(id, dto);
         return Result.success();
     }

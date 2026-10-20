@@ -1,6 +1,6 @@
 package com.labmanage.module.item.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.item.dto.MaterialCategoryCreateDTO;
@@ -52,28 +52,28 @@ public class MaterialCategoryController {
     }
 
     @Operation(summary = "分页查询分类")
-    @SaCheckPermission("item:category:list")
+    @RequirePermission("item:category:list")
     @GetMapping("/page")
     public Result<PageResult<MaterialCategoryVO>> page(@Valid MaterialCategoryQuery query) {
         return Result.success(categoryService.page(query));
     }
 
     @Operation(summary = "启用分类列表（下拉选择用）")
-    @SaCheckPermission("item:category:list")
+    @RequirePermission("item:category:list")
     @GetMapping("/list")
     public Result<List<MaterialCategoryVO>> listEnabled() {
         return Result.success(categoryService.listEnabled());
     }
 
     @Operation(summary = "分类详情")
-    @SaCheckPermission("item:category:list")
+    @RequirePermission("item:category:list")
     @GetMapping("/{id}")
     public Result<MaterialCategoryVO> get(@Parameter(description = "分类 ID") @PathVariable String id) {
         return Result.success(categoryService.get(id));
     }
 
     @Operation(summary = "新增分类")
-    @SaCheckPermission("item:category:create")
+    @RequirePermission("item:category:create")
     @PostMapping
     public Result<Void> create(@Valid @RequestBody MaterialCategoryCreateDTO dto) {
         categoryService.create(dto);
@@ -81,7 +81,7 @@ public class MaterialCategoryController {
     }
 
     @Operation(summary = "修改分类")
-    @SaCheckPermission("item:category:update")
+    @RequirePermission("item:category:update")
     @PutMapping
     public Result<Void> update(@Valid @RequestBody MaterialCategoryUpdateDTO dto) {
         categoryService.update(dto);
@@ -89,7 +89,7 @@ public class MaterialCategoryController {
     }
 
     @Operation(summary = "启用/停用分类")
-    @SaCheckPermission("item:category:enable")
+    @RequirePermission("item:category:enable")
     @PutMapping("/{id}/status")
     public Result<Void> updateStatus(
             @Parameter(description = "分类 ID") @PathVariable String id,
@@ -99,7 +99,7 @@ public class MaterialCategoryController {
     }
 
     @Operation(summary = "删除分类（逻辑删除；存在子分类或被物料引用时拒绝）")
-    @SaCheckPermission("item:category:delete")
+    @RequirePermission("item:category:delete")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@Parameter(description = "分类 ID") @PathVariable String id) {
         categoryService.delete(id);
@@ -107,7 +107,7 @@ public class MaterialCategoryController {
     }
 
     @Operation(summary = "批量导入分类（xlsx/csv，父分类行须排在子分类行之前，编码冲突与非法行跳过并返回失败明细）")
-    @SaCheckPermission("item:category:import")
+    @RequirePermission("item:category:import")
     @PostMapping("/import")
     public Result<ImportResultVO> importCategories(
             @Parameter(description = "导入文件（.xlsx / .csv）") @RequestParam("file") MultipartFile file) {
@@ -115,7 +115,7 @@ public class MaterialCategoryController {
     }
 
     @Operation(summary = "导出分类（按筛选条件导出全部匹配行，xlsx/csv）")
-    @SaCheckPermission("item:category:export")
+    @RequirePermission("item:category:export")
     @GetMapping("/export")
     public void export(@Valid MaterialCategoryExportQuery query, HttpServletResponse response) throws IOException {
         TransferFile file = transferService.exportCategories(query);
@@ -123,7 +123,7 @@ public class MaterialCategoryController {
     }
 
     @Operation(summary = "下载分类导入模板（xlsx/csv，仅表头）")
-    @SaCheckPermission("item:category:import")
+    @RequirePermission("item:category:import")
     @GetMapping("/import-template")
     public void importTemplate(
             @Parameter(description = "模板格式：xlsx / csv") @RequestParam(defaultValue = "xlsx") String format,

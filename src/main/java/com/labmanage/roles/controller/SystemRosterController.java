@@ -1,7 +1,7 @@
 package com.labmanage.roles.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
-import cn.dev33.satoken.stp.StpUtil;
+import com.labmanage.common.security.RequirePermission;
+import com.labmanage.common.utils.SecurityUtils;
 import com.labmanage.common.log.OperationLog;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
@@ -50,14 +50,14 @@ public class SystemRosterController {
     }
 
     @Operation(summary = "名单分页列表")
-    @SaCheckPermission("system:roster:list")
+    @RequirePermission("system:roster:list")
     @GetMapping
     public Result<PageResult<RosterPageItemVO>> page(@Valid RosterPageQueryDTO query) {
         return Result.success(rosterService.page(query));
     }
 
     @Operation(summary = "单条录入")
-    @SaCheckPermission("system:roster:create")
+    @RequirePermission("system:roster:create")
     @OperationLog(moduleCode = "system", actionCode = "system:roster:create", targetTable = "sys_person_roster")
     @PostMapping
     public Result<Void> create(@Valid @RequestBody RosterCreateDTO dto) {
@@ -66,7 +66,7 @@ public class SystemRosterController {
     }
 
     @Operation(summary = "批量导入（同事务，任一冲突整体回滚）")
-    @SaCheckPermission("system:roster:create")
+    @RequirePermission("system:roster:create")
     @OperationLog(moduleCode = "system", actionCode = "system:roster:batch_create", targetTable = "sys_person_roster")
     @PostMapping("/batch")
     public Result<Integer> createBatch(@Valid @RequestBody RosterBatchCreateDTO dto) {
@@ -74,7 +74,7 @@ public class SystemRosterController {
     }
 
     @Operation(summary = "编辑名单（已建档禁止编辑）")
-    @SaCheckPermission("system:roster:update")
+    @RequirePermission("system:roster:update")
     @OperationLog(moduleCode = "system", actionCode = "system:roster:update", targetTable = "sys_person_roster", targetId = "#id")
     @PutMapping("/{id}")
     public Result<Void> update(@PathVariable Long id, @Valid @RequestBody RosterUpdateDTO dto) {
@@ -83,7 +83,7 @@ public class SystemRosterController {
     }
 
     @Operation(summary = "启用/停用名单（已建档禁止停用）")
-    @SaCheckPermission("system:roster:enable")
+    @RequirePermission("system:roster:enable")
     @OperationLog(moduleCode = "system", actionCode = "system:roster:enable", targetTable = "sys_person_roster", targetId = "#id")
     @PutMapping("/{id}/enabled")
     public Result<Void> updateEnabled(@PathVariable Long id, @Valid @RequestBody RosterEnabledDTO dto) {
@@ -92,7 +92,7 @@ public class SystemRosterController {
     }
 
     @Operation(summary = "导出名单 CSV（筛选条件同分页列表）")
-    @SaCheckPermission("system:roster:export")
+    @RequirePermission("system:roster:export")
     @OperationLog(moduleCode = "system", actionCode = "system:roster:export", targetTable = "sys_person_roster")
     @GetMapping("/export")
     public ResponseEntity<byte[]> export(@Valid RosterPageQueryDTO query) {
@@ -100,18 +100,18 @@ public class SystemRosterController {
     }
 
     @Operation(summary = "下载批量导入模板 CSV")
-    @SaCheckPermission("system:roster:import")
+    @RequirePermission("system:roster:import")
     @GetMapping("/import_template")
     public ResponseEntity<byte[]> importTemplate() {
         return csvDownload(rosterService.importTemplate(), "roster_import_template");
     }
 
     @Operation(summary = "批量导入名单（CSV 部分成功，需二级认证）")
-    @SaCheckPermission("system:roster:import")
+    @RequirePermission("system:roster:import")
     @OperationLog(moduleCode = "system", actionCode = "system:roster:import", targetTable = "sys_person_roster")
     @PostMapping("/import")
     public Result<RosterImportResultVO> importCsv(@RequestParam("file") MultipartFile file) {
-        StpUtil.checkSafe();
+        SecurityUtils.checkSafe();
         return Result.success(rosterService.importCsv(file));
     }
 

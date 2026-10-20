@@ -1,6 +1,6 @@
 package com.labmanage.roles.service.impl;
 
-import cn.dev33.satoken.stp.StpUtil;
+import com.labmanage.common.utils.SecurityUtils;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.labmanage.common.exception.BusinessException;
 import com.labmanage.common.result.PageResult;
@@ -77,7 +77,7 @@ public class SysRestrictionServiceImpl implements SysRestrictionService {
             throw new BusinessException(40900, "该限制已撤销");
         }
         restriction.setRevokedAt(Instant.now().truncatedTo(ChronoUnit.MILLIS));
-        restriction.setRevokedBy(StpUtil.getLoginIdAsLong());
+        restriction.setRevokedBy(SecurityUtils.currentUserId());
         restrictionMapper.updateById(restriction);
     }
 

@@ -1,8 +1,8 @@
 package com.labmanage.module.booking;
 
-import cn.dev33.satoken.stp.StpInterface;
-import cn.dev33.satoken.stp.StpUtil;
 import com.labmanage.common.result.Result;
+import com.labmanage.common.security.JwtService;
+import com.labmanage.roles.service.AuthService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -66,10 +66,15 @@ class BookingApiIntegrationTest {
         @RestController
         static class TestAuthController {
 
+            private final JwtService jwtService;
+
+            TestAuthController(JwtService jwtService) {
+                this.jwtService = jwtService;
+            }
+
             @GetMapping("/test/login")
             Result<String> login(@RequestParam(defaultValue = "1") long userId) {
-                StpUtil.login(userId);
-                return Result.success(StpUtil.getTokenValue());
+                return Result.success(jwtService.issueAccess(userId));
             }
         }
     }
@@ -80,8 +85,12 @@ class BookingApiIntegrationTest {
     private static final List<String> TEACHER_PERMS = List.of(
             "booking:lab:create", "booking:lab:cancel", "booking:lab:list");
 
+    /**
+     * Mock AuthService：JWT 过滤器每请求经它装配角色/权限，
+     * 权限按登录用户返回（与生产实时加载行为一致，免去 H2 种 RBAC 全表）。
+     */
     @MockitoBean
-    private StpInterface stpInterface;
+    private AuthService authService;
 
     @LocalServerPort
     private int port;
@@ -96,13 +105,9 @@ class BookingApiIntegrationTest {
 
     @BeforeEach
     void login() throws Exception {
-        // 权限按登录用户返回：与生产 StpInterfaceImpl 行为一致（登录 ID 维度）
-        Mockito.when(stpInterface.getPermissionList(Mockito.eq("1"), Mockito.any()))
-                .thenReturn(ADMIN_PERMS);
-        Mockito.when(stpInterface.getPermissionList(Mockito.eq("2"), Mockito.any()))
-                .thenReturn(TEACHER_PERMS);
-        Mockito.when(stpInterface.getRoleList(Mockito.any(), Mockito.any()))
-                .thenReturn(List.of("ADMIN"));
+        Mockito.when(authService.loadPermissionCodes(1L)).thenReturn(ADMIN_PERMS);
+        Mockito.when(authService.loadPermissionCodes(2L)).thenReturn(TEACHER_PERMS);
+        Mockito.when(authService.loadRoleCodes(Mockito.any())).thenReturn(List.of("ADMIN"));
         adminToken = login(1);
         teacherToken = login(2);
     }

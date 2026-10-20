@@ -1,43 +1,34 @@
 package com.labmanage.roles.service.impl;
 
-import cn.dev33.satoken.stp.StpUtil;
-import cn.dev33.satoken.stp.parameter.SaLoginParameter;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.labmanage.common.exception.BusinessException;
+import com.labmanage.common.security.JwtService;
+import com.labmanage.common.utils.SecurityUtils;
 import com.labmanage.roles.dto.AccountLoginDTO;
 import com.labmanage.roles.dto.PasswordConfirmDTO;
-import com.labmanage.roles.dto.PasswordUpdateDTO;
-import com.labmanage.roles.dto.SmsLoginDTO;
-import com.labmanage.roles.dto.SmsSendDTO;
+import com.labmanage.roles.dto.RefreshTokenDTO;
 import com.labmanage.roles.entity.SysMenu;
-import com.labmanage.roles.entity.SysPersonRoster;
 import com.labmanage.roles.entity.SysRole;
 import com.labmanage.roles.entity.SysUser;
 import com.labmanage.roles.entity.SysUserRole;
 import com.labmanage.roles.enums.RoleCode;
-import com.labmanage.roles.enums.UserType;
 import com.labmanage.roles.mapper.AssistantGrantMapper;
 import com.labmanage.roles.mapper.SysMenuMapper;
 import com.labmanage.roles.mapper.SysPermissionMapper;
-import com.labmanage.roles.mapper.SysPersonRosterMapper;
 import com.labmanage.roles.mapper.SysRoleMapper;
 import com.labmanage.roles.mapper.SysUserMapper;
 import com.labmanage.roles.mapper.SysUserRoleMapper;
 import com.labmanage.roles.service.AuthService;
 import com.labmanage.roles.service.PolicyService;
-import com.labmanage.roles.service.SmsCodeService;
-import com.labmanage.roles.support.PasswordCryptoService;
 import com.labmanage.roles.vo.ConfirmVO;
 import com.labmanage.roles.vo.LoginVO;
 import com.labmanage.roles.vo.MenuVO;
 import com.labmanage.roles.vo.ProfileVO;
-import com.labmanage.roles.vo.SmsSendVO;
-import org.springframework.core.env.Environment;
-import org.springframework.dao.DuplicateKeyException;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import com.labmanage.roles.vo.SaltVO;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -46,21 +37,18 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 认证服务实现。
+ * 认证服务实现（JWT 无状态会话）。
+ * <p>
+ * 口令链路：客户端按账号预取盐 → 本地 bcrypt 算出与库中一致的哈希 → 上传，
+ * 服务端常量时间比对，全程无明文传输（内网/开发场景接受哈希即凭据的重放风险）。
  */
 @Service
 public class AuthServiceImpl implements AuthService {
 
-    /** 敏感操作二级认证有效期（秒） */
-    private static final long SAFE_AUTH_SECONDS = 300;
-
-    /** 密码强度：8-64 位且同时包含字母和数字（解密后的明文校验） */
-    private static final java.util.regex.Pattern PASSWORD_RULE =
-            java.util.regex.Pattern.compile("^(?=.*[A-Za-z])(?=.*\\d).{8,64}$");
+    /** BCrypt 哈希的盐前缀长度（$2a$10$ + 22 字符盐） */
+    private static final int BCRYPT_SALT_PREFIX_LENGTH = 29;
 
     private final SysUserMapper userMapper;
-
-    private final SysPersonRosterMapper rosterMapper;
 
     private final SysUserRoleMapper userRoleMapper;
 
@@ -72,34 +60,34 @@ public class AuthServiceImpl implements AuthService {
 
     private final AssistantGrantMapper grantMapper;
 
-    private final SmsCodeService smsCodeService;
-
     private final PolicyService policyService;
 
-    private final BCryptPasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
-    private final PasswordCryptoService passwordCryptoService;
-
-    private final Environment environment;
-
-    public AuthServiceImpl(SysUserMapper userMapper, SysPersonRosterMapper rosterMapper,
-                           SysUserRoleMapper userRoleMapper, SysRoleMapper roleMapper,
-                           SysPermissionMapper permissionMapper, SysMenuMapper menuMapper,
-                           AssistantGrantMapper grantMapper, SmsCodeService smsCodeService,
-                           PolicyService policyService, BCryptPasswordEncoder passwordEncoder,
-                           PasswordCryptoService passwordCryptoService, Environment environment) {
+    public AuthServiceImpl(SysUserMapper userMapper, SysUserRoleMapper userRoleMapper,
+                           SysRoleMapper roleMapper, SysPermissionMapper permissionMapper,
+                           SysMenuMapper menuMapper, AssistantGrantMapper grantMapper,
+                           PolicyService policyService, JwtService jwtService) {
         this.userMapper = userMapper;
-        this.rosterMapper = rosterMapper;
         this.userRoleMapper = userRoleMapper;
         this.roleMapper = roleMapper;
         this.permissionMapper = permissionMapper;
         this.menuMapper = menuMapper;
         this.grantMapper = grantMapper;
-        this.smsCodeService = smsCodeService;
         this.policyService = policyService;
-        this.passwordEncoder = passwordEncoder;
-        this.passwordCryptoService = passwordCryptoService;
-        this.environment = environment;
+        this.jwtService = jwtService;
+    }
+
+    @Override
+    public SaltVO salt(String accountName) {
+        SysUser user = userMapper.selectOne(Wrappers.<SysUser>lambdaQuery()
+                .eq(SysUser::getAccountName, accountName));
+        // 账号不存在与未设密码返回同一错误，不泄露账号是否存在
+        if (user == null || user.getPasswordHash() == null
+                || user.getPasswordHash().length() < BCRYPT_SALT_PREFIX_LENGTH) {
+            throw new BusinessException(40100, "账号或密码错误");
+        }
+        return new SaltVO(user.getPasswordHash().substring(0, BCRYPT_SALT_PREFIX_LENGTH));
     }
 
     @Override
@@ -111,92 +99,56 @@ public class AuthServiceImpl implements AuthService {
         }
         checkUsable(user);
         if (user.getPasswordHash() == null) {
-            throw new BusinessException(40100, "该账号未设置密码，请使用验证码登录");
+            throw new BusinessException(40100, "该账号未设置密码，请联系管理员重置");
         }
-        if (!passwordEncoder.matches(passwordCryptoService.decrypt(dto.password()), user.getPasswordHash())) {
+        if (!hashEquals(dto.password(), user.getPasswordHash())) {
             onPasswordFail(user);
         }
         resetPasswordFail(user);
-        return doLogin(user, false);
+        return issueTokens(user);
     }
 
     @Override
-    public SmsSendVO sendSmsCode(SmsSendDTO dto) {
-        SmsCodeService.SendResult result = smsCodeService.send(dto.phone());
-        // 模拟通道联调：仅 dev 环境回显验证码，其他环境置空
-        boolean devProfile = List.of(environment.getActiveProfiles()).contains("dev");
-        return new SmsSendVO(result.ttlSeconds(), devProfile ? result.code() : null);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public LoginVO smsLogin(SmsLoginDTO dto) {
-        smsCodeService.verify(dto.phone(), dto.code());
-        SysUser user = userMapper.selectOne(Wrappers.<SysUser>lambdaQuery()
-                .eq(SysUser::getPhone, dto.phone()));
-        if (user == null) {
-            user = registerFromRoster(dto.phone());
+    public LoginVO refresh(RefreshTokenDTO dto) {
+        Long userId = jwtService.parseUserId(dto.refreshToken(), JwtService.TYPE_REFRESH);
+        if (userId == null) {
+            throw new BusinessException(40100, "refresh token 无效或已过期");
         }
-        checkUsable(user);
-        boolean needSetPassword = needSetPassword(user);
-        return doLogin(user, needSetPassword);
-    }
-
-    @Override
-    public ProfileVO profile() {
-        Long userId = StpUtil.getLoginIdAsLong();
         SysUser user = userMapper.selectById(userId);
         if (user == null || !Integer.valueOf(1).equals(user.getEnabled())) {
             throw new BusinessException(40100, "账号不存在或已停用");
         }
-        List<String> roles = loadRoleCodes(userId);
-        List<String> permissions = loadPermissionCodes(userId);
-        StpUtil.getSession().set(SESSION_ROLES, roles);
-        StpUtil.getSession().set(SESSION_PERMS, permissions);
-        return new ProfileVO(String.valueOf(user.getId()), user.getRealName(), user.getUserType(),
-                roles, permissions, buildMenuTree(menuMapper.selectMenusByUserId(userId)),
-                passwordChangeRequired(user), needSetPassword(user));
-    }
-
-    /** 老师首登尚未设置敏感操作密码时须强制设置 */
-    private boolean needSetPassword(SysUser user) {
-        return user.getPasswordHash() == null && UserType.TEACHER.name().equals(user.getUserType());
+        return issueTokens(user);
     }
 
     @Override
-    public void updatePassword(PasswordUpdateDTO dto) {
-        SysUser user = currentUser();
-        String newPassword = passwordCryptoService.decrypt(dto.newPassword());
-        if (!PASSWORD_RULE.matcher(newPassword).matches()) {
-            throw new BusinessException(40000, "新密码需 8-64 位且同时包含字母和数字");
+    public ProfileVO profile() {
+        Long userId = SecurityUtils.currentUserId();
+        SysUser user = userMapper.selectById(userId);
+        if (user == null || !Integer.valueOf(1).equals(user.getEnabled())) {
+            throw new BusinessException(40100, "账号不存在或已停用");
         }
-        if (user.getPasswordHash() != null) {
-            String oldPassword = dto.oldPassword() == null ? null : passwordCryptoService.decrypt(dto.oldPassword());
-            if (oldPassword == null || !passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
-                throw new BusinessException(40100, "旧密码错误");
-            }
-        }
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
-        user.setPasswordChangedAt(Instant.now());
-        userMapper.updateById(user);
+        return new ProfileVO(String.valueOf(user.getId()), user.getRealName(), user.getUserType(),
+                loadRoleCodes(userId), loadPermissionCodes(userId),
+                buildMenuTree(menuMapper.selectMenusByUserId(userId)));
     }
 
     @Override
     public ConfirmVO confirmPassword(PasswordConfirmDTO dto) {
         SysUser user = currentUser();
         if (user.getPasswordHash() == null) {
-            throw new BusinessException(40100, "尚未设置密码，请先设置后再进行敏感操作确认");
+            throw new BusinessException(40100, "尚未设置密码，请联系管理员重置");
         }
-        if (!passwordEncoder.matches(passwordCryptoService.decrypt(dto.password()), user.getPasswordHash())) {
+        if (!hashEquals(dto.password(), user.getPasswordHash())) {
             throw new BusinessException(40100, "密码错误");
         }
-        StpUtil.openSafe(SAFE_AUTH_SECONDS);
-        return new ConfirmVO((int) SAFE_AUTH_SECONDS);
+        SecurityUtils.openSafe();
+        return new ConfirmVO((int) SecurityUtils.SAFE_AUTH_SECONDS);
     }
 
     @Override
     public void logout() {
-        StpUtil.logout();
+        // 无状态 JWT：服务端不持有会话，客户端丢弃 token 即完成注销
     }
 
     @Override
@@ -225,58 +177,24 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public void evictSession(Long userId) {
-        StpUtil.logout(userId);
+        // 无状态 JWT 无法主动踢会话；角色权限每请求实时加载，access token 最长 2h 自然过期
     }
 
-    /**
-     * 首登建档：匹配有效预录名单，派生身份与主角色；客户端不得指定角色。
-     */
-    private SysUser registerFromRoster(String phone) {
-        SysPersonRoster roster = rosterMapper.selectOne(Wrappers.<SysPersonRoster>lambdaQuery()
-                .eq(SysPersonRoster::getPhone, phone));
-        if (roster == null) {
-            throw new BusinessException(40900, "该手机号未在预录名单中，无法登录，请联系管理员");
-        }
-        if (!Integer.valueOf(1).equals(roster.getEnabled())) {
-            throw new BusinessException(40900, "预录名单已停用，请联系管理员");
-        }
-        SysUser user = new SysUser();
-        user.setUserType(roster.getPersonType());
-        user.setRosterId(roster.getId());
-        user.setPhone(phone);
-        user.setPersonNo(roster.getPersonNo());
-        user.setRealName(roster.getRealName());
-        user.setDepartmentId(roster.getDepartmentId());
-        user.setEnabled(1);
-        user.setFailedLoginCount(0);
-        SysUserRole userRole = new SysUserRole();
-        userRole.setEnabled(1);
-        try {
-            userMapper.insert(user);
-            userRole.setUserId(user.getId());
-            userRole.setRoleId(UserType.STUDENT.name().equals(roster.getPersonType())
-                    ? RoleCode.STUDENT.getId() : RoleCode.TEACHER.getId());
-            userRoleMapper.insert(userRole);
-        } catch (DuplicateKeyException e) {
-            throw new BusinessException(40900, "账号已存在，请重新验证登录");
-        }
-        return user;
+    /** 签发 access+refresh token 并装配响应 */
+    private LoginVO issueTokens(SysUser user) {
+        return new LoginVO(jwtService.issueAccess(user.getId()), jwtService.issueRefresh(user.getId()),
+                jwtService.getAccessTtlSeconds(), String.valueOf(user.getId()), user.getRealName(),
+                user.getUserType(), loadRoleCodes(user.getId()));
     }
 
-    /**
-     * 登录共通：校验可用性后签发会话，装配角色权限入会话缓存。
-     */
-    private LoginVO doLogin(SysUser user, boolean needSetPassword) {
-        long timeout = UserType.ADMIN.name().equals(user.getUserType())
-                ? policyService.getInt("SESSION_TIMEOUT_ADMIN", "timeoutSeconds", 28800)
-                : policyService.getInt("SESSION_TIMEOUT_STUDENT_TEACHER", "timeoutSeconds", 7200);
-        StpUtil.login(user.getId(), new SaLoginParameter().setTimeout(timeout));
-        List<String> roles = loadRoleCodes(user.getId());
-        List<String> permissions = loadPermissionCodes(user.getId());
-        StpUtil.getSession().set(SESSION_ROLES, roles);
-        StpUtil.getSession().set(SESSION_PERMS, permissions);
-        return new LoginVO(StpUtil.getTokenValue(), String.valueOf(user.getId()), user.getRealName(),
-                user.getUserType(), roles, passwordChangeRequired(user), needSetPassword);
+    /** 常量时间比对客户端 bcrypt 密文与库中哈希（防时序侧信道） */
+    private boolean hashEquals(String clientHash, String storedHash) {
+        if (clientHash == null || storedHash == null) {
+            return false;
+        }
+        return MessageDigest.isEqual(
+                clientHash.getBytes(StandardCharsets.UTF_8),
+                storedHash.getBytes(StandardCharsets.UTF_8));
     }
 
     private void checkUsable(SysUser user) {
@@ -313,17 +231,8 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
-    private boolean passwordChangeRequired(SysUser user) {
-        if (!UserType.ADMIN.name().equals(user.getUserType())) {
-            return false;
-        }
-        int expireDays = policyService.getInt("PASSWORD_EXPIRE_DAYS", "expireDays", 90);
-        Instant changedAt = user.getPasswordChangedAt();
-        return changedAt == null || changedAt.plus(Duration.ofDays(expireDays)).isBefore(Instant.now());
-    }
-
     private SysUser currentUser() {
-        SysUser user = userMapper.selectById(StpUtil.getLoginIdAsLong());
+        SysUser user = userMapper.selectById(SecurityUtils.currentUserId());
         if (user == null || !Integer.valueOf(1).equals(user.getEnabled())) {
             throw new BusinessException(40100, "账号不存在或已停用");
         }

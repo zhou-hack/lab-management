@@ -1,6 +1,6 @@
 package com.labmanage.roles.service.impl;
 
-import cn.dev33.satoken.stp.StpUtil;
+import com.labmanage.common.utils.SecurityUtils;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.labmanage.common.exception.BusinessException;
@@ -16,7 +16,6 @@ import com.labmanage.roles.entity.SysUser;
 import com.labmanage.roles.entity.SysUserRole;
 import com.labmanage.roles.enums.RoleCode;
 import com.labmanage.roles.enums.UserType;
-import com.labmanage.roles.support.PasswordCryptoService;
 import com.labmanage.roles.mapper.SysDepartmentMapper;
 import com.labmanage.roles.mapper.SysUserMapper;
 import com.labmanage.roles.mapper.SysUserRoleMapper;
@@ -52,23 +51,19 @@ public class SysUserServiceImpl implements SysUserService {
 
     private final BCryptPasswordEncoder passwordEncoder;
 
-    private final PasswordCryptoService passwordCryptoService;
-
-    /** 密码强度：8-64 位且同时包含字母和数字（解密后的明文校验，与 AuthServiceImpl 一致） */
+    /** 密码强度：8-64 位且同时包含字母和数字（服务端生成哈希前的明文校验） */
     private static final java.util.regex.Pattern PASSWORD_RULE =
             java.util.regex.Pattern.compile("^(?=.*[A-Za-z])(?=.*\\d).{8,64}$");
 
     public SysUserServiceImpl(SysUserMapper userMapper, SysUserRoleMapper userRoleMapper,
                               SysDepartmentMapper departmentMapper, AuthService authService,
-                              SysScopeService scopeService, BCryptPasswordEncoder passwordEncoder,
-                              PasswordCryptoService passwordCryptoService) {
+                              SysScopeService scopeService, BCryptPasswordEncoder passwordEncoder) {
         this.userMapper = userMapper;
         this.userRoleMapper = userRoleMapper;
         this.departmentMapper = departmentMapper;
         this.authService = authService;
         this.scopeService = scopeService;
         this.passwordEncoder = passwordEncoder;
-        this.passwordCryptoService = passwordCryptoService;
     }
 
     @Override
@@ -138,7 +133,7 @@ public class SysUserServiceImpl implements SysUserService {
         requireOpsAdminOperator(user);
         scopeService.requireDepartmentWrite(user.getDepartmentId());
         if (Integer.valueOf(0).equals(dto.enabled())) {
-            if (id.equals(StpUtil.getLoginIdAsLong())) {
+            if (id.equals(SecurityUtils.currentUserId())) {
                 throw new BusinessException(40900, "不能停用当前登录账号");
             }
             user.setEnabled(0);
@@ -158,11 +153,12 @@ public class SysUserServiceImpl implements SysUserService {
     public void resetPassword(Long id, UserPasswordResetDTO dto) {
         SysUser user = requireUser(id);
         requireOpsAdminOperator(user);
-        if (id.equals(StpUtil.getLoginIdAsLong())) {
+        if (id.equals(SecurityUtils.currentUserId())) {
             throw new BusinessException(40900, "不能重置当前登录账号密码，请使用修改密码");
         }
         scopeService.requireDepartmentWrite(user.getDepartmentId());
-        String newPassword = passwordCryptoService.decrypt(dto.newPassword());
+        // 管理员重置：内网/HTTP 场景接受明文口令入参，服务端校验强度后生成 BCrypt 哈希
+        String newPassword = dto.newPassword();
         if (!PASSWORD_RULE.matcher(newPassword).matches()) {
             throw new BusinessException(40000, "新密码需 8-64 位且同时包含字母和数字");
         }
@@ -201,7 +197,7 @@ public class SysUserServiceImpl implements SysUserService {
         if (!authService.loadRoleCodes(target.getId()).contains(RoleCode.OPS_ADMIN.name())) {
             return;
         }
-        if (!StpUtil.getRoleList().contains(RoleCode.OPS_ADMIN.name())) {
+        if (!SecurityUtils.currentRoles().contains(RoleCode.OPS_ADMIN.name())) {
             throw new BusinessException(40300, "运维管理员账号仅运维管理员本人可操作");
         }
     }

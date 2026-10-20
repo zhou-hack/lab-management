@@ -1,6 +1,6 @@
 package com.labmanage.module.item.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.item.dto.MaterialSettlementCreateDTO;
@@ -32,14 +32,14 @@ public class MaterialSettlementController {
 
     @Operation(summary = "核销登记",
             description = "锁原出库行校验累计结算量不超过原出库量；核销不再扣库存（出库时已扣减）；返回结算 ID")
-    @SaCheckPermission("item:settlement:create")
+    @RequirePermission("item:settlement:create")
     @PostMapping
     public Result<String> settle(@Valid @RequestBody MaterialSettlementCreateDTO dto) {
         return Result.success(settlementService.settle(dto));
     }
 
     @Operation(summary = "分页查询结算记录")
-    @SaCheckPermission("item:settlement:list")
+    @RequirePermission("item:settlement:list")
     @GetMapping("/page")
     public Result<PageResult<MaterialSettlementVO>> page(@Valid MaterialSettlementQuery query) {
         return Result.success(settlementService.page(query));

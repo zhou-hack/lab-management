@@ -1,6 +1,6 @@
 package com.labmanage.roles.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.log.OperationLog;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
@@ -39,14 +39,14 @@ public class GrantController {
     }
 
     @Operation(summary = "我的授权分页（老师）")
-    @SaCheckPermission("system:grant:list")
+    @RequirePermission("system:grant:list")
     @GetMapping
     public Result<PageResult<GrantPageItemVO>> pageMine(@Valid GrantPageQueryDTO query) {
         return Result.success(grantService.pageMine(query));
     }
 
     @Operation(summary = "创建授权（最长一学年）")
-    @SaCheckPermission("system:grant:create")
+    @RequirePermission("system:grant:create")
     @OperationLog(moduleCode = "system", actionCode = "system:grant:create", targetTable = "assistant_grant")
     @PostMapping
     public Result<Void> create(@Valid @RequestBody GrantCreateDTO dto) {
@@ -55,7 +55,7 @@ public class GrantController {
     }
 
     @Operation(summary = "撤销授权（仅本人 ACTIVE 授权）")
-    @SaCheckPermission("system:grant:revoke")
+    @RequirePermission("system:grant:revoke")
     @OperationLog(moduleCode = "system", actionCode = "system:grant:revoke", targetTable = "assistant_grant", targetId = "#id")
     @PutMapping("/{id}/revoke")
     public Result<Void> revoke(@PathVariable Long id) {
@@ -64,7 +64,7 @@ public class GrantController {
     }
 
     @Operation(summary = "被授权学生搜索")
-    @SaCheckPermission("system:grant:create")
+    @RequirePermission("system:grant:create")
     @GetMapping("/student_options")
     public Result<List<StudentOptionVO>> studentOptions(
             @RequestParam(required = false) @Size(max = 32, message = "关键字长度不能超过 32") String keyword) {
@@ -72,7 +72,7 @@ public class GrantController {
     }
 
     @Operation(summary = "授权审计分页（管理员全量）")
-    @SaCheckPermission("system:grant:audit")
+    @RequirePermission("system:grant:audit")
     @GetMapping("/audit")
     public Result<PageResult<GrantPageItemVO>> pageAudit(@Valid GrantPageQueryDTO query) {
         return Result.success(grantService.pageAudit(query));

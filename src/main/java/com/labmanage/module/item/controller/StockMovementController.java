@@ -1,6 +1,6 @@
 package com.labmanage.module.item.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.item.dto.StockMovementQuery;
@@ -28,7 +28,7 @@ public class StockMovementController {
     }
 
     @Operation(summary = "分页查询库存台账")
-    @SaCheckPermission("item:ledger:list")
+    @RequirePermission("item:ledger:list")
     @GetMapping("/page")
     public Result<PageResult<StockMovementVO>> page(@Valid StockMovementQuery query) {
         return Result.success(stockQueryService.pageMovement(query));

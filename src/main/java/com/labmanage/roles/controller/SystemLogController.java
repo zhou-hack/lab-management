@@ -1,6 +1,6 @@
 package com.labmanage.roles.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.roles.dto.LogPageQueryDTO;
@@ -28,7 +28,7 @@ public class SystemLogController {
     }
 
     @Operation(summary = "操作日志分页列表")
-    @SaCheckPermission("system:log:list")
+    @RequirePermission("system:log:list")
     @GetMapping
     public Result<PageResult<LogPageItemVO>> page(@Valid LogPageQueryDTO query) {
         return Result.success(logService.page(query));

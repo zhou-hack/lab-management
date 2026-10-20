@@ -379,9 +379,14 @@ class BookingFlowTest {
     }
 
     private String login(String username) throws Exception {
-        HttpResp resp = post(null, AUTH + "/login", Map.of("username", username, "password", "admin123"));
+        // 新登录契约：预取盐 → 客户端 bcrypt → 密文登录（与前端行为一致）
+        HttpResp saltResp = get(null, AUTH + "/salt?accountName=" + username);
+        assertOk(saltResp);
+        String salt = json(saltResp).path("data").path("salt").asText();
+        String hash = org.springframework.security.crypto.bcrypt.BCrypt.hashpw("admin123", salt);
+        HttpResp resp = post(null, AUTH + "/login", Map.of("accountName", username, "password", hash));
         assertOk(resp);
-        return json(resp).path("data").path("token").asText();
+        return json(resp).path("data").path("accessToken").asText();
     }
 
     /** 幂等重建 91xxx 测试设备（分类→型号→三台设备）与演示账号 */

@@ -1,7 +1,7 @@
 package com.labmanage.roles.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
-import cn.dev33.satoken.stp.StpUtil;
+import com.labmanage.common.security.RequirePermission;
+import com.labmanage.common.utils.SecurityUtils;
 import com.labmanage.common.log.OperationLog;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
@@ -33,18 +33,18 @@ public class SystemPolicyController {
     }
 
     @Operation(summary = "策略分页列表（全部版本）")
-    @SaCheckPermission("system:policy:list")
+    @RequirePermission("system:policy:list")
     @GetMapping
     public Result<PageResult<PolicyPageItemVO>> page(@Valid PolicyPageQueryDTO query) {
         return Result.success(sysPolicyService.page(query));
     }
 
     @Operation(summary = "发布新版本（区间不重叠，发布即刷新读取缓存；敏感操作需二级认证）")
-    @SaCheckPermission("system:policy:publish")
+    @RequirePermission("system:policy:publish")
     @OperationLog(moduleCode = "system", actionCode = "system:policy:publish", targetTable = "business_policy")
     @PostMapping("/publish")
     public Result<Integer> publish(@Valid @RequestBody PolicyPublishDTO dto) {
-        StpUtil.checkSafe();
+        SecurityUtils.checkSafe();
         return Result.success(sysPolicyService.publish(dto));
     }
 }

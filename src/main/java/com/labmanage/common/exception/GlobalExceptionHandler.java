@@ -1,8 +1,5 @@
 package com.labmanage.common.exception;
 
-import cn.dev33.satoken.exception.NotLoginException;
-import cn.dev33.satoken.exception.NotPermissionException;
-import cn.dev33.satoken.exception.NotSafeException;
 import com.labmanage.common.result.Result;
 import com.labmanage.common.result.ResultCode;
 import jakarta.servlet.http.HttpServletResponse;
@@ -53,15 +50,6 @@ public class GlobalExceptionHandler {
             case 50000 -> HttpStatus.INTERNAL_SERVER_ERROR.value();
             default -> HttpStatus.CONFLICT.value();
         };
-    }
-
-    /**
-     * Sa-Token 二级认证未通过：敏感操作需先完成二次密码确认（40101，前端弹确认框而非跳登录）
-     */
-    @ExceptionHandler(NotSafeException.class)
-    @ResponseStatus(HttpStatus.UNAUTHORIZED)
-    public Result<Void> handleNotSafeException(NotSafeException e) {
-        return Result.error(ResultCode.SAFE_AUTH_REQUIRED.getCode(), ResultCode.SAFE_AUTH_REQUIRED.getMsg());
     }
 
     /**
@@ -137,25 +125,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Sa-Token 未登录
-     */
-    @ExceptionHandler(NotLoginException.class)
-    @ResponseStatus(HttpStatus.UNAUTHORIZED)
-    public Result<Void> handleNotLoginException(NotLoginException e) {
-        return Result.error(ResultCode.UNAUTHORIZED.getCode(), ResultCode.UNAUTHORIZED.getMsg());
-    }
-
-    /**
-     * Sa-Token 无权限
-     */
-    @ExceptionHandler(NotPermissionException.class)
-    @ResponseStatus(HttpStatus.FORBIDDEN)
-    public Result<Void> handleNotPermissionException(NotPermissionException e) {
-        return Result.error(ResultCode.FORBIDDEN.getCode(), ResultCode.FORBIDDEN.getMsg());
-    }
-
-    /**
-     * 其他未捕获异常：记录堆栈便于排查，响应不泄露内部实现
+     * 404 - 路径不存在
      */
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)

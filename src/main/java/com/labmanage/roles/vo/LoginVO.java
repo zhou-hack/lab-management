@@ -3,23 +3,23 @@ package com.labmanage.roles.vo;
 import java.util.List;
 
 /**
- * 登录响应
+ * 登录/刷新响应
  *
- * @param token                  Sa-Token 会话令牌（经 Authorization: Bearer 传递）
- * @param userId                 用户 ID（字符串，避免 JS 精度损失）
- * @param realName               姓名
- * @param userType               用户类型：STUDENT/TEACHER/ADMIN
- * @param roles                  角色码集合（含动态计算的 ASSISTANT）
- * @param passwordChangeRequired 密码已到期或从未设置（管理员），须强制改密
- * @param needSetPassword        尚未设置密码（老师首登须设置敏感操作密码）
+ * @param accessToken  JWT access token（Authorization: Bearer 传递，短效）
+ * @param refreshToken JWT refresh token（仅用于到期换新，不作为业务请求凭据）
+ * @param expiresIn    access token 有效期（秒）
+ * @param userId       用户 ID（字符串，避免 JS 精度损失）
+ * @param realName     姓名
+ * @param userType     用户类型：STUDENT/TEACHER/ADMIN
+ * @param roles        角色码集合（含动态计算的 ASSISTANT）
  */
 public record LoginVO(
-        String token,
+        String accessToken,
+        String refreshToken,
+        Long expiresIn,
         String userId,
         String realName,
         String userType,
-        List<String> roles,
-        Boolean passwordChangeRequired,
-        Boolean needSetPassword
+        List<String> roles
 ) {
 }
