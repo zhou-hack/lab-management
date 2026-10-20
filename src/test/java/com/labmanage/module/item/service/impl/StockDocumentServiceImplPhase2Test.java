@@ -11,11 +11,8 @@ import com.labmanage.module.item.entity.StockBalance;
 import com.labmanage.module.item.entity.StockDocument;
 import com.labmanage.module.item.entity.StockDocumentLine;
 import com.labmanage.module.item.entity.StockLocation;
-import com.labmanage.module.item.entity.Stocktake;
-import com.labmanage.module.item.enums.AdjustDirection;
 import com.labmanage.module.item.enums.MovementType;
 import com.labmanage.module.item.enums.StockDocumentStatus;
-import com.labmanage.module.item.enums.StocktakeStatus;
 import com.labmanage.module.item.mapper.MaterialRequestLineMapper;
 import com.labmanage.module.item.mapper.MaterialRequestMapper;
 import com.labmanage.module.item.mapper.MaterialSettlementMapper;
@@ -25,7 +22,6 @@ import com.labmanage.module.item.mapper.StockDocumentLineMapper;
 import com.labmanage.module.item.mapper.StockDocumentMapper;
 import com.labmanage.module.item.mapper.StockLocationMapper;
 import com.labmanage.module.item.mapper.StockMovementMapper;
-import com.labmanage.module.item.mapper.StocktakeMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -53,7 +49,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * 库存单据服务第二阶段单元测试（调拨/归还/报废/冲销登记与盘点冻结调账，纯 Mockito）
+ * 库存单据服务第二阶段单元测试（调拨/归还/报废/冲销登记，纯 Mockito）
  */
 @ExtendWith(MockitoExtension.class)
 class StockDocumentServiceImplPhase2Test {
@@ -88,23 +84,10 @@ class StockDocumentServiceImplPhase2Test {
     private MaterialSettlementMapper settlementMapper;
 
     @Mock
-    private StocktakeMapper stocktakeMapper;
+    private com.labmanage.module.item.mapper.SysUserRefMapper sysUserRefMapper;
 
     @InjectMocks
     private StockDocumentServiceImpl service;
-
-    /**
-     * 追加（第二阶段）：初始化 Stocktake 实体的 MyBatis-Plus lambda 元数据缓存，
-     * 否则纯 Mockito 环境下 LambdaQueryWrapper 构建时会抛 can not find lambda cache。
-     */
-    @org.junit.jupiter.api.BeforeAll
-    static void initStocktakeMeta() {
-        org.apache.ibatis.builder.MapperBuilderAssistant assistant =
-                new org.apache.ibatis.builder.MapperBuilderAssistant(
-                        new com.baomidou.mybatisplus.core.MybatisConfiguration(), "");
-        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
-                assistant, com.labmanage.module.item.entity.Stocktake.class);
-    }
 
     // ---------------------------------------------------------------- helpers
 
@@ -207,20 +190,7 @@ class StockDocumentServiceImplPhase2Test {
         verify(lineMapper, never()).insertBatch(anyList());
     }
 
-    // --------------------------------------------------------- 盘点冻结与调账
-
-    @Test
-    void postRejectsFrozenLocation() {
-        when(documentMapper.casPost(eq(1L), any(Instant.class))).thenReturn(1);
-        when(documentMapper.selectById(1L)).thenReturn(document(MovementType.ISSUE, 1L));
-        when(lineMapper.selectByDocumentId(1L)).thenReturn(List.of(line(1, 1L, 100L, null, "5")));
-        when(stocktakeMapper.selectCount(any())).thenReturn(1L);
-
-        BusinessException ex = assertBizError(40900, () -> service.post("1"));
-
-        assertTrue(ex.getMessage().contains("盘点冻结"));
-        verifyNoInteractions(balanceMapper, movementMapper);
-    }
+    // --------------------------------------------------------- 调拨过账
 
     @Test
     void postTransferShortageRejected() {
@@ -228,7 +198,6 @@ class StockDocumentServiceImplPhase2Test {
         when(documentMapper.selectById(901L)).thenReturn(document(MovementType.TRANSFER, 901L));
         when(lineMapper.selectByDocumentId(901L)).thenReturn(List.of(line(1, 1L, 100L, 200L, "5")));
         when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L, 3)));
-        when(stocktakeMapper.selectCount(any())).thenReturn(0L);
         // 调出库位余额不足；调入库位无行则初始化 0 量行
         when(balanceMapper.lockByLocationAndSku(100L, 1L)).thenReturn(balance(100L, 1L, "2", "1.5"));
         when(balanceMapper.lockByLocationAndSku(200L, 1L)).thenReturn(null);
@@ -238,36 +207,6 @@ class StockDocumentServiceImplPhase2Test {
 
         assertTrue(ex.getMessage().contains("调出库位库存不足"));
         verifyNoInteractions(movementMapper);
-    }
-
-    @Test
-    void postAdjustCompletesStocktake() {
-        StockDocument adjust = document(MovementType.ADJUST, 901L);
-        when(documentMapper.casPost(eq(901L), any(Instant.class))).thenReturn(1);
-        when(documentMapper.selectById(901L)).thenReturn(adjust);
-        StockDocumentLine lossLine = line(1, 1L, 100L, null, "2");
-        lossLine.setAdjustDirection(AdjustDirection.LOSS.name());
-        when(lineMapper.selectByDocumentId(901L)).thenReturn(List.of(lossLine));
-        when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L, 3)));
-        when(balanceMapper.lockByLocationAndSku(100L, 1L)).thenReturn(balance(100L, 1L, "20", "2.5"));
-        when(balanceMapper.updatePostBalance(any(Long.class), any(Integer.class),
-                any(BigDecimal.class), any(BigDecimal.class))).thenReturn(1);
-        doAnswer(inv -> 1).when(movementMapper).insert(any(com.labmanage.module.item.entity.StockMovement.class));
-        Stocktake stocktake = new Stocktake();
-        stocktake.setId(555L);
-        stocktake.setStatus(StocktakeStatus.PENDING_REVIEW);
-        stocktake.setAdjustDocumentId(901L);
-        when(stocktakeMapper.selectOne(any())).thenReturn(stocktake);
-        when(stocktakeMapper.casComplete(eq(555L), any(Instant.class))).thenReturn(1);
-
-        assertDoesNotThrow(() -> service.post("901"));
-
-        // 盘亏行回填账面均价成本快照
-        ArgumentCaptor<StockDocumentLine> lineCaptor = ArgumentCaptor.forClass(StockDocumentLine.class);
-        verify(lineMapper).updateById(lineCaptor.capture());
-        assertEquals(new BigDecimal("2.5"), lineCaptor.getValue().getUnitPriceSnapshot());
-        // 过账完成关闭盘点单（解冻）
-        verify(stocktakeMapper).casComplete(eq(555L), any(Instant.class));
     }
 
     // ------------------------------------------------------------- 归还登记

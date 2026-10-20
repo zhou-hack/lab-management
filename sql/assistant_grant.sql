@@ -7,9 +7,11 @@
 --      有效 = status=ACTIVE 且 start_at <= now < end_at（半开区间），EXPIRED 由定时任务回填；
 --   2. 仅老师授权学生，最长一学年由服务端校验；同一学生可被多位老师授权，
 --      一笔代办必须明确选用一条授权；
---   3. 范围表 OFFERING/LAB 目标恰一非空（CHECK），生成列归一后
+--   3. 范围表 OFFERING/LAB/EQUIPMENT 目标恰一非空（CHECK），生成列归一后
 --      (grant_id, scope_type, scope_target_id, action_code) 唯一；
---   4. offering_id / lab_id 为跨模块引用，只建列与索引，外键由教学/空间模块脚本补充。
+--      动作 ISSUE/RETURN（物料领还）+ BOOKING（场地/物料/设备预约，2026-10-19 需求定稿）；
+--   4. offering_id / lab_id / equipment_id 为跨模块引用，只建列与索引，
+--      外键由教学/空间/设备模块脚本补充（lab_id、equipment_id 已在 lab_management_all.sql 补充）。
 -- 执行前提：sys_rbac.sql 已执行（依赖 sys_user）；时区约定同 sys_rbac.sql。
 -- ============================================================================
 
@@ -48,11 +50,12 @@ CREATE TABLE assistant_grant (
 CREATE TABLE assistant_grant_scope (
     id            BIGINT      NOT NULL                COMMENT '主键（雪花 ID）',
     grant_id      BIGINT      NOT NULL                COMMENT '授权（→ assistant_grant.id）',
-    scope_type    VARCHAR(32) NOT NULL                COMMENT '范围类型：OFFERING/LAB',
+    scope_type    VARCHAR(32) NOT NULL                COMMENT '范围类型：OFFERING开课/LAB实验室/EQUIPMENT设备',
     offering_id   BIGINT      NULL                    COMMENT '目标开课（→ course_offering.id，跨模块，外键由教学模块补充）',
     lab_id        BIGINT      NULL                    COMMENT '目标实验室（→ lab.id，跨模块，外键由空间模块补充）',
-    action_code   VARCHAR(64) NOT NULL                COMMENT '动作：ISSUE/RETURN',
-    scope_target_id BIGINT GENERATED ALWAYS AS (COALESCE(offering_id, lab_id, 0)) STORED COMMENT '范围目标归一键（生成列，勿写）',
+    equipment_id  BIGINT      NULL                    COMMENT '目标设备（→ equipment_asset.id，跨模块，外键由设备模块补充；2026-10-19 新增）',
+    action_code   VARCHAR(64) NOT NULL                COMMENT '动作：ISSUE领用/RETURN归还/BOOKING预约（场地/物料/设备）',
+    scope_target_id BIGINT GENERATED ALWAYS AS (COALESCE(offering_id, lab_id, equipment_id, 0)) STORED COMMENT '范围目标归一键（生成列，勿写）',
     create_time   DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)) COMMENT '创建时间（UTC）',
     update_time   DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间（UTC）',
     deleted       TINYINT     NOT NULL DEFAULT 0      COMMENT '逻辑删除：0正常 1删除',
@@ -62,9 +65,12 @@ CREATE TABLE assistant_grant_scope (
     UNIQUE KEY uk_assistant_grant_scope (grant_id, scope_type, scope_target_id, action_code),
     KEY idx_assistant_grant_scope_offering (offering_id),
     KEY idx_assistant_grant_scope_lab (lab_id),
+    KEY idx_assistant_grant_scope_equipment (equipment_id),
     CONSTRAINT fk_assistant_grant_scope_grant FOREIGN KEY (grant_id) REFERENCES assistant_grant (id),
-    CONSTRAINT chk_assistant_grant_scope_type CHECK (scope_type IN ('OFFERING', 'LAB')),
-    CONSTRAINT chk_assistant_grant_scope_target CHECK ((offering_id IS NULL) <> (lab_id IS NULL)),
-    CONSTRAINT chk_assistant_grant_scope_action CHECK (action_code IN ('ISSUE', 'RETURN')),
+    CONSTRAINT chk_assistant_grant_scope_type CHECK (scope_type IN ('OFFERING', 'LAB', 'EQUIPMENT')),
+    CONSTRAINT chk_assistant_grant_scope_target CHECK (
+        ((offering_id IS NOT NULL) + (lab_id IS NOT NULL) + (equipment_id IS NOT NULL)) = 1
+    ),
+    CONSTRAINT chk_assistant_grant_scope_action CHECK (action_code IN ('ISSUE', 'RETURN', 'BOOKING')),
     CONSTRAINT chk_assistant_grant_scope_deleted CHECK (deleted IN (0, 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='助理授权范围表（恰一目标 + 动作）';

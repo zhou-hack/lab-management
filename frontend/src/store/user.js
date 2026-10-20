@@ -14,7 +14,6 @@ const ADMIN_ITEM_PERMS = [
   'item:location:list', 'item:location:create', 'item:location:update',
   'item:location:enable', 'item:location:delete',
   'item:balance:import', 'item:balance:export',
-  'item:stocktake:export', 'item:stocktake:count',
   // 申领两级审核 + 代理代领（管理员全部单据终审，含老师审核动作）
   'item:request:list', 'item:request:create', 'item:request:teacher_approve',
   'item:request:approve', 'item:request:cancel', 'item:request:issue'

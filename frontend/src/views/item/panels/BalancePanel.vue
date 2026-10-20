@@ -7,24 +7,11 @@
         all-option
         @change="pager.search"
       />
-      <el-select
+      <CategorySelect
         v-model="query.categoryId"
-        clearable
-        filterable
-        placeholder="全部分类"
+        all-option
         @change="pager.search"
-      >
-        <el-option
-          label="全部分类"
-          value=""
-        />
-        <el-option
-          v-for="c in categories"
-          :key="c.id"
-          :label="c.categoryName"
-          :value="c.id"
-        />
-      </el-select>
+      />
       <SkuSelect
         v-model="query.skuId"
         all-option
@@ -129,16 +116,6 @@
       >
         <template #default="{ row }">
           {{ formatQty(row.suggestedQty) }}
-        </template>
-      </el-table-column>
-      <el-table-column
-        v-if="!warningOnly"
-        label="移动均价"
-        width="110"
-        align="right"
-      >
-        <template #default="{ row }">
-          {{ formatQty(row.movingAveragePrice) }}
         </template>
       </el-table-column>
       <el-table-column
@@ -267,7 +244,6 @@ import {
   downloadOpeningImportTemplate,
   exportBalances,
   importOpeningBalances,
-  listEnabledCategories,
   pageBalances,
   pageWarnings,
   updateBalanceWarning
@@ -280,13 +256,13 @@ import PagerBar from '@/components/PagerBar.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import LocationSelect from '@/components/LocationSelect.vue'
 import SkuSelect from '@/components/SkuSelect.vue'
+import CategorySelect from '@/components/CategorySelect.vue'
 import ImportDialog from '@/components/ImportDialog.vue'
 
 const query = reactive({ locationId: null, categoryId: null, skuId: null })
 const warningOnly = ref(false)
 const importDialogRef = ref(null)
 const exporting = ref(false)
-const categories = ref([])
 
 const pager = usePagedList((params) => {
   const common = {
@@ -297,14 +273,6 @@ const pager = usePagedList((params) => {
   }
   return warningOnly.value ? pageWarnings(common) : pageBalances(common)
 })
-
-async function loadCategories() {
-  try {
-    categories.value = await listEnabledCategories()
-  } catch {
-    // 失败已由全局拦截器提示
-  }
-}
 
 const warningVisible = ref(false)
 const submitting = ref(false)
@@ -366,13 +334,11 @@ async function doExport(format) {
 }
 
 onMounted(() => {
-  loadCategories()
   pager.load()
 })
 
-// 页签切回时刷新列表与分类下拉（保证基础数据页签新增分类后余额面板即时可见）
+// 页签切回时刷新列表（分类下拉为远程关键字搜索，打开时自动取最新数据）
 function refresh() {
-  loadCategories()
   pager.load()
 }
 

@@ -7,24 +7,11 @@
         all-option
         @change="pager.search"
       />
-      <el-select
+      <CategorySelect
         v-model="query.categoryId"
-        clearable
-        filterable
-        placeholder="全部分类"
+        all-option
         @change="pager.search"
-      >
-        <el-option
-          label="全部分类"
-          value=""
-        />
-        <el-option
-          v-for="c in categories"
-          :key="c.id"
-          :label="c.categoryName"
-          :value="c.id"
-        />
-      </el-select>
+      />
       <SkuSelect
         v-model="query.skuId"
         all-option
@@ -52,7 +39,7 @@
       <el-input
         v-model="query.stockDocumentId"
         clearable
-        class="w220"
+        class="w150"
         placeholder="按单据 ID 过滤"
         @change="pager.search"
       />
@@ -60,9 +47,9 @@
         v-model="query.timeRange"
         type="datetimerange"
         value-format="YYYY-MM-DD HH:mm:ss"
-        start-placeholder="发生时间起"
-        end-placeholder="发生时间止"
-        class="w360"
+        start-placeholder="出入库时间起"
+        end-placeholder="出入库时间止"
+        class="w320"
         @change="pager.search"
       />
       <el-button @click="pager.search">
@@ -76,7 +63,7 @@
       border
     >
       <el-table-column
-        label="发生时间"
+        label="出入库时间"
         width="170"
       >
         <template #default="{ row }">
@@ -141,21 +128,30 @@
         </template>
       </el-table-column>
       <el-table-column
-        label="价值变动"
+        label="入库人"
         width="110"
-        align="right"
+        align="center"
       >
         <template #default="{ row }">
-          {{ formatQty(row.valueDelta) }}
+          {{ row.direction === 'IN' ? displayName(row.operatorName, row.operatorId) : '—' }}
         </template>
       </el-table-column>
       <el-table-column
-        label="过账后均价"
+        label="出库人"
         width="110"
-        align="right"
+        align="center"
       >
         <template #default="{ row }">
-          {{ formatQty(row.afterAvgPrice) }}
+          {{ row.direction === 'OUT' ? displayName(row.operatorName, row.operatorId) : '—' }}
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="保管人"
+        width="110"
+        align="center"
+      >
+        <template #default="{ row }">
+          {{ displayName(row.custodianName, row.custodianId) }}
         </template>
       </el-table-column>
       <el-table-column
@@ -171,8 +167,8 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
-import { listEnabledCategories, pageMovements } from '@/api/item'
+import { onMounted, reactive } from 'vue'
+import { pageMovements } from '@/api/item'
 import { usePagedList } from '@/utils/usePagedList'
 import { moveDirectionMap } from '@/utils/statusMap'
 import { fmtShanghai, formatQty, shanghaiToUtcIso } from '@/utils/format'
@@ -180,9 +176,9 @@ import PagerBar from '@/components/PagerBar.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import LocationSelect from '@/components/LocationSelect.vue'
 import SkuSelect from '@/components/SkuSelect.vue'
+import CategorySelect from '@/components/CategorySelect.vue'
 
 const query = reactive({ locationId: null, categoryId: null, skuId: null, direction: null, stockDocumentId: '', timeRange: null })
-const categories = ref([])
 
 const pager = usePagedList((params) => {
   const range = query.timeRange || []
@@ -198,24 +194,30 @@ const pager = usePagedList((params) => {
   })
 })
 
-async function loadCategories() {
-  try {
-    categories.value = await listEnabledCategories()
-  } catch {
-    // 失败已由全局拦截器提示
-  }
+/** 姓名/ID 均缺失（经办人未登记）时显示占位 */
+function displayName(name, id) {
+  if (name) return name
+  return id || '—'
 }
 
 onMounted(() => {
   pager.load()
-  loadCategories()
 })
 
 defineExpose({ refresh: pager.load })
 </script>
 
 <style scoped>
-.w360 {
-  width: 360px;
+/* 单行工具栏压缩：默认状态总宽约 1318px，三个搜索下拉选中长文本撑满
+   （各 220px）时约 1378px，均不超过工作台内容区宽（1392px），保证不换行不滚动 */
+.toolbar :deep(.el-input.w150) {
+  width: 150px;
+  min-width: 150px;
+}
+
+/* EP 对 datetimerange 有主题默认宽（约 400px），普通单类选择器不稳；
+   用 .toolbar + 组件类 + 自定义类三重抬高特异性压到 320px */
+.toolbar :deep(.el-date-editor--datetimerange.w320) {
+  width: 320px;
 }
 </style>

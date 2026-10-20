@@ -15,14 +15,12 @@ import com.labmanage.module.item.entity.MaterialRequestLine;
 import com.labmanage.module.item.entity.MaterialSku;
 import com.labmanage.module.item.entity.StockBalance;
 import com.labmanage.module.item.entity.StockDocumentLine;
-import com.labmanage.module.item.entity.StocktakeLine;
 import com.labmanage.module.item.mapper.MaterialCategoryMapper;
 import com.labmanage.module.item.mapper.MaterialQuotaMapper;
 import com.labmanage.module.item.mapper.MaterialRequestLineMapper;
 import com.labmanage.module.item.mapper.MaterialSkuMapper;
 import com.labmanage.module.item.mapper.StockBalanceMapper;
 import com.labmanage.module.item.mapper.StockDocumentLineMapper;
-import com.labmanage.module.item.mapper.StocktakeLineMapper;
 import com.labmanage.module.item.service.MaterialSkuService;
 import com.labmanage.module.item.util.IdUtils;
 import com.labmanage.module.item.vo.MaterialSkuVO;
@@ -45,19 +43,16 @@ public class MaterialSkuServiceImpl implements MaterialSkuService {
     private final StockDocumentLineMapper documentLineMapper;
     private final MaterialRequestLineMapper requestLineMapper;
     private final MaterialQuotaMapper quotaMapper;
-    private final StocktakeLineMapper stocktakeLineMapper;
 
     public MaterialSkuServiceImpl(MaterialSkuMapper skuMapper, MaterialCategoryMapper categoryMapper,
                                   StockBalanceMapper balanceMapper, StockDocumentLineMapper documentLineMapper,
-                                  MaterialRequestLineMapper requestLineMapper, MaterialQuotaMapper quotaMapper,
-                                  StocktakeLineMapper stocktakeLineMapper) {
+                                  MaterialRequestLineMapper requestLineMapper, MaterialQuotaMapper quotaMapper) {
         this.skuMapper = skuMapper;
         this.categoryMapper = categoryMapper;
         this.balanceMapper = balanceMapper;
         this.documentLineMapper = documentLineMapper;
         this.requestLineMapper = requestLineMapper;
         this.quotaMapper = quotaMapper;
-        this.stocktakeLineMapper = stocktakeLineMapper;
     }
 
     @Override
@@ -167,10 +162,6 @@ public class MaterialSkuServiceImpl implements MaterialSkuService {
         }
         if (quotaMapper.selectCount(new LambdaQueryWrapper<MaterialQuota>().eq(MaterialQuota::getSkuId, skuId)) > 0) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "该物料已配置领用定额，禁止删除");
-        }
-        if (stocktakeLineMapper.selectCount(
-                new LambdaQueryWrapper<StocktakeLine>().eq(StocktakeLine::getSkuId, skuId)) > 0) {
-            throw new BusinessException(ResultCode.CONFLICT.getCode(), "该物料已有盘点记录，禁止删除");
         }
         skuMapper.deleteById(skuId);
     }

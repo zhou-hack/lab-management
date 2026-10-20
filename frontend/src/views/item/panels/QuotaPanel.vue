@@ -8,24 +8,11 @@
         placeholder="开课实例 ID 过滤"
         @change="pager.search"
       />
-      <el-select
+      <CategorySelect
         v-model="query.categoryId"
-        clearable
-        filterable
-        placeholder="全部分类"
+        all-option
         @change="pager.search"
-      >
-        <el-option
-          label="全部分类"
-          value=""
-        />
-        <el-option
-          v-for="c in categories"
-          :key="c.id"
-          :label="c.categoryName"
-          :value="c.id"
-        />
-      </el-select>
+      />
       <SkuSelect
         v-model="query.skuId"
         all-option
@@ -251,15 +238,15 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { disableQuota, enableQuota, listEnabledCategories, pageQuotas, updateQuota, upsertQuota } from '@/api/item'
+import { disableQuota, enableQuota, pageQuotas, updateQuota, upsertQuota } from '@/api/item'
 import { usePagedList } from '@/utils/usePagedList'
 import { confirmAction } from '@/utils/confirm'
 import { formatQty } from '@/utils/format'
 import PagerBar from '@/components/PagerBar.vue'
 import SkuSelect from '@/components/SkuSelect.vue'
+import CategorySelect from '@/components/CategorySelect.vue'
 
 const query = reactive({ offeringId: '', categoryId: null, skuId: null })
-const categories = ref([])
 
 const pager = usePagedList((params) =>
   pageQuotas({
@@ -269,14 +256,6 @@ const pager = usePagedList((params) =>
     skuId: query.skuId || undefined
   })
 )
-
-async function loadCategories() {
-  try {
-    categories.value = await listEnabledCategories()
-  } catch {
-    // 失败已由全局拦截器提示
-  }
-}
 
 const upsertVisible = ref(false)
 const submitting = ref(false)
@@ -366,7 +345,6 @@ async function doToggle(row, enable) {
 
 onMounted(() => {
   pager.load()
-  loadCategories()
 })
 
 defineExpose({ refresh: pager.load })

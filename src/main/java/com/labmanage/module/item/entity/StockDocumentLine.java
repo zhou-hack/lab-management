@@ -41,9 +41,6 @@ public class StockDocumentLine extends BaseEntity {
     /** 归还绑定的原出库行 ID */
     private Long originalIssueLineId;
 
-    /** 盘点调账方向 */
-    private String adjustDirection;
-
     public Long getStockDocumentId() {
         return stockDocumentId;
     }
@@ -122,13 +119,5 @@ public class StockDocumentLine extends BaseEntity {
 
     public void setOriginalIssueLineId(Long originalIssueLineId) {
         this.originalIssueLineId = originalIssueLineId;
-    }
-
-    public String getAdjustDirection() {
-        return adjustDirection;
-    }
-
-    public void setAdjustDirection(String adjustDirection) {
-        this.adjustDirection = adjustDirection;
     }
 }

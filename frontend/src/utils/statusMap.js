@@ -30,15 +30,6 @@ export const requestTypeMap = {
   PROXY: { label: '学生代理代领', type: 'warning' }
 }
 
-/** 盘点单状态 */
-export const stocktakeStatusMap = {
-  DRAFT: { label: '草稿', type: 'info' },
-  COUNTING: { label: '盘点中', type: 'warning' },
-  PENDING_REVIEW: { label: '待复核', type: 'primary' },
-  COMPLETED: { label: '已完成', type: 'success' },
-  CANCELLED: { label: '已取消', type: 'info' }
-}
-
 /** 库存流水业务类型 */
 export const movementTypeMap = {
   OPENING: { label: '期初入库', type: 'success' },
@@ -46,7 +37,7 @@ export const movementTypeMap = {
   ISSUE: { label: '领用出库', type: 'warning' },
   RETURN_IN: { label: '归还入库', type: 'success' },
   TRANSFER: { label: '调拨', type: 'primary' },
-  ADJUST: { label: '盘点调账', type: 'primary' },
+  ADJUST: { label: '调账', type: 'primary' },
   SCRAP: { label: '报废', type: 'danger' },
   REVERSAL: { label: '冲销', type: 'danger' }
 }

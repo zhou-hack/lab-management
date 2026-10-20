@@ -26,13 +26,10 @@ import com.labmanage.module.item.entity.StockDocument;
 import com.labmanage.module.item.entity.StockDocumentLine;
 import com.labmanage.module.item.entity.StockLocation;
 import com.labmanage.module.item.entity.StockMovement;
-import com.labmanage.module.item.entity.Stocktake;
-import com.labmanage.module.item.enums.AdjustDirection;
 import com.labmanage.module.item.enums.MoveDirection;
 import com.labmanage.module.item.enums.MovementType;
 import com.labmanage.module.item.enums.SettlementType;
 import com.labmanage.module.item.enums.StockDocumentStatus;
-import com.labmanage.module.item.enums.StocktakeStatus;
 import com.labmanage.module.item.mapper.MaterialRequestLineMapper;
 import com.labmanage.module.item.mapper.MaterialRequestMapper;
 import com.labmanage.module.item.mapper.MaterialSettlementMapper;
@@ -42,12 +39,14 @@ import com.labmanage.module.item.mapper.StockDocumentLineMapper;
 import com.labmanage.module.item.mapper.StockDocumentMapper;
 import com.labmanage.module.item.mapper.StockLocationMapper;
 import com.labmanage.module.item.mapper.StockMovementMapper;
-import com.labmanage.module.item.mapper.StocktakeMapper;
+import com.labmanage.module.item.mapper.SysUserRefMapper;
 import com.labmanage.module.item.service.StockDocumentService;
 import com.labmanage.module.item.util.IdUtils;
 import com.labmanage.module.item.vo.StockDocumentDetailVO;
 import com.labmanage.module.item.vo.StockDocumentLineVO;
 import com.labmanage.module.item.vo.StockDocumentVO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -76,6 +75,8 @@ import java.util.stream.Collectors;
 @Service
 public class StockDocumentServiceImpl implements StockDocumentService {
 
+    private static final Logger log = LoggerFactory.getLogger(StockDocumentServiceImpl.class);
+
     private static final Set<MovementType> SUPPORTED_TYPES = Set.of(
             MovementType.OPENING, MovementType.PURCHASE_IN, MovementType.ISSUE);
 
@@ -85,11 +86,12 @@ public class StockDocumentServiceImpl implements StockDocumentService {
     private final MaterialSkuMapper skuMapper;
     private final StockLocationMapper locationMapper;
     private final StockMovementMapper movementMapper;
-    // ---- 第二阶段追加依赖：申领实发回写、归还结算、盘点冻结检查 ----
+    // ---- 第二阶段追加依赖：申领实发回写、归还结算 ----
     private final MaterialRequestMapper requestMapper;
     private final MaterialRequestLineMapper requestLineMapper;
     private final MaterialSettlementMapper settlementMapper;
-    private final StocktakeMapper stocktakeMapper;
+    // ---- 经办人姓名解析（跨模块只读 sys_user）----
+    private final SysUserRefMapper sysUserRefMapper;
 
     public StockDocumentServiceImpl(StockDocumentMapper documentMapper,
                                      StockDocumentLineMapper lineMapper,
@@ -100,7 +102,7 @@ public class StockDocumentServiceImpl implements StockDocumentService {
                                      MaterialRequestMapper requestMapper,
                                      MaterialRequestLineMapper requestLineMapper,
                                      MaterialSettlementMapper settlementMapper,
-                                     StocktakeMapper stocktakeMapper) {
+                                     SysUserRefMapper sysUserRefMapper) {
         this.documentMapper = documentMapper;
         this.lineMapper = lineMapper;
         this.balanceMapper = balanceMapper;
@@ -110,7 +112,7 @@ public class StockDocumentServiceImpl implements StockDocumentService {
         this.requestMapper = requestMapper;
         this.requestLineMapper = requestLineMapper;
         this.settlementMapper = settlementMapper;
-        this.stocktakeMapper = stocktakeMapper;
+        this.sysUserRefMapper = sysUserRefMapper;
     }
 
     @Override
@@ -158,7 +160,11 @@ public class StockDocumentServiceImpl implements StockDocumentService {
         }
         wrapper.orderByDesc(StockDocument::getOccurredAt).orderByDesc(StockDocument::getId);
         IPage<StockDocument> page = documentMapper.selectPage(PageUtils.toPage(query), wrapper);
-        List<StockDocumentVO> records = page.getRecords().stream().map(StockDocumentVO::from).toList();
+        List<StockDocument> documents = page.getRecords();
+        Map<Long, String> operatorNames = userNamesOf(documents);
+        List<StockDocumentVO> records = documents.stream()
+                .map(doc -> toDocumentVO(doc, operatorNames))
+                .toList();
         return PageResult.of(records, page.getTotal(), query.getPageNum(), query.getPageSize());
     }
 
@@ -202,7 +208,56 @@ public class StockDocumentServiceImpl implements StockDocumentService {
                     nameOf(locationMap, line.getFromLocationId()),
                     nameOf(locationMap, line.getToLocationId())));
         }
-        return StockDocumentDetailVO.from(document, lineVos, totalAmount.setScale(2, RoundingMode.HALF_UP));
+        Map<Long, String> operatorNames = document.getOperatorId() == null
+                ? Map.of() : userNamesOf(List.of(document));
+        StockDocumentDetailVO vo = StockDocumentDetailVO.from(document, lineVos,
+                totalAmount.setScale(2, RoundingMode.HALF_UP), operatorNames);
+        // 经办人字段排查日志：定位姓名缺失或 ID 不匹配问题
+        if (log.isDebugEnabled()) {
+            log.debug(
+                    "DocumentDetailVO fields: documentId={}, movementType={}, status={}, operatorId={}, "
+                            + "operatorName={}, operatorNamesMap={}",
+                    vo.id(), vo.movementType(), vo.status(), vo.operatorId(), vo.operatorName(), operatorNames);
+        }
+        return vo;
+    }
+
+    /**
+     * 批量解析单据经办人姓名：收集 operator_id 一次性查询，避免 N+1
+     */
+    private Map<Long, String> userNamesOf(List<StockDocument> documents) {
+        Set<Long> userIds = new HashSet<>();
+        for (StockDocument doc : documents) {
+            if (doc.getOperatorId() != null) {
+                userIds.add(doc.getOperatorId());
+            }
+        }
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, String> names = new HashMap<>();
+        for (SysUserRefMapper.UserRef ref : sysUserRefMapper.selectNamesByIds(List.copyOf(userIds))) {
+            if (ref.realName() != null) {
+                names.put(ref.userId(), ref.realName());
+            }
+        }
+        // 排查日志：打印待解析用户 ID 与已解析姓名映射，便于定位姓名缺失
+        if (log.isDebugEnabled()) {
+            log.debug("documentUserNamesOf: requestedUserIds={}, resolvedNames={}", userIds, names);
+        }
+        return names;
+    }
+
+    private StockDocumentVO toDocumentVO(StockDocument doc, Map<Long, String> operatorNames) {
+        StockDocumentVO vo = StockDocumentVO.from(doc, operatorNames);
+        // 经办人字段排查日志：定位姓名缺失或 ID 不匹配问题
+        if (log.isDebugEnabled()) {
+            log.debug(
+                    "DocumentVO fields: documentId={}, movementType={}, status={}, operatorId={}, "
+                            + "operatorName={}",
+                    vo.id(), vo.movementType(), vo.status(), vo.operatorId(), vo.operatorName());
+        }
+        return vo;
     }
 
     @Override
@@ -238,16 +293,13 @@ public class StockDocumentServiceImpl implements StockDocumentService {
         if (lines.isEmpty()) {
             throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "单据没有明细行，无法过账");
         }
-        // ---- 第二阶段追加：调拨/盘点调账/冲销走专用过账路径（双边锁/按行方向/相反流水）----
+        // ---- 第二阶段追加：调拨/冲销走专用过账路径（双边锁/相反流水）----
         switch (document.getMovementType()) {
             case TRANSFER -> { postTransfer(document, lines); return; }
-            case ADJUST -> { postAdjust(document, lines); return; }
             case REVERSAL -> { postReversal(document, lines); return; }
             default -> { }
         }
         MoveDirection direction = directionOf(document.getMovementType());
-        // ---- 第二阶段追加：盘点冻结检查（COUNTING/PENDING_REVIEW 期间禁止所有库存写入）----
-        checkNotFrozen(lines, direction);
         // ---- 第二阶段追加：归还行锁原出库行校验累计结算量；申领实发行锁申领行校验批准量 ----
         Map<Long, StockDocumentLine> issueLineMap = checkReturnQuota(lines);
         Map<Long, MaterialRequestLine> requestLineMap = checkIssueQuota(lines);
@@ -469,11 +521,11 @@ public class StockDocumentServiceImpl implements StockDocumentService {
     // 既有 create/page/get/approve/cancel/post 及单边过账循环保持原实现不动。
     // ====================================================================
 
-    /** 可冲销的原单业务类型（TRANSFER/ADJUST/REVERSAL/RETURN_IN 不开放冲销，见设计文档 7.1 差异） */
+    /** 可冲销的原单业务类型（TRANSFER/REVERSAL/RETURN_IN 不开放冲销，见设计文档 7.1 差异） */
     private static final Set<MovementType> REVERSABLE_TYPES = Set.of(
             MovementType.OPENING, MovementType.PURCHASE_IN, MovementType.ISSUE, MovementType.SCRAP);
 
-    /** 库位 + SKU 锁序键（调拨/调账/冲销按库位、SKU 排序锁定的最小单位） */
+    /** 库位 + SKU 锁序键（调拨/冲销按库位、SKU 排序锁定的最小单位） */
     private record LocSku(Long locationId, Long skuId) {
     }
 
@@ -704,7 +756,7 @@ public class StockDocumentServiceImpl implements StockDocumentService {
         if (!REVERSABLE_TYPES.contains(original.getMovementType())) {
             throw new BusinessException(ResultCode.BAD_REQUEST.getCode(),
                     "该业务类型不允许冲销：" + original.getMovementType()
-                            + "（调拨/盘点调账/冲销/归还不开放冲销，见设计文档 7.1）");
+                            + "（调拨/冲销/归还不开放冲销，见设计文档 7.1）");
         }
         if (original.getMaterialRequestId() != null) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(),
@@ -795,7 +847,6 @@ public class StockDocumentServiceImpl implements StockDocumentService {
      */
     private void postTransfer(StockDocument document, List<StockDocumentLine> lines) {
         Map<Long, MaterialSku> skuMap = loadSkuMap(lines);
-        Set<Long> locationIds = new HashSet<>();
         for (StockDocumentLine line : lines) {
             MaterialSku sku = requireSku(skuMap, line);
             validateQuantityScale(line.getQuantity(), sku);
@@ -805,11 +856,7 @@ public class StockDocumentServiceImpl implements StockDocumentService {
             if (line.getFromLocationId().equals(line.getToLocationId())) {
                 throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "调拨双边库位不能相同");
             }
-            locationIds.add(line.getFromLocationId());
-            locationIds.add(line.getToLocationId());
         }
-        // 双边库位均不得处于盘点冻结状态
-        checkLocationsNotFrozen(locationIds);
 
         SortedSet<LocSku> pairs = new TreeSet<>(
                 Comparator.comparing(LocSku::locationId).thenComparing(LocSku::skuId));
@@ -834,62 +881,6 @@ public class StockDocumentServiceImpl implements StockDocumentService {
             BigDecimal srcAvg = src.getMovingAveragePrice();
             applyOutLeg(document, line, line.getFromLocationId(), src, quantity);
             applyInLeg(document, line, line.getToLocationId(), dst, quantity, srcAvg);
-        }
-    }
-
-    /**
-     * 盘点调账过账：按行方向盘盈入库 / 盘亏出库（同一盘点单行同属一个库位）；
-     * ADJUST 单由盘点提交流程生成，豁免冻结检查；过账完成后关闭关联盘点单并解冻。
-     */
-    private void postAdjust(StockDocument document, List<StockDocumentLine> lines) {
-        for (StockDocumentLine line : lines) {
-            String direction = line.getAdjustDirection();
-            if (AdjustDirection.SURPLUS.name().equals(direction)) {
-                if (line.getToLocationId() == null) {
-                    throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "盘盈行缺少入库位");
-                }
-            } else if (AdjustDirection.LOSS.name().equals(direction)) {
-                if (line.getFromLocationId() == null) {
-                    throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "盘亏行缺少出库位");
-                }
-            } else {
-                throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "无效的盘点调账方向：" + direction);
-            }
-        }
-        Map<Long, MaterialSku> skuMap = loadSkuMap(lines);
-        List<StockDocumentLine> sorted = lines.stream()
-                .sorted(Comparator.comparing((StockDocumentLine line) -> adjustTargetLocationId(line))
-                        .thenComparing(StockDocumentLine::getSkuId))
-                .toList();
-        SortedSet<LocSku> pairs = new TreeSet<>(
-                Comparator.comparing(LocSku::locationId).thenComparing(LocSku::skuId));
-        for (StockDocumentLine line : sorted) {
-            pairs.add(new LocSku(adjustTargetLocationId(line), line.getSkuId()));
-        }
-        Map<LocSku, StockBalance> balanceMap = lockBalanceMap(pairs);
-
-        for (StockDocumentLine line : sorted) {
-            MaterialSku sku = requireSku(skuMap, line);
-            validateQuantityScale(line.getQuantity(), sku);
-            StockBalance balance = balanceMap.get(new LocSku(adjustTargetLocationId(line), line.getSkuId()));
-            if (AdjustDirection.SURPLUS.name().equals(line.getAdjustDirection())) {
-                // 盘盈入库：定稿无审批确认单价承载字段，以账面均价入账（设计文档 7.1 差异）
-                applyInLeg(document, line, line.getToLocationId(), balance, line.getQuantity(),
-                        balance.getMovingAveragePrice());
-            } else {
-                // 盘亏出库：按账面均价计损失，回填成本快照
-                BigDecimal beforeAvg = balance.getMovingAveragePrice();
-                applyOutLeg(document, line, line.getFromLocationId(), balance, line.getQuantity());
-                line.setUnitPriceSnapshot(beforeAvg);
-                line.setAmountSnapshot(line.getQuantity().multiply(beforeAvg).setScale(2, RoundingMode.HALF_UP));
-                lineMapper.updateById(line);
-            }
-        }
-        // 调账单过账完成：关闭关联盘点单（解冻库位）
-        Stocktake stocktake = stocktakeMapper.selectOne(new LambdaQueryWrapper<Stocktake>()
-                .eq(Stocktake::getAdjustDocumentId, document.getId()));
-        if (stocktake != null && stocktakeMapper.casComplete(stocktake.getId(), Instant.now()) == 0) {
-            throw new BusinessException(ResultCode.CONFLICT.getCode(), "盘点单状态异常，无法完成盘点");
         }
     }
 
@@ -922,7 +913,6 @@ public class StockDocumentServiceImpl implements StockDocumentService {
             case OPENING, PURCHASE_IN, RETURN_IN -> MoveDirection.OUT;
             default -> MoveDirection.IN;
         };
-        checkNotFrozen(lines, reversalDirection);
 
         List<StockDocumentLine> sorted = lines.stream()
                 .sorted(Comparator.comparing((StockDocumentLine line) -> targetLocationId(line, reversalDirection))
@@ -1021,31 +1011,6 @@ public class StockDocumentServiceImpl implements StockDocumentService {
                     throw new BusinessException(ResultCode.CONFLICT.getCode(), "申领单状态已变更，实发回写失败");
                 }
             }
-        }
-    }
-
-    /** 盘点冻结检查：目标库位存在 COUNTING/PENDING_REVIEW 盘点单时拒绝库存写入 */
-    private void checkNotFrozen(List<StockDocumentLine> lines, MoveDirection direction) {
-        Set<Long> locationIds = new HashSet<>();
-        for (StockDocumentLine line : lines) {
-            Long target = targetLocationId(line, direction);
-            if (target != null) {
-                locationIds.add(target);
-            }
-        }
-        checkLocationsNotFrozen(locationIds);
-    }
-
-    private void checkLocationsNotFrozen(Set<Long> locationIds) {
-        if (locationIds.isEmpty()) {
-            return;
-        }
-        Long freezing = stocktakeMapper.selectCount(new LambdaQueryWrapper<Stocktake>()
-                .in(Stocktake::getLocationId, locationIds)
-                .in(Stocktake::getStatus, StocktakeStatus.COUNTING, StocktakeStatus.PENDING_REVIEW));
-        if (freezing != null && freezing > 0) {
-            throw new BusinessException(ResultCode.CONFLICT.getCode(),
-                    "库位盘点冻结中，禁止库存出入库，请先完成盘点");
         }
     }
 
@@ -1183,11 +1148,5 @@ public class StockDocumentServiceImpl implements StockDocumentService {
             balances.put(pair, lockBalance(pair.locationId(), pair.skuId()));
         }
         return balances;
-    }
-
-    /** 调账行目标库位：盘盈看入库位，盘亏看出库位（方向已在调用前校验） */
-    private Long adjustTargetLocationId(StockDocumentLine line) {
-        return AdjustDirection.SURPLUS.name().equals(line.getAdjustDirection())
-                ? line.getToLocationId() : line.getFromLocationId();
     }
 }

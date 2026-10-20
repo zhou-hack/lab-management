@@ -11,7 +11,6 @@ import com.labmanage.module.item.entity.MaterialRequestLine;
 import com.labmanage.module.item.entity.MaterialSku;
 import com.labmanage.module.item.entity.StockBalance;
 import com.labmanage.module.item.entity.StockDocumentLine;
-import com.labmanage.module.item.entity.StocktakeLine;
 import com.labmanage.module.item.enums.MaterialType;
 import com.labmanage.module.item.mapper.MaterialCategoryMapper;
 import com.labmanage.module.item.mapper.MaterialQuotaMapper;
@@ -19,7 +18,6 @@ import com.labmanage.module.item.mapper.MaterialRequestLineMapper;
 import com.labmanage.module.item.mapper.MaterialSkuMapper;
 import com.labmanage.module.item.mapper.StockBalanceMapper;
 import com.labmanage.module.item.mapper.StockDocumentLineMapper;
-import com.labmanage.module.item.mapper.StocktakeLineMapper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -64,9 +62,6 @@ class MaterialSkuServiceImplTest {
     @Mock
     private MaterialQuotaMapper quotaMapper;
 
-    @Mock
-    private StocktakeLineMapper stocktakeLineMapper;
-
     @InjectMocks
     private MaterialSkuServiceImpl service;
 
@@ -81,7 +76,6 @@ class MaterialSkuServiceImplTest {
         TableInfoHelper.initTableInfo(assistant, StockDocumentLine.class);
         TableInfoHelper.initTableInfo(assistant, MaterialRequestLine.class);
         TableInfoHelper.initTableInfo(assistant, MaterialQuota.class);
-        TableInfoHelper.initTableInfo(assistant, StocktakeLine.class);
     }
 
     private MaterialSkuCreateDTO createDto(String categoryId, String skuCode) {
@@ -289,29 +283,12 @@ class MaterialSkuServiceImplTest {
     }
 
     @Test
-    void deleteRejectsStocktakeLineReference() {
-        when(skuMapper.selectById(1L)).thenReturn(existingSku(1L));
-        when(balanceMapper.selectCount(any())).thenReturn(0L);
-        when(documentLineMapper.selectCount(any())).thenReturn(0L);
-        when(requestLineMapper.selectCount(any())).thenReturn(0L);
-        when(quotaMapper.selectCount(any())).thenReturn(0L);
-        when(stocktakeLineMapper.selectCount(any())).thenReturn(1L);
-
-        BusinessException ex = assertThrows(BusinessException.class, () -> service.delete("1"));
-
-        assertEquals(40900, ex.getCode());
-        assertTrue(ex.getMessage().contains("盘点记录"));
-        verify(skuMapper, never()).deleteById(anyLong());
-    }
-
-    @Test
     void deleteSuccess() {
         when(skuMapper.selectById(1L)).thenReturn(existingSku(1L));
         when(balanceMapper.selectCount(any())).thenReturn(0L);
         when(documentLineMapper.selectCount(any())).thenReturn(0L);
         when(requestLineMapper.selectCount(any())).thenReturn(0L);
         when(quotaMapper.selectCount(any())).thenReturn(0L);
-        when(stocktakeLineMapper.selectCount(any())).thenReturn(0L);
 
         service.delete("1");
 

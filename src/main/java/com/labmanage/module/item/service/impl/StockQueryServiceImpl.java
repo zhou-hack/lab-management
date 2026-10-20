@@ -13,22 +13,29 @@ import com.labmanage.module.item.dto.StockMovementQuery;
 import com.labmanage.module.item.dto.StockWarningQuery;
 import com.labmanage.module.item.entity.MaterialSku;
 import com.labmanage.module.item.entity.StockBalance;
+import com.labmanage.module.item.entity.StockDocument;
 import com.labmanage.module.item.entity.StockDocumentLine;
 import com.labmanage.module.item.entity.StockLocation;
 import com.labmanage.module.item.entity.StockMovement;
 import com.labmanage.module.item.mapper.MaterialSkuMapper;
 import com.labmanage.module.item.mapper.StockBalanceMapper;
 import com.labmanage.module.item.mapper.StockDocumentLineMapper;
+import com.labmanage.module.item.mapper.StockDocumentMapper;
 import com.labmanage.module.item.mapper.StockLocationMapper;
 import com.labmanage.module.item.mapper.StockMovementMapper;
+import com.labmanage.module.item.mapper.SysUserRefMapper;
 import com.labmanage.module.item.service.StockQueryService;
 import com.labmanage.module.item.util.IdUtils;
 import com.labmanage.module.item.vo.StockBalanceVO;
 import com.labmanage.module.item.vo.StockMovementVO;
 import com.labmanage.module.item.vo.StockWarningVO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,22 +47,30 @@ import java.util.stream.Collectors;
 @Service
 public class StockQueryServiceImpl implements StockQueryService {
 
+    private static final Logger log = LoggerFactory.getLogger(StockQueryServiceImpl.class);
+
     private final StockBalanceMapper balanceMapper;
     private final StockMovementMapper movementMapper;
     private final MaterialSkuMapper skuMapper;
     private final StockLocationMapper locationMapper;
     private final StockDocumentLineMapper lineMapper;
+    private final StockDocumentMapper documentMapper;
+    private final SysUserRefMapper sysUserRefMapper;
 
     public StockQueryServiceImpl(StockBalanceMapper balanceMapper,
                                    StockMovementMapper movementMapper,
                                    MaterialSkuMapper skuMapper,
                                    StockLocationMapper locationMapper,
-                                   StockDocumentLineMapper lineMapper) {
+                                   StockDocumentLineMapper lineMapper,
+                                   StockDocumentMapper documentMapper,
+                                   SysUserRefMapper sysUserRefMapper) {
         this.balanceMapper = balanceMapper;
         this.movementMapper = movementMapper;
         this.skuMapper = skuMapper;
         this.locationMapper = locationMapper;
         this.lineMapper = lineMapper;
+        this.documentMapper = documentMapper;
+        this.sysUserRefMapper = sysUserRefMapper;
     }
 
     @Override
@@ -159,14 +174,69 @@ public class StockQueryServiceImpl implements StockQueryService {
         Map<Long, StockDocumentLine> lineMap = lineIds.isEmpty() ? Map.of()
                 : lineMapper.selectByIds(lineIds).stream()
                         .collect(Collectors.toMap(StockDocumentLine::getId, line -> line));
+        // 单据映射：取 operator_id（入库人/出库人，实际经办人）
+        Set<Long> documentIds = lineMap.values().stream()
+                .map(StockDocumentLine::getStockDocumentId).collect(Collectors.toSet());
+        Map<Long, StockDocument> documentMap = documentIds.isEmpty() ? Map.of()
+                : documentMapper.selectByIds(documentIds).stream()
+                        .collect(Collectors.toMap(StockDocument::getId, doc -> doc));
         Map<Long, MaterialSku> skuMap = skuMapOf(movements.stream().map(StockMovement::getSkuId).collect(Collectors.toSet()));
         Map<Long, StockLocation> locationMap = locationMapOf(
                 movements.stream().map(StockMovement::getLocationId).collect(Collectors.toSet()));
-        List<StockMovementVO> records = movements.stream()
-                .map(movement -> toMovementVO(movement, lineMap.get(movement.getDocumentLineId()),
-                        skuMap.get(movement.getSkuId()), locationMap.get(movement.getLocationId())))
-                .toList();
+        Map<Long, String> userNames = movementUserNamesOf(movements, lineMap, documentMap, locationMap);
+        List<StockMovementVO> records = new java.util.ArrayList<>();
+        for (StockMovement movement : movements) {
+            StockDocumentLine line = lineMap.get(movement.getDocumentLineId());
+            StockDocument doc = line == null ? null : documentMap.get(line.getStockDocumentId());
+            StockMovementVO vo = toMovementVO(movement, line, doc, skuMap.get(movement.getSkuId()),
+                    locationMap.get(movement.getLocationId()), userNames);
+            // 入库人/出库人/保管人 字段排查日志：定位姓名缺失或 ID 不匹配问题
+            if (log.isDebugEnabled()) {
+                log.debug(
+                        "MovementVO fields: movementId={}, direction={}, operatorId={}, operatorName={}, "
+                                + "custodianId={}, custodianName={}, docNull={}, lineNull={}, locationNull={}",
+                        vo.id(), vo.direction(), vo.operatorId(), vo.operatorName(),
+                        vo.custodianId(), vo.custodianName(),
+                        doc == null, line == null, locationMap.get(movement.getLocationId()) == null);
+            }
+            records.add(vo);
+        }
         return PageResult.of(records, page.getTotal(), query.getPageNum(), query.getPageSize());
+    }
+
+    /**
+     * 流水行涉及的用户姓名：单据经办人（入库人/出库人）+ 库位保管人，批量只读解析
+     */
+    private Map<Long, String> movementUserNamesOf(List<StockMovement> movements,
+                                                  Map<Long, StockDocumentLine> lineMap,
+                                                  Map<Long, StockDocument> documentMap,
+                                                  Map<Long, StockLocation> locationMap) {
+        Set<Long> userIds = new HashSet<>();
+        for (StockMovement movement : movements) {
+            StockDocumentLine line = lineMap.get(movement.getDocumentLineId());
+            StockDocument doc = line == null ? null : documentMap.get(line.getStockDocumentId());
+            if (doc != null && doc.getOperatorId() != null) {
+                userIds.add(doc.getOperatorId());
+            }
+            StockLocation location = locationMap.get(movement.getLocationId());
+            if (location != null && location.getCustodianId() != null) {
+                userIds.add(location.getCustodianId());
+            }
+        }
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, String> names = new HashMap<>();
+        for (SysUserRefMapper.UserRef ref : sysUserRefMapper.selectNamesByIds(List.copyOf(userIds))) {
+            if (ref.realName() != null) {
+                names.put(ref.userId(), ref.realName());
+            }
+        }
+        // 排查日志：打印待解析用户 ID 与已解析姓名映射，便于定位姓名缺失（如用户被删除/realName 为空）
+        if (log.isDebugEnabled()) {
+            log.debug("movementUserNamesOf: requestedUserIds={}, resolvedNames={}", userIds, names);
+        }
+        return names;
     }
 
     @Override
@@ -290,8 +360,10 @@ public class StockQueryServiceImpl implements StockQueryService {
         );
     }
 
-    private StockMovementVO toMovementVO(StockMovement movement, StockDocumentLine line,
-                                          MaterialSku sku, StockLocation location) {
+    private StockMovementVO toMovementVO(StockMovement movement, StockDocumentLine line, StockDocument doc,
+                                          MaterialSku sku, StockLocation location, Map<Long, String> userNames) {
+        Long operatorId = doc == null ? null : doc.getOperatorId();
+        Long custodianId = location == null ? null : location.getCustodianId();
         return new StockMovementVO(
                 String.valueOf(movement.getId()),
                 movement.getMovementKey(),
@@ -309,7 +381,11 @@ public class StockQueryServiceImpl implements StockQueryService {
                 movement.getValueDelta(),
                 movement.getBeforeAvgPrice(),
                 movement.getAfterAvgPrice(),
-                movement.getOccurredAt()
+                movement.getOccurredAt(),
+                operatorId == null ? null : String.valueOf(operatorId),
+                operatorId == null ? null : userNames.get(operatorId),
+                custodianId == null ? null : String.valueOf(custodianId),
+                custodianId == null ? null : userNames.get(custodianId)
         );
     }
 

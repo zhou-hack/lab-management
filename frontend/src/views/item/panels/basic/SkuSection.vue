@@ -8,24 +8,11 @@
         placeholder="SKU 码 / 名称 / 规格"
         @change="pager.search"
       />
-      <el-select
+      <CategorySelect
         v-model="categoryId"
-        clearable
-        filterable
-        placeholder="全部分类"
+        all-option
         @change="pager.search"
-      >
-        <el-option
-          label="全部分类"
-          value=""
-        />
-        <el-option
-          v-for="c in categories"
-          :key="c.id"
-          :label="c.categoryName"
-          :value="c.id"
-        />
-      </el-select>
+      />
       <el-select
         v-model="materialType"
         clearable
@@ -234,19 +221,11 @@
           label="所属分类"
           required
         >
-          <el-select
+          <CategorySelect
             v-model="form.categoryId"
-            filterable
             class="w240"
-            placeholder="选择分类"
-          >
-            <el-option
-              v-for="c in categories"
-              :key="c.id"
-              :label="`${c.categoryCode} · ${c.categoryName}`"
-              :value="c.id"
-            />
-          </el-select>
+            placeholder="搜索分类"
+          />
         </el-form-item>
         <el-form-item
           label="SKU 码"
@@ -328,7 +307,7 @@
         </el-form-item>
       </el-form>
       <div class="muted small">
-        SKU 码全局唯一；被余额 / 单据 / 申领 / 定额 / 盘点引用时禁止删除。
+        SKU 码全局唯一；被余额 / 单据 / 申领 / 定额引用时禁止删除。
       </div>
       <template #footer>
         <el-button @click="dialogVisible = false">
@@ -367,7 +346,6 @@ import {
   downloadSkuImportTemplate,
   exportSkus,
   importSkus,
-  listEnabledCategories,
   pageSkus,
   updateMaterialSku,
   updateSkuStatus
@@ -379,6 +357,7 @@ import { saveBlobFile } from '@/utils/download'
 import PagerBar from '@/components/PagerBar.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import ImportDialog from '@/components/ImportDialog.vue'
+import CategorySelect from '@/components/CategorySelect.vue'
 
 const keyword = ref('')
 const categoryId = ref(null)
@@ -396,16 +375,6 @@ const pager = usePagedList((params) =>
     enabled: enabled.value || undefined
   })
 )
-
-const categories = ref([])
-
-async function loadCategories() {
-  try {
-    categories.value = await listEnabledCategories()
-  } catch {
-    // 失败已由全局拦截器提示
-  }
-}
 
 const dialogVisible = ref(false)
 const submitting = ref(false)
@@ -550,7 +519,6 @@ async function doExport(format) {
 }
 
 onMounted(() => {
-  loadCategories()
   pager.load()
 })
 
