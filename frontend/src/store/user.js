@@ -81,7 +81,9 @@ export const useUserStore = defineStore('user', {
   }),
   getters: {
     isAdmin: (state) => state.roles.includes('ADMIN'),
-    homePath: (state) => (state.roles.includes('ADMIN') ? '/admin/home' : '/home')
+    // 管理员/老师进物料工作台；学生无物料权限（产品定稿），进管理端首页
+    homePath: (state) =>
+      state.roles.includes('ADMIN') || state.roles.includes('TEACHER') ? '/admin/item/workspace' : '/admin/home'
   },
   actions: {
     /**
@@ -97,6 +99,15 @@ export const useUserStore = defineStore('user', {
       setToken(data.token)
     },
     async fetchUserMenus() {
+      // 骨架环境模拟会话恢复：test_token 无后端可拉取，按保存的角色重建（刷新免重登）
+      if (this.token === 'test_token') {
+        const role = sessionStorage.getItem('mock_role')
+        if (role && TEST_PROFILES[role]) {
+          this.loginAsTest(role)
+          return
+        }
+        throw new Error('mock session expired')
+      }
       const data = await getUserMenus()
       this.userInfo = data.userInfo || null
       this.roles = data.roles || []
@@ -113,11 +124,13 @@ export const useUserStore = defineStore('user', {
       removeDynamicRoutes()
       this.token = 'test_token'
       setToken('test_token')
+      // 模拟角色持久化：刷新后由 fetchUserMenus 重建会话
+      sessionStorage.setItem('mock_role', role)
       this.userInfo = profile.userInfo
       this.roles = profile.roles
       this.perms = profile.perms
-      this.menus = profile.menus
-      registerDynamicRoutes(this.menus)
+      // 侧边栏已由静态布局承载（仅物料模块），不再注册动态路由
+      this.menus = []
       this.routesLoaded = true
     },
     async buildRoutes() {
@@ -138,6 +151,7 @@ export const useUserStore = defineStore('user', {
     resetState() {
       removeDynamicRoutes()
       removeToken()
+      sessionStorage.removeItem('mock_role')
       this.token = ''
       this.userInfo = null
       this.roles = []

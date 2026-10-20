@@ -5,27 +5,27 @@
         欢迎使用
       </h2>
       <p class="t-sub">
-        实验室设备管理系统 · 前台视图（学生 / 老师）
+        实验室设备管理系统 · {{ roleLabel }}
       </p>
-      <div class="front_home__debug">
-        <p class="t-body">
-          当前用户：{{ store.userInfo?.realName || '（后端接入后显示）' }}
-        </p>
-        <p class="t-body">
-          角色：{{ store.roles.join('、') || '—' }}
-        </p>
-        <p class="t-body">
-          权限标识数：{{ store.perms.length }}
-        </p>
-      </div>
+      <p
+        v-if="!hasEntry"
+        class="t-hint front_home__hint"
+      >
+        当前暂无可用功能入口；物料代领需老师授权后才会显示。
+      </p>
     </div>
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useUserStore } from '@/store/user'
 
 const store = useUserStore()
+
+const roleLabel = computed(() => (store.roles.includes('STUDENT') ? '学生端' : '前台视图'))
+// 骨架环境：本分支仅物料模块；学生无物料管理权限（产品定稿），首页仅作落地页
+const hasEntry = computed(() => store.roles.includes('ADMIN') || store.roles.includes('TEACHER'))
 </script>
 
 <style scoped>
@@ -33,13 +33,9 @@ const store = useUserStore()
   padding: 14px;
 }
 
-.front_home__debug {
+.front_home__hint {
   margin-top: 14px;
   padding-top: 12px;
   border-top: .5px solid var(--hair);
-}
-
-.front_home__debug p {
-  margin: 4px 0;
 }
 </style>

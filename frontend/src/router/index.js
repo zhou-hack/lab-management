@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { getToken } from '@/utils/token'
 import { useUserStore } from '@/store/user'
+import AdminLayout from '@/layout/admin/AdminLayout.vue'
 
 const staticRoutes = [
   {
@@ -10,17 +11,46 @@ const staticRoutes = [
     meta: { title: '登录' }
   },
   {
+    // 根路径占位记录：必须有匹配记录才能进入守卫，守卫按角色分流到
+    // '/admin/item/workspace' 或 '/admin/home'（该组件实际不会被渲染）
+    path: '/',
+    component: () => import('@/views/front/home/FrontHome.vue')
+  },
+  {
+    // 管理端布局（全部角色共用，与发布版一致）：本分支仅物料模块，
+    // 管理员/老师侧边栏见物料管理，学生仅见首页
+    path: '/admin',
+    component: AdminLayout,
+    redirect: '/admin/item/workspace',
+    children: [
+      {
+        path: 'item/workspace',
+        name: 'AdminItemWorkspace',
+        component: () => import('@/views/item/ItemWorkspace.vue'),
+        meta: { title: '物料工作台' }
+      },
+      {
+        path: 'home',
+        name: 'AdminHome',
+        component: () => import('@/views/front/home/FrontHome.vue'),
+        meta: { title: '首页' }
+      }
+    ]
+  },
+  {
+    // 旧地址兼容：物料骨架页与前台首页统一改由管理端布局承载
+    path: '/item',
+    redirect: '/admin/item/workspace'
+  },
+  {
+    path: '/home',
+    redirect: '/admin/home'
+  },
+  {
     path: '/404',
     name: 'NotFound',
     component: () => import('@/views/error/NotFound.vue'),
     meta: { title: '页面不存在' }
-  },
-  {
-    // 物料模块联调骨架页（第二阶段）；登录模块接入后由动态菜单替代
-    path: '/item',
-    name: 'ItemWorkspace',
-    component: () => import('@/views/item/ItemWorkspace.vue'),
-    meta: { title: '物料管理', public: true }
   },
   { path: '/:pathMatch(.*)*', redirect: '/404' }
 ]
@@ -33,11 +63,6 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  // 物料骨架页等本地联调页面：meta.public 跳过登录与菜单加载（临时）
-  if (to.meta && to.meta.public) {
-    return true
-  }
-
   const token = getToken()
 
   if (!token) {
@@ -59,7 +84,7 @@ router.beforeEach(async (to) => {
     }
   }
 
-  // 根路径按角色分流（前台视图挂根路径，无前缀）
+  // 根路径按角色分流（管理员/老师进物料工作台，学生进前台首页）
   if (to.path === '/') {
     return store.homePath
   }

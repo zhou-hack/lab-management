@@ -26,14 +26,28 @@
       >
         仅 equipment:edit 可见（示例）
       </el-button>
+      <!-- 物料工作台入口：骨架阶段 /item 为公共静态路由 -->
+      <el-button
+        type="primary"
+        style="margin-top: 12px"
+        @click="goItem"
+      >
+        进入物料管理
+      </el-button>
     </div>
   </div>
 </template>
 
 <script setup>
+import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 
 const store = useUserStore()
+const router = useRouter()
+
+function goItem() {
+  router.push('/item')
+}
 </script>
 
 <style scoped>
