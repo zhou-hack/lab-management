@@ -1,13 +1,23 @@
-const TOKEN_KEY = 'lab_token'
+const ACCESS_KEY = 'lab_access_token'
+const REFRESH_KEY = 'lab_refresh_token'
 
 export function getToken() {
-  return sessionStorage.getItem(TOKEN_KEY)
+  return sessionStorage.getItem(ACCESS_KEY)
 }
 
 export function setToken(token) {
-  sessionStorage.setItem(TOKEN_KEY, token)
+  sessionStorage.setItem(ACCESS_KEY, token)
+}
+
+export function getRefreshToken() {
+  return sessionStorage.getItem(REFRESH_KEY)
+}
+
+export function setRefreshToken(token) {
+  sessionStorage.setItem(REFRESH_KEY, token)
 }
 
 export function removeToken() {
-  sessionStorage.removeItem(TOKEN_KEY)
+  sessionStorage.removeItem(ACCESS_KEY)
+  sessionStorage.removeItem(REFRESH_KEY)
 }

@@ -14,12 +14,6 @@ const routes = [
     meta: { title: '登录' }
   },
   {
-    path: '/set_password',
-    name: 'SetPassword',
-    component: () => import('@/views/login/SetPasswordView.vue'),
-    meta: { title: '设置密码' }
-  },
-  {
     path: '/',
     name: 'Home',
     component: () => import('@/views/common/PlaceholderView.vue'),
@@ -63,10 +57,6 @@ router.beforeEach(async (to) => {
       // 拉取失败（含 401 已清理场景）：重置状态回登录页
       store.resetState()
       return { path: '/login', query: { redirect: to.fullPath } }
-    }
-    // 强制改密期间直接进入设置密码页
-    if (store.mustSetPassword && to.path !== '/set_password') {
-      return { path: '/set_password' }
     }
   }
 

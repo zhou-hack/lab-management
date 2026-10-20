@@ -13,19 +13,6 @@
         学生 / 老师 / 管理员 统一入口
       </p>
 
-      <!-- 分段控件：账号密码 / 手机验证码 -->
-      <div class="login_seg">
-        <button
-          v-for="tab in tabs"
-          :key="tab.value"
-          class="login_seg__item"
-          :class="{ 'login_seg__item--on': mode === tab.value }"
-          @click="mode = tab.value"
-        >
-          {{ tab.label }}
-        </button>
-      </div>
-
       <el-form
         ref="formRef"
         :model="form"
@@ -33,77 +20,37 @@
         label-position="top"
         @submit.prevent
       >
-        <template v-if="mode === 'password'">
-          <el-form-item
-            label="账号"
-            prop="accountName"
+        <el-form-item
+          label="账号"
+          prop="accountName"
+        >
+          <el-input
+            v-model="form.accountName"
+            placeholder="请输入账号 / 学工号"
+            size="large"
           >
-            <el-input
-              v-model="form.accountName"
-              placeholder="请输入账号 / 学工号"
-              size="large"
-            >
-              <template #prefix>
-                <el-icon><User /></el-icon>
-              </template>
-            </el-input>
-          </el-form-item>
-          <el-form-item
-            label="密码"
-            prop="password"
+            <template #prefix>
+              <el-icon><User /></el-icon>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item
+          label="密码"
+          prop="password"
+        >
+          <el-input
+            v-model="form.password"
+            type="password"
+            placeholder="请输入密码"
+            size="large"
+            show-password
+            @keyup.enter="submit"
           >
-            <el-input
-              v-model="form.password"
-              type="password"
-              placeholder="请输入密码"
-              size="large"
-              show-password
-              @keyup.enter="submit"
-            >
-              <template #prefix>
-                <el-icon><Lock /></el-icon>
-              </template>
-            </el-input>
-          </el-form-item>
-        </template>
-        <template v-else>
-          <el-form-item
-            label="手机号"
-            prop="phone"
-          >
-            <el-input
-              v-model="form.phone"
-              placeholder="11 位手机号"
-              size="large"
-              maxlength="11"
-            >
-              <template #prefix>
-                <el-icon><Iphone /></el-icon>
-              </template>
-            </el-input>
-          </el-form-item>
-          <el-form-item
-            label="验证码"
-            prop="code"
-          >
-            <div class="login_code_row">
-              <el-input
-                v-model="form.code"
-                placeholder="6 位验证码"
-                size="large"
-                maxlength="6"
-              />
-              <el-button
-                class="login_code_btn"
-                size="large"
-                :disabled="countdown > 0"
-                @click="sendCode"
-              >
-                {{ countdown > 0 ? `${countdown}s 后重发` : '获取验证码' }}
-              </el-button>
-            </div>
-          </el-form-item>
-        </template>
+            <template #prefix>
+              <el-icon><Lock /></el-icon>
+            </template>
+          </el-input>
+        </el-form-item>
 
         <el-button
           class="login_submit"
@@ -115,110 +62,27 @@
           登 录
         </el-button>
       </el-form>
-
-      <!-- 开发环境：测试账号一键登录（生产构建不含此区块） -->
-      <div
-        v-if="isDev"
-        class="login_quick"
-      >
-        <span class="login_quick__label">测试账号</span>
-        <button
-          type="button"
-          class="login_quick__chip"
-          :disabled="loading"
-          @click="quickLoginAdmin"
-        >
-          管理员 admin
-        </button>
-        <button
-          type="button"
-          class="login_quick__chip"
-          :disabled="loading"
-          @click="quickLoginPhone('13800000001')"
-        >
-          王老师（老师）
-        </button>
-        <button
-          type="button"
-          class="login_quick__chip"
-          :disabled="loading"
-          @click="quickLoginPhone('13800000002')"
-        >
-          张同学（学生）
-        </button>
-      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { onBeforeUnmount, reactive, ref } from 'vue'
+import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Iphone, Lock, Tools, User } from '@element-plus/icons-vue'
+import { Lock, Tools, User } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
-import { sendSmsCode } from '@/api/user'
 
 const route = useRoute()
 const router = useRouter()
 const store = useUserStore()
 
-const tabs = [
-  { label: '账号密码', value: 'password' },
-  { label: '手机验证码', value: 'phone' }
-]
-
-const mode = ref('password')
 const loading = ref(false)
 const formRef = ref()
-const form = reactive({ accountName: '', password: '', phone: '', code: '' })
-
-/** 开发环境标识：测试账号一键登录区块仅在 dev 构建出现 */
-const isDev = import.meta.env.DEV
+const form = reactive({ accountName: '', password: '' })
 
 const rules = {
   accountName: [{ required: true, message: '请输入账号', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
-  phone: [
-    { required: true, message: '请输入手机号', trigger: 'blur' },
-    { pattern: /^1\d{10}$/, message: '手机号格式不正确', trigger: 'blur' }
-  ],
-  code: [
-    { required: true, message: '请输入验证码', trigger: 'blur' },
-    { pattern: /^\d{6}$/, message: '验证码为 6 位数字', trigger: 'blur' }
-  ]
-}
-
-// 60s 重发倒计时
-const countdown = ref(0)
-let timer = null
-
-async function sendCode() {
-  if (!/^1\d{10}$/.test(form.phone)) {
-    ElMessage.warning('请先输入正确的手机号')
-    return
-  }
-  try {
-    const res = await sendSmsCode(form.phone)
-    // dev 环境模拟通道：验证码直接回显自动回填；其他环境 devCode 为空
-    if (res && res.devCode) {
-      form.code = res.devCode
-      ElMessage.success('模拟通道：验证码已自动回填')
-    } else {
-      ElMessage.success('验证码已发送')
-    }
-    countdown.value = (res && res.ttlSeconds) || 60
-  } catch {
-    // 接口错误提示由请求拦截器统一处理；失败时不启动倒计时，允许立即重试
-    return
-  }
-  timer = setInterval(() => {
-    countdown.value -= 1
-    if (countdown.value <= 0) {
-      clearInterval(timer)
-      timer = null
-    }
-  }, 1000)
+  password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 }
 
 async function submit() {
@@ -230,38 +94,12 @@ async function submit() {
   }
   loading.value = true
   try {
-    await store.login({ mode: mode.value, ...form })
-    // 强制改密（管理员密码到期 / 老师首登）优先于目标路由
-    if (store.mustSetPassword) {
-      router.push('/set_password')
-      return
-    }
+    await store.login({ accountName: form.accountName, password: form.password })
     router.push(route.query.redirect || '/')
+  } catch {
+    // 登录失败提示由请求拦截器统一处理
   } finally {
     loading.value = false
-  }
-}
-
-onBeforeUnmount(() => {
-  if (timer) clearInterval(timer)
-})
-
-/** 一键登录（仅 dev）：管理员账密填充后直接提交 */
-async function quickLoginAdmin() {
-  mode.value = 'password'
-  form.accountName = 'admin'
-  form.password = 'Admin123'
-  await submit()
-}
-
-/** 一键登录（仅 dev）：填充手机号 → 模拟通道自动回填验证码 → 提交 */
-async function quickLoginPhone(phone) {
-  mode.value = 'phone'
-  form.phone = phone
-  form.code = ''
-  await sendCode()
-  if (form.code) {
-    await submit()
   }
 }
 </script>
@@ -333,46 +171,6 @@ async function quickLoginPhone(phone) {
   color: var(--brand);
 }
 
-/* 分段控件（规范 7.6）：sunken 槽 + 选中项白底浮起 + 蓝字，全圆角 */
-.login_seg {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  margin-bottom: 20px;
-  background: var(--surface-sunken);
-  border-radius: var(--r-full);
-}
-
-.login_seg__item {
-  flex: 1;
-  height: 34px;
-  border: none;
-  border-radius: var(--r-full);
-  background: transparent;
-  font-size: 13px;
-  font-weight: var(--fw-medium);
-  color: var(--g3);
-  cursor: pointer;
-  transition: all var(--dur-fast) var(--ease);
-}
-
-.login_seg__item--on {
-  background: var(--surface);
-  color: var(--brand);
-  box-shadow: 0 2px 8px -2px rgba(15, 30, 60, .12);
-}
-
-.login_code_row {
-  display: flex;
-  gap: 10px;
-  width: 100%;
-}
-
-.login_code_btn {
-  flex-shrink: 0;
-  border-radius: var(--r-full);
-}
-
 .login_submit {
   width: 100%;
   height: 46px;
@@ -384,47 +182,5 @@ async function quickLoginPhone(phone) {
 
 .login_submit:active {
   transform: scale(.985);
-}
-
-/* 测试账号一键登录（仅 dev）：细线分隔 + 全圆角小胶囊 */
-.login_quick {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: .5px solid var(--hair);
-}
-
-.login_quick__label {
-  font-size: 12px;
-  color: var(--g3);
-}
-
-.login_quick__chip {
-  height: 28px;
-  padding: 0 12px;
-  border: .5px solid var(--hair-brand);
-  border-radius: var(--r-full);
-  background: var(--brand-a04);
-  color: var(--brand);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all var(--dur-fast) var(--ease);
-}
-
-.login_quick__chip:hover:not(:disabled) {
-  background: var(--brand-a08);
-  transform: translateY(-1px);
-}
-
-.login_quick__chip:active:not(:disabled) {
-  transform: scale(.97);
-}
-
-.login_quick__chip:disabled {
-  opacity: .5;
-  cursor: not-allowed;
 }
 </style>
