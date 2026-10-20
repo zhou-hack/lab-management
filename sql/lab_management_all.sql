@@ -719,7 +719,7 @@ ALTER TABLE stock_document
         FOREIGN KEY (grant_id) REFERENCES assistant_grant (id);
 
 -- ----------------------------------------------------------------------------
--- 4.6 stock_document_line 库存单据行表（qty > 0；出入方向由 movement_type 校验）
+-- 4.6 stock_document_line 库存单据行表（quantity > 0；出入方向由 movement_type 校验）
 -- ----------------------------------------------------------------------------
 CREATE TABLE stock_document_line (
     id                    BIGINT        NOT NULL                COMMENT '主键（雪花 ID）',
@@ -728,7 +728,7 @@ CREATE TABLE stock_document_line (
     sku_id                BIGINT        NOT NULL                COMMENT '物料（→ material_sku.id）',
     from_location_id      BIGINT        NULL                    COMMENT '出库位（→ stock_location.id；ISSUE/调拨必填）',
     to_location_id        BIGINT        NULL                    COMMENT '入库位（→ stock_location.id；OPENING/PURCHASE_IN/RETURN_IN 必填）',
-    qty                   DECIMAL(18,3) NOT NULL                COMMENT '数量（> 0，精度不超过 SKU.quantity_scale）',
+    quantity              DECIMAL(18,3) NOT NULL                COMMENT '数量（> 0，精度不超过 SKU.quantity_scale）',
     unit_price_snapshot   DECIMAL(18,4) NULL                    COMMENT '单价快照（入库登记价格 / 过账时成本）',
     amount_snapshot       DECIMAL(18,2) NULL                    COMMENT '金额快照（数量 × 单价，两位小数）',
     request_line_id       BIGINT        NULL                    COMMENT '绑定申领行（→ material_request_line.id，本阶段直发领用为 NULL）',
@@ -747,7 +747,7 @@ CREATE TABLE stock_document_line (
     CONSTRAINT fk_item_stock_doc_line_from FOREIGN KEY (from_location_id) REFERENCES stock_location (id),
     CONSTRAINT fk_item_stock_doc_line_to FOREIGN KEY (to_location_id) REFERENCES stock_location (id),
     CONSTRAINT fk_item_stock_doc_line_issue FOREIGN KEY (original_issue_line_id) REFERENCES stock_document_line (id),
-    CONSTRAINT chk_item_stock_doc_line_qty CHECK (qty > 0),
+    CONSTRAINT chk_item_stock_doc_line_quantity CHECK (quantity > 0),
     CONSTRAINT chk_item_stock_doc_line_deleted CHECK (deleted IN (0, 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='库存单据行表';
 
@@ -1029,7 +1029,7 @@ CREATE TABLE material_settlement (
     sku_id          BIGINT        NULL                    COMMENT '核销物料（→ material_sku.id；直填核销必填）',
     location_id     BIGINT        NULL                    COMMENT '核销库位（→ stock_location.id；直填核销必填）',
     settlement_type VARCHAR(32)   NOT NULL                COMMENT '结算类型：RETURNED 归还 / CONSUMED 耗用 / LOST 丢失 / DAMAGED 损坏',
-    qty             DECIMAL(18,3) NOT NULL                COMMENT '本次结算量（> 0）',
+    quantity        DECIMAL(18,3) NOT NULL                COMMENT '本次结算量（> 0）',
     operator_id     BIGINT        NULL                    COMMENT '经办人（→ sys_user.id；登录模块接入后由会话写入）',
     settled_at      DATETIME(3)   NOT NULL                COMMENT '结算时间（UTC）',
     return_line_id  BIGINT        NULL                    COMMENT '对应归还行（→ stock_document_line.id，同归还行唯一）',
@@ -1049,7 +1049,7 @@ CREATE TABLE material_settlement (
     CONSTRAINT fk_item_settlement_return FOREIGN KEY (return_line_id) REFERENCES stock_document_line (id),
     CONSTRAINT fk_item_settlement_sku FOREIGN KEY (sku_id) REFERENCES material_sku (id),
     CONSTRAINT fk_item_settlement_location FOREIGN KEY (location_id) REFERENCES stock_location (id),
-    CONSTRAINT chk_item_settlement_qty CHECK (qty > 0),
+    CONSTRAINT chk_item_settlement_quantity CHECK (quantity > 0),
     CONSTRAINT chk_item_settlement_type CHECK (settlement_type IN ('RETURNED', 'CONSUMED', 'LOST', 'DAMAGED')),
     CONSTRAINT chk_item_settlement_deleted CHECK (deleted IN (0, 1)),
     CONSTRAINT chk_item_settlement_source CHECK (

@@ -234,7 +234,7 @@ VALUES
 
 -- 9. 单据行（入库位=总库房；期初无价格，本地保留的单价/金额快照列为可空，缺价即 NULL）
 INSERT INTO stock_document_line (id, stock_document_id, line_no, sku_id,
-                                 from_location_id, to_location_id, qty,
+                                 from_location_id, to_location_id, quantity,
                                  create_user_id, update_user_id)
 VALUES
 (1, 1, 1, 4, NULL, 1, 3, 1, 1),
