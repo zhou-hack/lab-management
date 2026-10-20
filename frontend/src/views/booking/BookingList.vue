@@ -528,7 +528,7 @@ function onPeriodClick(card) {
     selectedRange.value = [card.periodNo, card.periodNo]
     return
   }
-  const [start, end] = selectedRange.value
+  const [start] = selectedRange.value
   const min = Math.min(start, card.periodNo)
   const max = Math.max(start, card.periodNo)
   // 成段选择要求区间内全部空闲

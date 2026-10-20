@@ -38,7 +38,7 @@
 <script setup>
 import { formatInstant } from '@/utils/datetime'
 
-const props = defineProps({
+defineProps({
   /** document_event 时间线：BookingTimelineEventVO[] */
   events: { type: Array, default: () => [] }
 })
