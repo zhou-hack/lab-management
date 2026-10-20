@@ -32,8 +32,9 @@
 | `booking_deploy.sql` | **预约模块首发部署**。适用：已有 RBAC + `lab` 表、还没有预约模块的库。建 `lab_booking`/`lab_slot` 两张表 + 预约授权种子；末尾自动回收曾误授给学生的预约权限 |
 | `booking_flow_deploy.sql` | **预约权级流程增量**（2026-10-17 定稿）。适用：已有预约模块的旧库。补建 `biz_document/approval_task/document_event` 三张流程表（审批流：教师发起 → 管理员核对/驳回 → 签到清点，超时自动取消）；新增学生只读权限 3005 `booking:lab:view` + 学生只读菜单 3004。**注意：其 3005/3004 内容已吸收进基线 `lab_management_all.sql` 6.3-6.5 节，新建库无需执行** |
 | `booking_student_revoke.sql` | **学生预约权限回收**。适用：执行过"师生均授预约权限"旧版种子的库。删除学生的预约权限(3001/3002/3003)与菜单 3003 绑定；只回收授权，不删学生历史预约数据 |
+| `booking_period_series.sql` | **节次时间轴 + 批量周期预约**（2026-10-20，来自 dev/space）。适用：2026-10-19 前建成的库。建 `class_period`（含 8 条节次种子）与 `lab_booking_series`，`lab_booking` 追加日期/节次/series_id/课程/班级/上课老师 7 列（均可空，旧行不受影响）。**注意：全新建库无需执行，基线模块六已含全部内容** |
 
-旧库升级顺序：`booking_deploy.sql` → `booking_flow_deploy.sql` →（如曾授予学生权限）`booking_student_revoke.sql`。
+旧库升级顺序：`booking_deploy.sql` → `booking_flow_deploy.sql` →（如曾授予学生权限）`booking_student_revoke.sql` → `booking_period_series.sql`。
 
 ## 三、常见问题
 
