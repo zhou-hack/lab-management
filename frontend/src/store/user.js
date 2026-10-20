@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import { loginByPassword, loginByPhone, logout as apiLogout, getProfile } from '@/api/user'
 import { getToken, setToken, removeToken } from '@/utils/token'
-import { registerDynamicRoutes, removeDynamicRoutes } from '@/router/dynamic'
 
 export const useUserStore = defineStore('user', {
   state: () => ({
@@ -9,16 +8,12 @@ export const useUserStore = defineStore('user', {
     user: null, // { userId, realName, userType }
     roles: [],
     permissions: [],
-    menus: [],
-    routesLoaded: false,
     needSetPassword: false,
     passwordChangeRequired: false
   }),
   getters: {
     /** 任一强制改密标志命中即拦截到设置密码页 */
-    mustSetPassword: (state) => state.needSetPassword || state.passwordChangeRequired,
-    /** 全部账号统一直落到管理端首页（同一布局与设计风格） */
-    homePath: () => '/admin/home'
+    mustSetPassword: (state) => state.needSetPassword || state.passwordChangeRequired
   },
   actions: {
     /**
@@ -40,13 +35,8 @@ export const useUserStore = defineStore('user', {
       this.user = { userId: data.userId, realName: data.realName, userType: data.userType }
       this.roles = data.roles || []
       this.permissions = data.permissions || []
-      this.menus = data.menus || []
       this.needSetPassword = !!data.needSetPassword
       this.passwordChangeRequired = !!data.passwordChangeRequired
-    },
-    async buildRoutes() {
-      registerDynamicRoutes(this.menus)
-      this.routesLoaded = true
     },
     /** 设置密码成功后清除强制改密标志 */
     clearPasswordFlags() {
@@ -65,14 +55,11 @@ export const useUserStore = defineStore('user', {
       this.resetState()
     },
     resetState() {
-      removeDynamicRoutes()
       removeToken()
       this.token = ''
       this.user = null
       this.roles = []
       this.permissions = []
-      this.menus = []
-      this.routesLoaded = false
       this.needSetPassword = false
       this.passwordChangeRequired = false
     }
