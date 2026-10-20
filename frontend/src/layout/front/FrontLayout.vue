@@ -14,7 +14,16 @@
         class="front_nav__back front_nav__back--placeholder"
       />
       <b class="front_nav__title">{{ title }}</b>
-      <span class="front_nav__back front_nav__back--placeholder" />
+      <button
+        class="front_nav__back"
+        aria-label="退出登录"
+        title="退出登录"
+        @click="onLogout"
+      >
+        <el-icon :size="17">
+          <SwitchButton />
+        </el-icon>
+      </button>
     </header>
     <main class="front_layout__body">
       <router-view />
@@ -25,9 +34,13 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessageBox } from 'element-plus'
+import { SwitchButton } from '@element-plus/icons-vue'
+import { useUserStore } from '@/store/user'
 
 const route = useRoute()
 const router = useRouter()
+const store = useUserStore()
 
 const title = computed(() => route.meta.title || '实验室设备管理系统')
 // 首页不显示返回；history.state.back 为空说明是直接打开/刷新进入，无可回退栈
@@ -35,6 +48,16 @@ const showBack = computed(() => route.path !== '/home' && !!router.options.histo
 
 function goBack() {
   router.back()
+}
+
+async function onLogout() {
+  try {
+    await ElMessageBox.confirm('确定退出登录吗？', '提示', { type: 'warning' })
+  } catch {
+    return
+  }
+  await store.logout()
+  router.push('/login')
 }
 </script>
 
