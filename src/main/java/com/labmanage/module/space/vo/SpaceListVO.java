@@ -17,6 +17,7 @@ public record SpaceListVO(
         String labTypeName,
         String locationDetail,
         Integer capacity,
+        String facilities,
         SpaceStatus status,
         String statusName,
         String openStart,

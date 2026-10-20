@@ -669,6 +669,7 @@ public class SpaceServiceImpl implements SpaceService {
                 s.getLabType() == null ? null : s.getLabType().getDisplayName(),
                 s.getLocationDetail(),
                 s.getCapacity(),
+                s.getFacilities(),
                 s.getStatus(),
                 s.getStatus() == null ? null : s.getStatus().getDisplayName(),
                 formatTime(s.getOpenStart()),
