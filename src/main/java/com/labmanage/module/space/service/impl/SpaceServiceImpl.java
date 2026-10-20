@@ -135,7 +135,7 @@ public class SpaceServiceImpl implements SpaceService {
     }
 
     @Override
-    public List<SpaceOptionVO> options(SpaceType labType, Integer minCapacity, Boolean availableOnly) {
+    public List<SpaceOptionVO> options(SpaceType labType, Integer minCapacity, Boolean availableOnly, String keyword) {
         LambdaQueryWrapper<BizSpace> wrapper = new LambdaQueryWrapper<>();
         if (labType != null) {
             wrapper.eq(BizSpace::getLabType, labType);
@@ -146,6 +146,10 @@ public class SpaceServiceImpl implements SpaceService {
         if (Boolean.TRUE.equals(availableOnly)) {
             wrapper.eq(BizSpace::getStatus, SpaceStatus.AVAILABLE);
         }
+        // Typeahead 关键字模糊查询（联想下拉）
+        if (keyword != null && !keyword.isBlank()) {
+            wrapper.like(BizSpace::getLabName, keyword.trim());
+        }
         wrapper.orderByAsc(BizSpace::getLabName);
 
         List<SpaceOptionVO> result = spaceMapper.selectList(wrapper).stream()
@@ -153,8 +157,8 @@ public class SpaceServiceImpl implements SpaceService {
                         String.valueOf(s.getId()), s.getLabName(), s.getLabType(),
                         s.getCapacity(), s.getStatus()))
                 .toList();
-        log.info("[场地选项] 完成：操作人={}, 类型={}, 最小容量={}, 仅可用={}, 返回条数={}",
-                SecurityUtils.currentUserId(), labType, minCapacity, availableOnly, result.size());
+        log.info("[场地选项] 完成：操作人={}, 类型={}, 最小容量={}, 仅可用={}, 关键字={}, 返回条数={}",
+                SecurityUtils.currentUserId(), labType, minCapacity, availableOnly, keyword, result.size());
         return result;
     }
 

@@ -3,6 +3,7 @@ package com.labmanage.roles.controller;
 import cn.dev33.satoken.annotation.SaCheckLogin;
 import com.labmanage.common.result.Result;
 import com.labmanage.roles.dto.AccountLoginDTO;
+import com.labmanage.roles.dto.IdentitySwitchDTO;
 import com.labmanage.roles.dto.PasswordConfirmDTO;
 import com.labmanage.roles.dto.PasswordUpdateDTO;
 import com.labmanage.roles.dto.SmsLoginDTO;
@@ -59,6 +60,13 @@ public class AuthController {
     @GetMapping("/profile")
     public Result<ProfileVO> profile() {
         return Result.success(authService.profile());
+    }
+
+    @Operation(summary = "身份一键切换（返回切换后的 ProfileVO；目标身份不可用返回 40300）")
+    @SaCheckLogin
+    @PostMapping("/switch")
+    public Result<ProfileVO> switchIdentity(@Valid @RequestBody IdentitySwitchDTO dto) {
+        return Result.success(authService.switchIdentity(dto));
     }
 
     @Operation(summary = "设置/修改密码")

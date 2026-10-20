@@ -1,122 +1,389 @@
 <template>
   <div class="bk_approval">
-    <!-- 待办概览 -->
-    <div class="card bk_approval__summary">
-      <div class="bk_approval__summary_main">
-        <h2 class="t-title bk_approval__title">
-          预约审批
-        </h2>
-        <p class="t-sub">
-          逐单审批待处理申请 · 批准后时段立即占用，与其他申请互斥；驳回须填写原因
-        </p>
-      </div>
-      <div class="bk_approval__pending">
-        <p class="bk_approval__pending_num">
-          {{ pendingCount }}
-        </p>
-        <p class="bk_approval__pending_label">
-          待审批
-        </p>
-      </div>
-    </div>
-
-    <!-- 待审批列表 -->
-    <div class="card bk_approval__table_card">
-      <el-table
-        v-loading="loading"
-        :data="records"
-        class="table-scroll-x"
-        row-key="id"
+    <el-tabs
+      v-model="activeTab"
+      class="bk_approval__tabs"
+    >
+      <!-- 单次预约审批 -->
+      <el-tab-pane
+        label="单次预约"
+        name="single"
       >
-        <el-table-column
-          label="申请人"
-          min-width="100"
-        >
-          <template #default="{ row }">
-            {{ row.applicantName || row.applicantId }}
-          </template>
-        </el-table-column>
-        <el-table-column
-          label="场地"
-          min-width="140"
-        >
-          <template #default="{ row }">
-            <span class="bk_approval__space">{{ row.labName || row.spaceId }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column
-          label="使用时段（上海）"
-          min-width="180"
-        >
-          <template #default="{ row }">
-            {{ formatRange(row.startAt, row.endAt) }}
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="purpose"
-          label="事由"
-          min-width="180"
-          show-overflow-tooltip
-        />
-        <el-table-column
-          prop="participantCount"
-          label="人数"
-          width="70"
-          align="right"
-        />
-        <el-table-column
-          label="提交时间"
-          min-width="140"
-        >
-          <template #default="{ row }">
-            {{ formatInstant(row.createTime) }}
-          </template>
-        </el-table-column>
-        <el-table-column
-          label="操作"
-          width="150"
-          fixed="right"
-        >
-          <template #default="{ row }">
-            <el-button
-              v-permission="'booking:lab:approve'"
-              link
-              type="success"
-              @click="onApprove(row)"
-            >
-              批准
-            </el-button>
-            <el-button
-              v-permission="'booking:lab:approve'"
-              link
-              type="danger"
-              @click="onReject(row)"
-            >
-              驳回
-            </el-button>
-          </template>
-        </el-table-column>
-        <template #empty>
-          <span class="t-hint">当前没有待审批的预约申请</span>
-        </template>
-      </el-table>
+        <div class="card bk_approval__summary">
+          <div class="bk_approval__summary_main">
+            <h2 class="t-title bk_approval__title">
+              预约审批
+            </h2>
+            <p class="t-sub">
+              逐单审批待处理申请 · 批准后时段立即占用，与其他申请互斥；驳回须填写原因
+            </p>
+          </div>
+          <div class="bk_approval__pending">
+            <p class="bk_approval__pending_num">
+              {{ pendingCount }}
+            </p>
+            <p class="bk_approval__pending_label">
+              待审批
+            </p>
+          </div>
+        </div>
 
-      <div
-        v-if="total > query.pageSize"
-        class="bk_approval__pager"
+        <div class="card bk_approval__table_card">
+          <el-table
+            v-loading="loading"
+            :data="records"
+            class="table-scroll-x"
+            row-key="id"
+          >
+            <el-table-column
+              label="申请人"
+              min-width="100"
+            >
+              <template #default="{ row }">
+                {{ row.applicantName || row.applicantId }}
+              </template>
+            </el-table-column>
+            <el-table-column
+              label="场地"
+              min-width="140"
+            >
+              <template #default="{ row }">
+                <span class="bk_approval__space">{{ row.labName || row.spaceId }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column
+              label="课程 / 班级"
+              min-width="150"
+            >
+              <template #default="{ row }">
+                {{ [row.courseName, row.className].filter(Boolean).join(' · ') || '—' }}
+              </template>
+            </el-table-column>
+            <el-table-column
+              label="使用时段（上海）"
+              min-width="180"
+            >
+              <template #default="{ row }">
+                {{ formatRange(row.startAt, row.endAt) }}
+              </template>
+            </el-table-column>
+            <el-table-column
+              prop="purpose"
+              label="事由"
+              min-width="160"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="participantCount"
+              label="人数"
+              width="70"
+              align="right"
+            />
+            <el-table-column
+              label="操作"
+              width="150"
+              fixed="right"
+            >
+              <template #default="{ row }">
+                <el-button
+                  v-permission="'booking:lab:approve'"
+                  link
+                  type="success"
+                  @click="onApprove(row)"
+                >
+                  批准
+                </el-button>
+                <el-button
+                  v-permission="'booking:lab:approve'"
+                  link
+                  type="danger"
+                  @click="onReject(row)"
+                >
+                  驳回
+                </el-button>
+              </template>
+            </el-table-column>
+            <template #empty>
+              <span class="t-hint">当前没有待审批的单次预约申请</span>
+            </template>
+          </el-table>
+
+          <div
+            v-if="total > query.pageSize"
+            class="bk_approval__pager"
+          >
+            <el-pagination
+              v-model:current-page="query.pageNum"
+              v-model:page-size="query.pageSize"
+              :total="total"
+              :page-sizes="[10, 20, 50]"
+              layout="total, sizes, prev, pager, next"
+              background
+              @size-change="loadData"
+              @current-change="loadData"
+            />
+          </div>
+        </div>
+      </el-tab-pane>
+
+      <!-- 周期预约审批 -->
+      <el-tab-pane
+        label="周期预约"
+        name="series"
       >
-        <el-pagination
-          v-model:current-page="query.pageNum"
-          v-model:page-size="query.pageSize"
-          :total="total"
-          :page-sizes="[10, 20, 50]"
-          layout="total, sizes, prev, pager, next"
-          background
-          @size-change="loadData"
-          @current-change="loadData"
-        />
-      </div>
-    </div>
+        <div class="card bk_approval__table_card">
+          <el-table
+            v-loading="seriesLoading"
+            :data="seriesList"
+            class="table-scroll-x"
+            row-key="id"
+          >
+            <el-table-column
+              label="申请人"
+              min-width="100"
+            >
+              <template #default="{ row }">
+                {{ row.applicantName || row.applicantId }}
+              </template>
+            </el-table-column>
+            <el-table-column
+              label="场地"
+              min-width="130"
+            >
+              <template #default="{ row }">
+                <span class="bk_approval__space">{{ row.labName || row.spaceId }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column
+              label="课程 / 班级"
+              min-width="140"
+            >
+              <template #default="{ row }">
+                {{ [row.courseName, row.className].filter(Boolean).join(' · ') || '—' }}
+              </template>
+            </el-table-column>
+            <el-table-column
+              label="星期 + 节次"
+              min-width="150"
+            >
+              <template #default="{ row }">
+                {{ row.weekdayName }} {{ row.startPeriodName }} ~ {{ row.endPeriodName }}
+              </template>
+            </el-table-column>
+            <el-table-column
+              label="使用周期"
+              min-width="180"
+            >
+              <template #default="{ row }">
+                {{ row.cycleStartDate }} ~ {{ row.cycleEndDate }}
+                <span class="t-hint">（{{ row.weekCount }} 周）</span>
+              </template>
+            </el-table-column>
+            <el-table-column
+              label="状态"
+              width="96"
+            >
+              <template #default="{ row }">
+                <el-tooltip
+                  v-if="row.status === 'REJECTED' && row.rejectReason"
+                  :content="`驳回原因：${row.rejectReason}`"
+                  placement="top"
+                >
+                  <span class="pill pill--danger">已驳回</span>
+                </el-tooltip>
+                <span
+                  v-else
+                  class="pill"
+                  :class="SERIES_STATUS_MAP[row.status]?.pill"
+                >
+                  {{ SERIES_STATUS_MAP[row.status]?.label || row.status }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column
+              type="expand"
+              width="48"
+            >
+              <template #default="{ row }">
+                <div class="bk_approval__series_detail">
+                  <el-descriptions
+                    :column="2"
+                    border
+                    size="small"
+                  >
+                    <el-descriptions-item label="用途">
+                      {{ row.purpose || '—' }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="参与人数">
+                      {{ row.participantCount }} 人
+                    </el-descriptions-item>
+                    <el-descriptions-item label="上课老师">
+                      {{ row.teacherName || '—' }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="已生成预约单">
+                      {{ row.bookedCount }} 条
+                    </el-descriptions-item>
+                  </el-descriptions>
+                  <p
+                    v-if="row.status === 'REJECTED' && row.rejectReason"
+                    class="bk_approval__reject t-hint"
+                  >
+                    驳回原因：{{ row.rejectReason }}
+                  </p>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column
+              label="操作"
+              width="160"
+              fixed="right"
+            >
+              <template #default="{ row }">
+                <template v-if="row.status === 'PENDING'">
+                  <el-button
+                    v-permission="'booking:lab:approve'"
+                    link
+                    type="success"
+                    @click="onApproveSeries(row)"
+                  >
+                    批准
+                  </el-button>
+                  <el-button
+                    v-permission="'booking:lab:approve'"
+                    link
+                    type="danger"
+                    @click="onRejectSeries(row)"
+                  >
+                    驳回
+                  </el-button>
+                </template>
+                <el-button
+                  v-else
+                  link
+                  type="primary"
+                  @click="openSeriesDetail(row)"
+                >
+                  详情
+                </el-button>
+              </template>
+            </el-table-column>
+            <template #empty>
+              <span class="t-hint">暂无周期预约申请</span>
+            </template>
+          </el-table>
+
+          <div
+            v-if="seriesTotal > seriesQuery.pageSize"
+            class="bk_approval__pager"
+          >
+            <el-pagination
+              v-model:current-page="seriesQuery.pageNum"
+              v-model:page-size="seriesQuery.pageSize"
+              :total="seriesTotal"
+              :page-sizes="[10, 20, 50]"
+              layout="total, sizes, prev, pager, next"
+              background
+              @size-change="loadSeries"
+              @current-change="loadSeries"
+            />
+          </div>
+        </div>
+
+        <el-drawer
+          v-model="seriesDetailVisible"
+          title="周期预约详情"
+          size="520px"
+        >
+          <div
+            v-if="seriesDetail"
+            class="bk_approval__detail"
+          >
+            <div class="card bk_approval__detail_head">
+              <h3 class="t-title">{{ seriesDetail.labName || seriesDetail.spaceId }}</h3>
+              <p class="t-sub">
+                {{ seriesDetail.weekdayName }} {{ seriesDetail.startPeriodName }} ~
+                {{ seriesDetail.endPeriodName }} · {{ seriesDetail.cycleStartDate }} ~
+                {{ seriesDetail.cycleEndDate }}（{{ seriesDetail.weekCount }} 周）
+              </p>
+              <span
+                class="pill"
+                :class="SERIES_STATUS_MAP[seriesDetail.status]?.pill"
+              >
+                {{ seriesDetail.statusName || SERIES_STATUS_MAP[seriesDetail.status]?.label }}
+              </span>
+            </div>
+            <el-descriptions
+              :column="2"
+              border
+            >
+              <el-descriptions-item label="申请人">
+                {{ seriesDetail.applicantName || seriesDetail.applicantId }}
+              </el-descriptions-item>
+              <el-descriptions-item label="上课老师">
+                {{ seriesDetail.teacherName || '—' }}
+              </el-descriptions-item>
+              <el-descriptions-item
+                label="课程"
+                :span="1"
+              >
+                {{ seriesDetail.courseName || '—' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="班级">
+                {{ seriesDetail.className || '—' }}
+              </el-descriptions-item>
+              <el-descriptions-item
+                label="用途"
+                :span="2"
+              >
+                {{ seriesDetail.purpose || '—' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="参与人数">
+                {{ seriesDetail.participantCount }} 人
+              </el-descriptions-item>
+              <el-descriptions-item label="已生成预约单">
+                {{ (seriesDetail.generated || []).length }} 条
+              </el-descriptions-item>
+            </el-descriptions>
+            <h4 class="bk_approval__section">
+              各周生成预约单
+            </h4>
+            <el-table
+              :data="seriesDetail.generated || []"
+              size="small"
+              class="table-scroll-x"
+              row-key="bookingId"
+            >
+              <el-table-column
+                label="日期"
+                min-width="110"
+              >
+                <template #default="{ row }">
+                  {{ row.bookingDate }}
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="时段（上海）"
+                min-width="120"
+              >
+                <template #default="{ row }">
+                  {{ row.timeRange }}
+                </template>
+              </el-table-column>
+              <el-table-column label="状态">
+                <template #default="{ row }">
+                  <span
+                    class="pill"
+                    :class="BOOKING_STATUS_MAP[row.status]?.pill"
+                  >
+                    {{ row.statusName || row.status }}
+                  </span>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </el-drawer>
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 
@@ -124,18 +391,26 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { pageAllBookings, approveBooking, rejectBooking } from '@/api/booking'
-import { formatInstant, formatRange } from '@/utils/datetime'
+import { pageAllSeries, approveSeries, rejectSeries, getSeriesDetail } from '@/api/booking'
+import { BOOKING_STATUS_MAP, SERIES_STATUS_MAP } from '@/views/booking/booking.constants'
+import { formatRange } from '@/utils/datetime'
 
+const activeTab = ref('single')
+
+// 单次预约
 const loading = ref(false)
 const records = ref([])
 const total = ref(0)
 const pendingCount = ref(0)
+const query = reactive({ pageNum: 1, pageSize: 10 })
 
-// 审批页固定只看待审批（PENDING）申请
-const query = reactive({
-  pageNum: 1,
-  pageSize: 10
-})
+// 周期预约
+const seriesLoading = ref(false)
+const seriesList = ref([])
+const seriesTotal = ref(0)
+const seriesQuery = reactive({ pageNum: 1, pageSize: 10 })
+const seriesDetailVisible = ref(false)
+const seriesDetail = ref(null)
 
 async function loadData() {
   loading.value = true
@@ -153,6 +428,21 @@ async function loadData() {
   }
 }
 
+async function loadSeries() {
+  seriesLoading.value = true
+  try {
+    const data = await pageAllSeries({
+      pageNum: seriesQuery.pageNum,
+      pageSize: seriesQuery.pageSize,
+      status: 'PENDING'
+    })
+    seriesList.value = data.records || []
+    seriesTotal.value = Number(data.total) || 0
+  } finally {
+    seriesLoading.value = false
+  }
+}
+
 async function onApprove(row) {
   try {
     await ElMessageBox.confirm(
@@ -165,10 +455,7 @@ async function onApprove(row) {
   }
   await approveBooking(row.id)
   ElMessage.success('已批准，时段已占用')
-  // 当前页删空且不在首页时回退一页
-  if (records.value.length === 1 && query.pageNum > 1) {
-    query.pageNum -= 1
-  }
+  if (records.value.length === 1 && query.pageNum > 1) query.pageNum -= 1
   loadData()
 }
 
@@ -192,13 +479,64 @@ async function onReject(row) {
   }
   await rejectBooking(row.id, reason)
   ElMessage.success('已驳回')
-  if (records.value.length === 1 && query.pageNum > 1) {
-    query.pageNum -= 1
-  }
+  if (records.value.length === 1 && query.pageNum > 1) query.pageNum -= 1
   loadData()
 }
 
-onMounted(loadData)
+async function onApproveSeries(row) {
+  try {
+    await ElMessageBox.confirm(
+      `批准「${row.applicantName || row.applicantId}」周期预约 ${row.labName}（${row.weekdayName} ${row.startPeriodName}~${row.endPeriodName}，${row.weekCount} 周）吗？批准后逐周生成预约单并占用时段。`,
+      '周期预约批准确认',
+      { type: 'warning', confirmButtonText: '批准并生成占用', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  await approveSeries(row.id)
+  ElMessage.success('已批准，已逐周生成占用')
+  if (seriesList.value.length === 1 && seriesQuery.pageNum > 1) seriesQuery.pageNum -= 1
+  loadSeries()
+}
+
+async function onRejectSeries(row) {
+  let reason
+  try {
+    const res = await ElMessageBox.prompt(
+      '驳回周期预约后将整单终止，原因必填（≤200 字）',
+      `驳回「${row.labName}」周期预约`,
+      {
+        inputPlaceholder: '驳回原因（必填）',
+        inputValidator: (v) => (v && v.trim() ? (v.length <= 200 ? true : '原因不能超过 200 字') : '请填写驳回原因'),
+        type: 'warning',
+        confirmButtonText: '确定驳回',
+        cancelButtonText: '取消'
+      }
+    )
+    reason = res.value.trim()
+  } catch {
+    return
+  }
+  await rejectSeries(row.id, reason)
+  ElMessage.success('已驳回')
+  if (seriesList.value.length === 1 && seriesQuery.pageNum > 1) seriesQuery.pageNum -= 1
+  loadSeries()
+}
+
+async function openSeriesDetail(row) {
+  seriesDetailVisible.value = true
+  seriesDetail.value = null
+  try {
+    seriesDetail.value = await getSeriesDetail(row.id)
+  } catch {
+    seriesDetail.value = null
+  }
+}
+
+onMounted(() => {
+  loadData()
+  loadSeries()
+})
 </script>
 
 <style scoped>
@@ -208,12 +546,17 @@ onMounted(loadData)
   gap: 14px;
 }
 
+.bk_approval__tabs {
+  background: transparent;
+}
+
 .bk_approval__summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 20px 24px;
+  margin-bottom: 14px;
 }
 
 .bk_approval__title {
@@ -258,6 +601,31 @@ onMounted(loadData)
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.bk_approval__series_detail {
+  padding: 8px 16px;
+}
+
+.bk_approval__reject {
+  margin: 8px 0 0;
+}
+
+.bk_approval__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.bk_approval__detail_head {
+  padding: 16px 20px;
+}
+
+.bk_approval__section {
+  margin: 6px 0 0;
+  font-size: 14px;
+  font-weight: var(--fw-semibold, 600);
+  color: var(--g1);
 }
 
 @media (max-width: 768px) {

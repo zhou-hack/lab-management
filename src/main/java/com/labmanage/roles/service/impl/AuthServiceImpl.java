@@ -5,6 +5,7 @@ import cn.dev33.satoken.stp.parameter.SaLoginParameter;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.labmanage.common.exception.BusinessException;
 import com.labmanage.roles.dto.AccountLoginDTO;
+import com.labmanage.roles.dto.IdentitySwitchDTO;
 import com.labmanage.roles.dto.PasswordConfirmDTO;
 import com.labmanage.roles.dto.PasswordUpdateDTO;
 import com.labmanage.roles.dto.SmsLoginDTO;
@@ -27,6 +28,7 @@ import com.labmanage.roles.service.AuthService;
 import com.labmanage.roles.service.PolicyService;
 import com.labmanage.roles.service.SmsCodeService;
 import com.labmanage.roles.vo.ConfirmVO;
+import com.labmanage.roles.vo.IdentityOptionVO;
 import com.labmanage.roles.vo.LoginVO;
 import com.labmanage.roles.vo.MenuVO;
 import com.labmanage.roles.vo.ProfileVO;
@@ -40,6 +42,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -134,12 +137,35 @@ public class AuthServiceImpl implements AuthService {
         if (user == null || !Integer.valueOf(1).equals(user.getEnabled())) {
             throw new BusinessException(40100, "账号不存在或已停用");
         }
+        String identity = currentIdentity(user.getUserType());
+        List<IdentityOptionVO> identities = computeIdentities(user);
         List<String> roles = loadRoleCodes(userId);
         List<String> permissions = loadPermissionCodes(userId);
+        List<SysMenu> menus = identityMenus(userId, identity);
         StpUtil.getSession().set(SESSION_ROLES, roles);
         StpUtil.getSession().set(SESSION_PERMS, permissions);
         return new ProfileVO(String.valueOf(user.getId()), user.getRealName(), user.getUserType(),
-                roles, permissions, buildMenuTree(menuMapper.selectMenusByUserId(userId)));
+                roles, permissions, buildMenuTree(menus), identities, identity);
+    }
+
+    @Override
+    public ProfileVO switchIdentity(IdentitySwitchDTO dto) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        SysUser user = userMapper.selectById(userId);
+        if (user == null || !Integer.valueOf(1).equals(user.getEnabled())) {
+            throw new BusinessException(40100, "账号不存在或已停用");
+        }
+        List<IdentityOptionVO> identities = computeIdentities(user);
+        boolean allowed = identities.stream()
+                .anyMatch(identity -> identity.code().equals(dto.roleCode()));
+        if (!allowed) {
+            throw new BusinessException(40300, "当前账号无「" + identityLabel(dto.roleCode()) + "」身份，无法切换");
+        }
+        // 切换后角色/权限/菜单按新身份过滤：置空会话缓存强制重算
+        StpUtil.getSession().set(SESSION_CURRENT_IDENTITY, dto.roleCode());
+        StpUtil.getSession().set(SESSION_ROLES, null);
+        StpUtil.getSession().set(SESSION_PERMS, null);
+        return profile();
     }
 
     @Override
@@ -175,6 +201,16 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public List<String> loadRoleCodes(Long userId) {
+        // 身份切换后按当前生效身份返回（单身份列表），未切换回退全量装配
+        String identity = currentSessionIdentity();
+        if (identity != null) {
+            return List.of(identity);
+        }
+        return loadAllRoleCodes(userId);
+    }
+
+    /** 全量角色码：持久化角色 + 有效助理授权动态计算的 ASSISTANT（与身份切换无关） */
+    private List<String> loadAllRoleCodes(Long userId) {
         List<SysUserRole> userRoles = userRoleMapper.selectList(Wrappers.<SysUserRole>lambdaQuery()
                 .eq(SysUserRole::getUserId, userId)
                 .eq(SysUserRole::getEnabled, 1));
@@ -194,6 +230,10 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public List<String> loadPermissionCodes(Long userId) {
+        String identity = currentSessionIdentity();
+        if (identity != null) {
+            return permissionMapper.selectPermissionCodesByRoleIds(effectiveRoleIds(identity));
+        }
         return permissionMapper.selectPermissionCodesByUserId(userId);
     }
 
@@ -301,6 +341,89 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(40100, "账号不存在或已停用");
         }
         return user;
+    }
+
+    // ------------------------------------------------------------ 身份一键切换
+
+    /** 会话已切换身份码；未切换返回 null（回退主身份内容加载） */
+    private String currentSessionIdentity() {
+        try {
+            Object identity = StpUtil.getSession().get(SESSION_CURRENT_IDENTITY);
+            return identity == null ? null : String.valueOf(identity);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 当前生效身份：已切换取切换值，否则主身份（userType） */
+    private String currentIdentity(String userType) {
+        String switched = currentSessionIdentity();
+        return switched != null ? switched : userType;
+    }
+
+    /**
+     * 可用身份列表（首项为主身份）：主身份 + 持久化角色 + 有效 ASSISTANT 授权。
+     * 无授权/单身份时列表仅一项，前端据此隐藏切换入口。
+     */
+    private List<IdentityOptionVO> computeIdentities(SysUser user) {
+        LinkedHashSet<String> codes = new LinkedHashSet<>();
+        codes.add(user.getUserType());
+        codes.addAll(loadAllRoleCodes(user.getId()).stream()
+                .filter(code -> !code.equals(user.getUserType()))
+                .toList());
+        List<IdentityOptionVO> result = new ArrayList<>(codes.size());
+        for (String code : codes) {
+            String label = identityLabel(code);
+            result.add(new IdentityOptionVO(code, label, identityDescription(code)));
+        }
+        return result;
+    }
+
+    /** 当前身份菜单：切换后按身份角色过滤，否则按用户全部角色 */
+    private List<SysMenu> identityMenus(Long userId, String identity) {
+        if (currentSessionIdentity() == null) {
+            return menuMapper.selectMenusByUserId(userId);
+        }
+        return menuMapper.selectMenusByRoleIds(effectiveRoleIds(identity));
+    }
+
+    /**
+     * 身份对应生效角色 ID：ASSISTANT 视为「助理 + 学生」叠加（助理=学生+增量），
+     * 其余身份即其角色本身。
+     */
+    private List<Long> effectiveRoleIds(String identity) {
+        if (RoleCode.ASSISTANT.name().equals(identity)) {
+            return List.of(RoleCode.ASSISTANT.getId(), RoleCode.STUDENT.getId());
+        }
+        for (RoleCode role : RoleCode.values()) {
+            if (role.name().equals(identity)) {
+                return List.of(role.getId());
+            }
+        }
+        return List.of();
+    }
+
+    private String identityLabel(String code) {
+        if (code == null) {
+            return "未知身份";
+        }
+        return switch (code) {
+            case "ADMIN" -> "管理员";
+            case "TEACHER" -> "老师";
+            case "STUDENT" -> "学生";
+            case "ASSISTANT" -> "老师助理";
+            default -> code;
+        };
+    }
+
+    private String identityDescription(String code) {
+        return switch (code) {
+            case "ADMIN" -> "统一管理、审批与台账配置";
+            case "TEACHER" -> "发起预约与教学使用";
+            case "STUDENT" -> "只读查看预约情况";
+            case "ASSISTANT" -> "学生 + 老师助理授权范围";
+            default -> "";
+        };
     }
 
     private List<MenuVO> buildMenuTree(List<SysMenu> menus) {

@@ -1,5 +1,11 @@
 import { defineStore } from 'pinia'
-import { loginByPassword, loginBySms, logout as apiLogout, getProfile } from '@/api/user'
+import {
+  loginByPassword,
+  loginBySms,
+  logout as apiLogout,
+  getProfile,
+  switchIdentity as apiSwitchIdentity
+} from '@/api/user'
 import { getToken, setToken, removeToken } from '@/utils/token'
 import { registerDynamicRoutes, removeDynamicRoutes, getRegisteredPaths } from '@/router/dynamic'
 
@@ -28,10 +34,20 @@ export const useUserStore = defineStore('user', {
     roles: [],
     perms: [],
     menus: [],
+    identities: [],
+    currentIdentity: '',
     routesLoaded: false
   }),
   getters: {
     isAdmin: (state) => state.roles.includes('ADMIN'),
+    /**
+     * 当前身份中文名（顶栏身份切换器标签）。
+     */
+    identityLabel: (state) => {
+      const current = state.currentIdentity
+      const option = (state.identities || []).find((item) => item.code === current)
+      return option?.label || state.userInfo?.userType || ''
+    },
     /**
      * 登录落地页：优先约定首页（/admin/home、/home），
      * 后端菜单未下发首页时回退到该身份第一个已注册页面，避免跳入 404 白屏。
@@ -68,6 +84,26 @@ export const useUserStore = defineStore('user', {
       this.roles = data.roles || []
       this.perms = data.permissions || []
       this.menus = (data.menus || []).map(mapMenu)
+      this.identities = data.identities || []
+      this.currentIdentity = data.currentIdentity || data.userType || ''
+    },
+    /**
+     * 身份一键切换：后端按新身份重算角色/权限/菜单后返回完整 ProfileVO，
+     * 前端据此换掉动态路由并回到该身份的落地页。
+     */
+    async switchIdentity(roleCode) {
+      const data = await apiSwitchIdentity({ roleCode })
+      this.userInfo = data.userId
+        ? { userId: data.userId, realName: data.realName, userType: data.userType }
+        : null
+      this.roles = data.roles || []
+      this.perms = data.permissions || []
+      this.identities = data.identities || []
+      this.currentIdentity = data.currentIdentity || roleCode
+      // 菜单变了：先拆除旧动态路由（含通配符），再按新身份重建
+      removeDynamicRoutes()
+      this.menus = (data.menus || []).map(mapMenu)
+      await this.buildRoutes()
     },
     async buildRoutes() {
       registerDynamicRoutes(this.menus, this.userInfo?.userType)

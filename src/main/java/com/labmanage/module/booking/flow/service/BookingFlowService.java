@@ -1,6 +1,7 @@
 package com.labmanage.module.booking.flow.service;
 
 import com.labmanage.module.booking.entity.LabBooking;
+import com.labmanage.module.booking.entity.LabBookingSeries;
 import com.labmanage.module.booking.flow.entity.ApprovalTask;
 import com.labmanage.module.booking.flow.entity.BizDocument;
 import com.labmanage.module.booking.flow.entity.DocumentEvent;
@@ -44,6 +45,9 @@ public class BookingFlowService {
     public static final String REQUIRED_ROLE_ADMIN = "ADMIN";
     public static final String DOCUMENT_TYPE_LAB_BOOKING = "LAB_BOOKING";
 
+    /** 周期预约规则单据类型与单号前缀（document_no="LBS"+规则ID） */
+    public static final String DOCUMENT_TYPE_LAB_BOOKING_SERIES = "LAB_BOOKING_SERIES";
+
     /** 申请人缺省归属部门：设备处（sys_rbac.sql 预置 id=1） */
     public static final long DEFAULT_DEPARTMENT_ID = 1L;
 
@@ -64,6 +68,10 @@ public class BookingFlowService {
 
     public static String documentNoOf(Long bookingId) {
         return "LAB" + bookingId;
+    }
+
+    public static String documentNoOfSeries(Long seriesId) {
+        return "LBS" + seriesId;
     }
 
     /**
@@ -182,6 +190,151 @@ public class BookingFlowService {
     /** 查询单据；不存在返回 null（历史预约可能无流程档案）。 */
     public BizDocument findByBookingId(Long bookingId) {
         return documentMapper.selectByDocumentNo(documentNoOf(bookingId));
+    }
+
+    /** 查询周期预约规则单据；不存在返回 null。 */
+    public BizDocument findBySeriesId(Long seriesId) {
+        return documentMapper.selectByDocumentNo(documentNoOfSeries(seriesId));
+    }
+
+    // ------------------------------------------------------------ 周期预约流程
+
+    /**
+     * 周期预约提交时建档：LBS 单据 + READY 管理员核对任务 + SUBMIT 事件。
+     * 已存在则原样返回（重复提交保护）。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public BizDocument onSeriesSubmit(LabBookingSeries series, Long applicantDepartmentId) {
+        BizDocument doc = documentMapper.selectByDocumentNo(documentNoOfSeries(series.getId()));
+        if (doc != null) {
+            return doc;
+        }
+        Instant now = Instant.now();
+        doc = new BizDocument();
+        doc.setDocumentNo(documentNoOfSeries(series.getId()));
+        doc.setDocumentType(DOCUMENT_TYPE_LAB_BOOKING_SERIES);
+        doc.setOwnerUserId(series.getApplicantId());
+        doc.setDepartmentId(applicantDepartmentId == null ? DEFAULT_DEPARTMENT_ID : applicantDepartmentId);
+        doc.setSubmittedAt(series.getCreateTime() == null ? now : series.getCreateTime());
+        doc.setIdempotencyKey(series.getIdempotencyKey());
+        documentMapper.insert(doc);
+
+        ApprovalTask task = new ApprovalTask();
+        task.setDocumentId(doc.getId());
+        task.setStageCode(STAGE_ADMIN_REVIEW);
+        task.setSequenceNo(1);
+        task.setRoundNo(1);
+        task.setRequiredRole(REQUIRED_ROLE_ADMIN);
+        task.setStatus(ApprovalTaskStatus.READY);
+        task.setAvailableAt(now);
+        // 周期规则超时由定时任务按 cycle_end_date 整单取消，此处无需设置超时点
+        task.setTimeoutAction("CANCEL");
+        taskMapper.insert(task);
+
+        appendEvent(doc.getId(), series.getId(), DocumentEventType.SUBMIT,
+                null, "PENDING", series.getApplicantId(), ActorType.USER,
+                now, series.getPurpose(), task.getId());
+        log.info("[周期流程建档] 规则ID={}, 单据ID={}, 审批任务ID={}, 阶段=ADMIN_REVIEW/READY",
+                series.getId(), doc.getId(), task.getId());
+        return doc;
+    }
+
+    /** 管理员批准周期规则：任务 APPROVED + APPROVE 事件。 */
+    @Transactional(rollbackFor = Exception.class)
+    public void onSeriesApprove(BizDocument doc, LabBookingSeries series, Long adminId) {
+        ApprovalTask task = requireReviewTask(doc.getId());
+        Instant now = Instant.now();
+        task.setStatus(ApprovalTaskStatus.APPROVED);
+        task.setDecidedBy(adminId);
+        task.setDecidedAt(now);
+        task.setDecisionComment("周期预约核对通过，批准使用");
+        taskMapper.updateById(task);
+
+        appendEvent(doc.getId(), series.getId(), DocumentEventType.APPROVE,
+                "PENDING", "APPROVED", adminId, ActorType.USER,
+                now, task.getDecisionComment(), task.getId());
+    }
+
+    /** 管理员整单驳回周期规则：任务 REJECTED + REJECT 事件（原因必填）。 */
+    @Transactional(rollbackFor = Exception.class)
+    public void onSeriesReject(BizDocument doc, LabBookingSeries series, Long adminId, String reason) {
+        ApprovalTask task = requireReviewTask(doc.getId());
+        Instant now = Instant.now();
+        task.setStatus(ApprovalTaskStatus.REJECTED);
+        task.setDecidedBy(adminId);
+        task.setDecidedAt(now);
+        task.setDecisionComment(reason);
+        taskMapper.updateById(task);
+
+        appendEvent(doc.getId(), series.getId(), DocumentEventType.REJECT,
+                "PENDING", "REJECTED", adminId, ActorType.USER,
+                now, reason, task.getId());
+    }
+
+    /** 撤销/超时取消周期规则：任务 CANCELLED + CANCEL/TIMEOUT_CANCEL 事件。 */
+    @Transactional(rollbackFor = Exception.class)
+    public void onSeriesCancel(BizDocument doc, LabBookingSeries series, Long actorId, boolean system, String reason) {
+        ApprovalTask task = requireReviewTask(doc.getId());
+        Instant now = Instant.now();
+        task.setStatus(ApprovalTaskStatus.CANCELLED);
+        if (!system) {
+            task.setDecidedBy(actorId);
+        }
+        task.setDecidedAt(now);
+        task.setDecisionComment(reason);
+        taskMapper.updateById(task);
+
+        DocumentEventType type = system ? DocumentEventType.TIMEOUT_CANCEL : DocumentEventType.CANCEL;
+        appendEvent(doc.getId(), series.getId(), type,
+                series.getStatus() == null ? null : series.getStatus().name(),
+                "CANCELLED", system ? null : actorId,
+                system ? ActorType.SYSTEM : ActorType.USER,
+                now, reason, task.getId());
+    }
+
+    /**
+     * 周期规则批准后逐周生成的预约单流程建档（幂等）：这些单创建即 APPROVED，
+     * 需补齐 biz_document + APPROVED 任务 + SUBMIT/APPROVE 事件，使详情时间线、
+     * 开门签到/结束清点与单次预约行为一致。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void onGeneratedApproved(LabBooking booking, Long operatorId, Long departmentId) {
+        BizDocument doc = documentMapper.selectByDocumentNo(documentNoOf(booking.getId()));
+        if (doc != null) {
+            return;
+        }
+        Instant now = Instant.now();
+        doc = new BizDocument();
+        doc.setDocumentNo(documentNoOf(booking.getId()));
+        doc.setDocumentType(DOCUMENT_TYPE_LAB_BOOKING);
+        doc.setOwnerUserId(booking.getApplicantId());
+        doc.setDepartmentId(departmentId == null ? DEFAULT_DEPARTMENT_ID : departmentId);
+        doc.setSubmittedAt(booking.getCreateTime() == null ? now : booking.getCreateTime());
+        doc.setIdempotencyKey(String.valueOf(booking.getId()));
+        documentMapper.insert(doc);
+
+        ApprovalTask task = new ApprovalTask();
+        task.setDocumentId(doc.getId());
+        task.setStageCode(STAGE_ADMIN_REVIEW);
+        task.setSequenceNo(1);
+        task.setRoundNo(1);
+        task.setRequiredRole(REQUIRED_ROLE_ADMIN);
+        task.setStatus(ApprovalTaskStatus.APPROVED);
+        task.setAvailableAt(now);
+        task.setDecidedBy(operatorId);
+        task.setDecidedAt(now);
+        task.setDecisionComment("周期预约一次批准，本单随规则生效");
+        task.setTimeoutAction("NONE");
+        taskMapper.insert(task);
+
+        appendEvent(doc.getId(), booking.getId(), DocumentEventType.SUBMIT,
+                null, "PENDING", booking.getApplicantId(), ActorType.USER,
+                now, "周期预约批量生成", task.getId());
+        appendEvent(doc.getId(), booking.getId(), DocumentEventType.APPROVE,
+                "PENDING", "APPROVED", operatorId, ActorType.USER,
+                now, "周期预约一次批准，本单随规则生效", task.getId());
+        log.info("[生成单流程建档] 预约ID={}, 单据ID={}, 审批任务ID={}",
+                booking.getId(), doc.getId(), task.getId());
     }
 
     /** 是否已记录某事件（签到/清点状态判定）。 */

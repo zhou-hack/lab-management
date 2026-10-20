@@ -68,10 +68,9 @@ router.beforeEach(async (to) => {
     return { path: '/404' }
   }
 
-  // 业务规则：场地预约不对学生开放（路由注册层已过滤，此处兜底防手输 URL/历史记录进入）
-  if (store.userInfo?.userType === 'STUDENT' && to.path.startsWith('/booking/')) {
-    return { path: store.homePath, replace: true }
-  }
+  // 业务规则：场地预约学生为纯只读（时间轴查看）——菜单由后端仅下发「预约情况」，
+  // 页面内发起/撤销/审批按钮按 v-permission 与身份隐藏，写接口由后端权限与身份门禁拦截。
+  // 不再按 userType 硬封锁 /booking/ 路径。
 
   return true
 })

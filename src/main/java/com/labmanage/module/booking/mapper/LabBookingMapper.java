@@ -38,4 +38,17 @@ public interface LabBookingMapper extends BaseMapper<LabBooking> {
     @Select("SELECT * FROM lab_booking WHERE deleted = 0 AND status = 'PENDING' "
             + "AND start_at <= #{now} ORDER BY start_at ASC LIMIT 200")
     List<LabBooking> selectExpiredPending(@Param("now") Instant now);
+
+    /**
+     * 周期预约规则生成的各周预约单（取消/详情核对用），按开始时间升序。
+     */
+    @Select("SELECT * FROM lab_booking WHERE deleted = 0 AND series_id = #{seriesId} "
+            + "ORDER BY start_at ASC")
+    List<LabBooking> selectBySeriesId(@Param("seriesId") Long seriesId);
+
+    /**
+     * 周期预约规则已生成的预约单数（SeriesVO.bookedCount）。
+     */
+    @Select("SELECT COUNT(*) FROM lab_booking WHERE deleted = 0 AND series_id = #{seriesId}")
+    long countBySeriesId(@Param("seriesId") Long seriesId);
 }

@@ -41,19 +41,22 @@
             <el-breadcrumb-item>{{ route.meta.title || '首页' }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
-        <el-dropdown @command="onUserCommand">
-          <span class="admin_layout__user">
-            {{ store.userInfo?.realName || '用户' }}
-            <el-icon><ArrowDown /></el-icon>
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="logout">
-                退出登录
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <div class="admin_layout__header_right">
+          <IdentitySwitch v-if="store.identities.length > 1" />
+          <el-dropdown @command="onUserCommand">
+            <span class="admin_layout__user">
+              {{ store.userInfo?.realName || '用户' }}
+              <el-icon><ArrowDown /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="logout">
+                  退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </el-header>
 
       <el-main class="admin_layout__main">
@@ -70,6 +73,7 @@ import { ElMessageBox } from 'element-plus'
 import { ArrowDown, Expand, Fold } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import SidebarItem from './SidebarItem.vue'
+import IdentitySwitch from '@/components/IdentitySwitch.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -145,6 +149,12 @@ async function onUserCommand(command) {
 }
 
 .admin_layout__header_left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin_layout__header_right {
   display: flex;
   align-items: center;
   gap: 10px;

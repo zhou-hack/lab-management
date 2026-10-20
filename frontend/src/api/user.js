@@ -26,6 +26,15 @@ export function getProfile() {
   return request.get('/auth/profile')
 }
 
+/**
+ * 身份一键切换（老师⇄管理员 / 学生⇄助理）。
+ * @param {{ roleCode: string }} data 目标身份码，须在当前账号可用身份列表中
+ * @returns {Promise<ProfileVO>} 切换后的完整身份信息
+ */
+export function switchIdentity(data) {
+  return request.post('/auth/switch', data)
+}
+
 /** 注销 */
 export function logout() {
   return request.post('/auth/logout')

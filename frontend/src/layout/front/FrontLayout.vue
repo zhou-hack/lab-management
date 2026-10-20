@@ -14,7 +14,9 @@
         class="front_nav__back front_nav__back--placeholder"
       />
       <b class="front_nav__title">{{ title }}</b>
-      <span class="front_nav__back front_nav__back--placeholder" />
+      <span class="front_nav__back front_nav__back--placeholder">
+        <IdentitySwitch v-if="store.identities.length > 1" />
+      </span>
     </header>
     <main class="front_layout__body">
       <router-view />
@@ -25,9 +27,12 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useUserStore } from '@/store/user'
+import IdentitySwitch from '@/components/IdentitySwitch.vue'
 
 const route = useRoute()
 const router = useRouter()
+const store = useUserStore()
 
 const title = computed(() => route.meta.title || '实验室设备管理系统')
 // 首页不显示返回；history.state.back 为空说明是直接打开/刷新进入，无可回退栈
