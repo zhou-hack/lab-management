@@ -14,16 +14,29 @@
         class="front_nav__back front_nav__back--placeholder"
       />
       <b class="front_nav__title">{{ title }}</b>
-      <button
-        class="front_nav__back"
-        aria-label="退出登录"
-        title="退出登录"
-        @click="onLogout"
-      >
-        <el-icon :size="17">
-          <SwitchButton />
-        </el-icon>
-      </button>
+      <div class="front_nav__actions">
+        <button
+          v-if="store.switchableRoles.length"
+          class="front_nav__back"
+          aria-label="切换身份"
+          title="切换身份"
+          @click="onSwitchRole"
+        >
+          <el-icon :size="17">
+            <Switch />
+          </el-icon>
+        </button>
+        <button
+          class="front_nav__back"
+          aria-label="退出登录"
+          title="退出登录"
+          @click="onLogout"
+        >
+          <el-icon :size="17">
+            <SwitchButton />
+          </el-icon>
+        </button>
+      </div>
     </header>
     <main class="front_layout__body">
       <router-view />
@@ -35,7 +48,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import { SwitchButton } from '@element-plus/icons-vue'
+import { Switch, SwitchButton } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 
 const route = useRoute()
@@ -46,8 +59,26 @@ const title = computed(() => route.meta.title || '实验室设备管理系统')
 // 首页不显示返回；history.state.back 为空说明是直接打开/刷新进入，无可回退栈
 const showBack = computed(() => route.path !== '/home' && !!router.options.history.state.back)
 
+// 一期可切换角色至多一个（如老师被绑定管理员角色）
+const roleLabels = { ADMIN: '管理员', TEACHER: '老师', STUDENT: '学生', OPS_ADMIN: '运维管理员' }
+
 function goBack() {
   router.back()
+}
+
+async function onSwitchRole() {
+  const target = store.switchableRoles[0]
+  try {
+    await ElMessageBox.confirm(
+      `切换到「${roleLabels[target] || target}」身份？页面与数据权限将按新身份重新加载。`,
+      '切换身份',
+      { type: 'warning', confirmButtonText: '切换' }
+    )
+  } catch {
+    return
+  }
+  const homePath = await store.switchRole(target)
+  router.push(homePath)
 }
 
 async function onLogout() {
@@ -114,6 +145,12 @@ async function onLogout() {
 
 .front_nav__back--placeholder {
   cursor: default;
+}
+
+.front_nav__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .front_layout__body {

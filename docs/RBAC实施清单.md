@@ -34,7 +34,7 @@ OPS_ADMIN（运维管理员）为最高级预置运维角色，仅 SQL 预置不
 
 | permission_code | 名称 | 归属角色 |
 | --- | --- | --- |
-| system:user:list / get / create / update / enable / reset_password | 用户管理 | ADMIN / OPS_ADMIN（createAdmin 固定绑 ADMIN 角色且调用方须全校写；OPS_ADMIN 账号仅 OPS_ADMIN 本人可编辑/启停/重置） |
+| system:user:list / get / create / update / enable / reset_password / bind_role | 用户管理 | ADMIN / OPS_ADMIN（createAdmin 固定绑 ADMIN 角色且调用方须全校写；bind_role 仅老师账号可绑定/解绑 ADMIN 角色、调用方须全校写，变更踢目标用户会话；OPS_ADMIN 账号仅 OPS_ADMIN 本人可编辑/启停/重置/绑定操作） |
 | system:roster:list / create / update / enable / export / import | 预录名单管理（export 导出 CSV 复用列表筛选；import 批量导入 CSV 部分成功、需二级认证） | ADMIN / OPS_ADMIN |
 | system:department:list / create / update / enable | 组织管理 | ADMIN / OPS_ADMIN |
 | system:role:list | 角色与权限查看（角色仍 SQL 预置不可增删） | ADMIN / OPS_ADMIN |
@@ -144,7 +144,8 @@ space 目录及 space_campus / space_lab 两个页面菜单（ID 1000–1002）�
 | 账号密码登录（公开） | POST /auth/login | 管理员 | accountName, password | token, userId, realName, userType, roles, passwordChangeRequired | 40100 凭据错误/账号锁定（msg 含剩余分钟）；40000 参数校验 |
 | 发送短信验证码（公开） | POST /auth/sms/send | 学生/老师 | phone | ttlSeconds | 40000 手机号格式；40900 触发限流（60s 重发/日上限） |
 | 验证码登录（公开） | POST /auth/sms/login | 首登匹配 sys_person_roster 自动建档并派生角色 | phone, code | 同登录 + needSetPassword（老师 true） | 40100 验证码错误/失效；40900 名单未匹配或已停用 |
-| 当前身份 | GET /auth/profile | 登录后/刷新时加载 | — | userId, realName, userType, roles, permissions, menus | 40100 未登录 |
+| 当前身份 | GET /auth/profile | 登录后/刷新时加载 | — | userId, realName, userType, roles, permissions, menus, activeRole, switchableRoles | 40100 未登录 |
+| 切换活动角色 | POST /auth/switch_role | 多角色用户会话内直接切换身份视图（不校验），重新装配权限/菜单 | roleCode | 同 profile（新活动角色全量装配） | 40300 未持有该角色/目标为 ASSISTANT |
 | 设置/修改密码 | PUT /auth/password | 学生/老师首次设置免旧密码；管理员必须旧密码 | oldPassword?, newPassword | null | 40000 密码规则（≥8 位含数字字母）；40100 旧密码错误 |
 | 敏感操作确认 | POST /auth/password/confirm | 审批、报废处置等二次确认，通过后开启 Sa-Token 二级认证 | password | validSeconds（300，期内敏感接口免再确认） | 40100 密码错误 |
 | 注销 | POST /auth/logout | 前端移除动态路由并清理状态 | — | null | — |

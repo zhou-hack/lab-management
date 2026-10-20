@@ -8,6 +8,7 @@ import com.labmanage.roles.dto.PasswordConfirmDTO;
 import com.labmanage.roles.dto.PasswordUpdateDTO;
 import com.labmanage.roles.dto.SmsLoginDTO;
 import com.labmanage.roles.dto.SmsSendDTO;
+import com.labmanage.roles.dto.SwitchRoleDTO;
 import com.labmanage.roles.service.AuthService;
 import com.labmanage.roles.vo.ConfirmVO;
 import com.labmanage.roles.vo.LoginVO;
@@ -64,6 +65,14 @@ public class AuthController {
     @GetMapping("/profile")
     public Result<ProfileVO> profile() {
         return Result.success(authService.profile());
+    }
+
+    @Operation(summary = "切换活动角色（多角色用户会话内切换身份视图）")
+    @OperationLog(moduleCode = "auth", actionCode = "auth:switch_role", targetTable = "sys_user")
+    @SaCheckLogin
+    @PostMapping("/switch_role")
+    public Result<ProfileVO> switchRole(@Valid @RequestBody SwitchRoleDTO dto) {
+        return Result.success(authService.switchRole(dto));
     }
 
     @Operation(summary = "设置/修改密码")

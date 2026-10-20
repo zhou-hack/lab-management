@@ -60,18 +60,19 @@
 ### 3.1 用户与角色分离
 
 - **用户类型（sys_user.user_type）**：STUDENT / TEACHER / ADMIN。决定登录方式：学生/老师短信验证码登录；ADMIN 类型账密登录。会话时长统一 8 小时（普通用户 2026-10-20 起由 2 小时放宽）。
-- **角色（sys_role.role_code）**：权限集合。主身份角色一人一值（sys_user_role 唯一行），ASSISTANT 是唯一可动态授予/回收的附加角色。
+- **角色（sys_role.role_code）**：权限集合。主身份角色由 user_type 派生；老师账号可经用户管理页叠加绑定 ADMIN 角色（一人多角色，2026-10-20 起），ASSISTANT 是唯一可动态授予/回收的附加角色。
+- **活动角色（会话内生效身份视图）**：多角色用户登录后默认以主身份角色为活动角色，权限/菜单按活动角色装配；可经 POST /api/v1/auth/switch_role 在持有角色间直接切换（不校验），前端前台导航栏与后台右上角账户菜单提供切换入口。
 - 用户类型与角色正交但受控：OPS_ADMIN 角色的账号 user_type 仍为 ADMIN（账密登录、8 小时会话），角色只决定权限集合。
 
 ### 3.2 五个预置角色
 
 | 角色 | id | 定位 | 权限来源 | 创建方式 | 数据范围 |
 | --- | --- | --- | --- | --- | --- |
-| ADMIN | 1 | 设备处业务管理员 | 静态绑定 26 项 system 权限（1-22, 26-27, 29-30） | 用户管理页 createAdmin（绑固定角色） | 受 sys_user_data_scope 约束，无行即零范围 |
+| ADMIN | 1 | 设备处业务管理员 | 静态绑定 27 项 system 权限（1-22, 26-27, 29-31） | 用户管理页 createAdmin（绑固定角色）；老师账号可经用户管理页绑定/解绑 ADMIN 角色（system:user:bind_role，仅老师可绑，变更踢会话） | 受 sys_user_data_scope 约束，无行即零范围 |
 | TEACHER | 2 | 授课老师 | 静态绑定助理授权 3 项（23-25）+ 业务模块增量 | 名单首登自动建档派生 | 本人 + 课程名单计算，不可登记范围行 |
 | STUDENT | 3 | 在校学生 | 业务模块增量 | 名单首登自动建档派生 | 仅本人数据 |
 | ASSISTANT | 4 | 老师助理（附加角色） | 不持久化，由有效 assistant_grant 动态计算 | 老师授权产生，到期/撤销自动还原 | 授权范围（OFFERING/LAB + ISSUE/RETURN） |
-| OPS_ADMIN | 5 | 最高级运维管理员 | 静态绑定全部权限（当前 30 项：system 1-30；后续模块新增权限随各自脚本同步绑定） | 仅 SQL 预置（sql/sys_ops_role.sql），页面不可创建；其权限绑定锁定不可页面调整（40900），其余 4 个预置角色的权限绑定可由运维管理员整集替换（system:role:assign） | 不受范围约束（面向全系统数据与配置；实现层豁免见 SysScopeServiceImpl.isOpsAdmin） |
+| OPS_ADMIN | 5 | 最高级运维管理员 | 静态绑定全部权限（当前 31 项：system 1-31；后续模块新增权限随各自脚本同步绑定） | 仅 SQL 预置（sql/sys_ops_role.sql），页面不可创建；其权限绑定锁定不可页面调整（40900），其余 4 个预置角色的权限绑定可由运维管理员整集替换（system:role:assign） | 不受范围约束（面向全系统数据与配置；实现层豁免见 SysScopeServiceImpl.isOpsAdmin） |
 
 层级关系：OPS_ADMIN 为最高级运维角色，普通 ADMIN 无法通过任何页面操作创建或提升账号为 OPS_ADMIN；ASSISTANT 附加在 STUDENT 之上，授权期内同时持有 STUDENT + ASSISTANT。
 
@@ -113,8 +114,9 @@
 
 ### 4.2 权限装配（StpInterfaceImpl）
 
-- `getRoleCodeList` = sys_user_role 静态角色 + 动态 ASSISTANT（assistant_grant 当前窗口存在有效行即追加）。
-- `getPermissionCodeList` = 角色并集对应的 sys_permission 集合。
+- 持有角色全集 = sys_user_role 静态角色 + 动态 ASSISTANT（assistant_grant 当前窗口存在有效行即追加）。
+- `getRoleCodeList` = 会话活动角色 + 动态 ASSISTANT；`getPermissionCodeList` = 活动角色（+ASSISTANT）对应的 sys_permission 集合。
+- 活动角色默认取主身份角色（user_type 派生，未持有时兜底第一个持有的非 ASSISTANT 角色），多角色用户可经 switch_role 会话内直接切换，切换即重新装配并回写会话缓存。
 - 结果按会话缓存；缓存不主动过期，**变更即踢会话**（见 4.3）。
 
 ### 4.3 权限缓存失效矩阵
@@ -126,6 +128,7 @@
 | 助理授权撤销 | 踢学生会话，助理身份随重登消失 | AssistantGrantServiceImpl.revoke |
 | 数据范围增删 | 范围实时查询无缓存，无需踢会话 | SysScopeService 直查 sys_user_data_scope |
 | 角色权限调整 | ✅ 已实现（OPS_ADMIN 整集替换，锁 OPS_ADMIN 角色）：踢该角色全部用户会话（含 ASSISTANT 动态持有者） | SysRoleServiceImpl.assignPermissions → evictRoleHolders |
+| 老师绑定/解绑管理员角色 | 踢该老师全部会话，重登按新持有角色装配 | SysUserServiceImpl.updateAdminRole → evictSession |
 
 ### 4.4 前端镜像层
 
@@ -285,7 +288,8 @@ RBAC 核心 11 表（sql/sys_rbac.sql）：sys_department、sys_person_roster、
 | 锁定限流、会话分时长、动态 ASSISTANT 装配 | ✅ 已落地并验证 |
 | 用户/名单（含 CSV 导出与批量导入）/组织/角色只读/数据范围/预约限制/操作日志/参数配置 | ✅ 已落地并验证 |
 | 助理授权（创建/撤销/审计 + 权限缓存失效闭环） | ✅ 已落地并验证（范围表已建，业务接入待分组 B→E） |
-| OPS_ADMIN 运维角色 | ✅ 已落地并验证；2026-10-15 由运维子集调整为全部权限；2026-10-17 新增角色权限整集替换（system:role:assign，锁 OPS_ADMIN 角色）；2026-10-20 空间功能下线后回至 30 项 |
+| OPS_ADMIN 运维角色 | ✅ 已落地并验证；2026-10-15 由运维子集调整为全部权限；2026-10-17 新增角色权限整集替换（system:role:assign，锁 OPS_ADMIN 角色）；2026-10-20 空间功能下线后回至 30 项，同日新增 system:user:bind_role 后为 31 项 |
+| 一人多角色与活动角色切换 | ✅ 已落地并验证（2026-10-20）：老师可绑定 ADMIN，默认主身份登录，switch_role 会话内直接切换 |
 | 敏感端点二级认证强制执行（checkSafe + 40101 + 前端确认弹窗重试） | ✅ 已落地并验证（策略发布等敏感端点接入） |
 | 空间模块（校区/楼栋/实验室/开放规则） | ❌ 已于 2026-10-20 整体下线（模块代码、页面、权限 1000–1011、菜单 1000–1002、四表全部移除；CAMPUS/BUILDING/LAB 范围类型回退为预留） |
 | course/schedule 教学基础与 asset/booking/item/maintain/report 权限登记 | ⬜ 随分组 B→E（原依赖 space 表的设计待重新评审） |

@@ -19,9 +19,14 @@ export function loginByPhone(data) {
   return request.post('/auth/sms/login', data)
 }
 
-/** 当前身份：用户 / 角色 / 权限 / 菜单树 + 强制改密标志 → ProfileVO */
+/** 当前身份：用户 / 角色 / 权限 / 菜单树 + 活动角色 + 强制改密标志 → ProfileVO */
 export function getProfile() {
   return request.get('/auth/profile')
+}
+
+/** 切换活动角色（多角色用户会话内切换身份视图）→ ProfileVO（新身份全量装配） */
+export function switchRole(roleCode) {
+  return request.post('/auth/switch_role', { roleCode })
 }
 
 /** 设置/修改密码（首次设置无密码散列免旧密码）→ { oldPassword?, newPassword } */

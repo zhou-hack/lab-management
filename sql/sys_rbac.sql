@@ -337,7 +337,7 @@ INSERT INTO sys_user_role (id, user_id, role_id, enabled) VALUES (1, 1, 1, 1);
 -- ID 段约定：system 模块 1-999，业务模块按 RBAC实施清单 第一节分段登记。
 -- ============================================================================
 
--- system 模块权限（30 项）
+-- system 模块权限（31 项）
 INSERT INTO sys_permission (id, permission_code, permission_name, module_code, enabled) VALUES
 (1,  'system:user:list',        '用户列表',       'system', 1),
 (2,  'system:user:get',         '用户详情',       'system', 1),
@@ -345,6 +345,7 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code, e
 (4,  'system:user:update',      '编辑用户',       'system', 1),
 (5,  'system:user:enable',      '启用停用用户',   'system', 1),
 (27, 'system:user:reset_password', '重置密码',    'system', 1),
+(31, 'system:user:bind_role',   '绑定管理员角色', 'system', 1),
 (6,  'system:roster:list',      '名单列表',       'system', 1),
 (7,  'system:roster:create',    '名单录入',       'system', 1),
 (8,  'system:roster:update',    '名单编辑',       'system', 1),
@@ -384,14 +385,14 @@ INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component
 (10, 1,    'system_grant_audit',  '授权审计',     '/system/grant',      'SystemGrantAudit', 26,   'PAGE',      9,  1),
 (11, NULL, 'grant_manage',        '助理管理',     '/grant',             'GrantManage',      23,   'PAGE',      50, 1);
 
--- 角色权限绑定：ADMIN 全部系统权限（1-22、26-27、29-30），TEACHER 助理授权三项（23-25）
+-- 角色权限绑定：ADMIN 全部系统权限（1-22、26-27、29-31），TEACHER 助理授权三项（23-25）
 INSERT INTO sys_role_permission (id, role_id, permission_id, enabled) VALUES
 (1,  1, 1,  1), (2,  1, 2,  1), (3,  1, 3,  1), (4,  1, 4,  1), (5,  1, 5,  1),
 (6,  1, 6,  1), (7,  1, 7,  1), (8,  1, 8,  1), (9,  1, 9,  1), (10, 1, 10, 1),
 (11, 1, 11, 1), (12, 1, 12, 1), (13, 1, 13, 1), (14, 1, 14, 1), (15, 1, 15, 1),
 (16, 1, 16, 1), (17, 1, 17, 1), (18, 1, 18, 1), (19, 1, 19, 1), (20, 1, 20, 1),
 (21, 1, 21, 1), (22, 1, 22, 1), (23, 1, 26, 1), (51, 1, 27, 1),
-(84, 1, 29, 1), (85, 1, 30, 1),
+(84, 1, 29, 1), (85, 1, 30, 1), (86, 1, 31, 1),
 (24, 2, 23, 1), (25, 2, 24, 1), (26, 2, 25, 1);
 
 -- 角色菜单绑定：ADMIN 系统管理目录及 9 个页面，TEACHER 助理管理页

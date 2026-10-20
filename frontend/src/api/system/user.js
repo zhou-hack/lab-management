@@ -34,6 +34,11 @@ export function resetUserPassword(id, newPassword) {
   return request.put(`/system/users/${id}/password_reset`, { newPassword })
 }
 
+/** 绑定/解绑老师账号的管理员角色（变更踢出该用户全部会话） */
+export function updateUserAdminRole(id, bind) {
+  return request.put(`/system/users/${id}/admin_role`, { bind })
+}
+
 /** 启用部门下拉选项 → [{ id, departmentName }] */
 export function getDepartmentOptions() {
   return request.get('/system/departments/options')

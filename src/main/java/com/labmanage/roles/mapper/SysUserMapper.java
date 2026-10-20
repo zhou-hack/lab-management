@@ -35,6 +35,8 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
                    d.department_name AS departmentName,
                    u.enabled AS enabled,
                    (u.locked_until IS NOT NULL AND u.locked_until > UTC_TIMESTAMP(3)) AS locked,
+                   EXISTS(SELECT 1 FROM sys_user_role ur
+                          WHERE ur.user_id = u.id AND ur.role_id = 1 AND ur.deleted = 0 AND ur.enabled = 1) AS adminBound,
                    u.create_time AS createTime
             FROM sys_user u
             LEFT JOIN sys_department d ON d.id = u.department_id AND d.deleted = 0

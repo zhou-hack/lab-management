@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.labmanage.common.exception.BusinessException;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.utils.PageUtils;
+import com.labmanage.roles.dto.UserAdminRoleDTO;
 import com.labmanage.roles.dto.UserCreateDTO;
 import com.labmanage.roles.dto.UserEnabledDTO;
 import com.labmanage.roles.dto.UserPageQueryDTO;
@@ -158,6 +159,41 @@ public class SysUserServiceImpl implements SysUserService {
         user.setPasswordChangedAt(null);
         userMapper.updateById(user);
         // 重置立即生效：踢出该用户全部会话
+        authService.evictSession(id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateAdminRole(Long id, UserAdminRoleDTO dto) {
+        SysUser user = requireUser(id);
+        requireOpsAdminOperator(user);
+        // 绑定管理员角色赋予后台全集权限，须全校写范围防部门管理员提权（同 createAdmin）
+        scopeService.requireAllWrite();
+        if (!UserType.TEACHER.name().equals(user.getUserType())) {
+            throw new BusinessException(40000, "仅老师账号可绑定或解绑管理员角色");
+        }
+        // uk(user_id, role_id) 下逻辑删除行仍占位，重复绑定走恢复路径
+        SysUserRole existing = userRoleMapper.selectAnyByUserAndRole(id, RoleCode.ADMIN.getId());
+        if (Boolean.TRUE.equals(dto.bind())) {
+            if (existing != null && Integer.valueOf(0).equals(existing.getDeleted())) {
+                throw new BusinessException(40900, "已绑定管理员角色");
+            }
+            if (existing != null) {
+                userRoleMapper.restoreById(existing.getId());
+            } else {
+                SysUserRole userRole = new SysUserRole();
+                userRole.setUserId(id);
+                userRole.setRoleId(RoleCode.ADMIN.getId());
+                userRole.setEnabled(1);
+                userRoleMapper.insert(userRole);
+            }
+        } else {
+            if (existing == null || !Integer.valueOf(0).equals(existing.getDeleted())) {
+                throw new BusinessException(40900, "未绑定管理员角色");
+            }
+            userRoleMapper.deleteById(existing.getId());
+        }
+        // 角色变更立即生效：踢出该用户全部会话，重登按新持有角色装配
         authService.evictSession(id);
     }
 

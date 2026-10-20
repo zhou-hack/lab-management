@@ -151,7 +151,7 @@
         </el-table-column>
         <el-table-column
           label="操作"
-          width="200"
+          width="270"
           fixed="right"
         >
           <template #default="{ row }">
@@ -162,6 +162,15 @@
               @click="openEdit(row)"
             >
               编辑
+            </el-button>
+            <el-button
+              v-if="row.userType === 'TEACHER'"
+              v-permission="'system:user:bind_role'"
+              link
+              type="primary"
+              @click="toggleAdminRole(row)"
+            >
+              {{ row.adminBound ? '解绑管理员' : '绑定管理员' }}
             </el-button>
             <el-button
               v-permission="'system:user:reset_password'"
@@ -400,6 +409,7 @@ import {
   pageUsers,
   resetUserPassword,
   updateUser,
+  updateUserAdminRole,
   updateUserEnabled
 } from '@/api/system/user'
 import { formatInstant } from '@/utils/datetime'
@@ -550,6 +560,25 @@ async function toggleEnabled(row) {
   }
   await updateUserEnabled(row.id, disabling ? 0 : 1)
   ElMessage.success(disabling ? '已停用' : '已启用')
+  load()
+}
+
+// ---------- 绑定/解绑管理员角色 ----------
+async function toggleAdminRole(row) {
+  const unbinding = !!row.adminBound
+  try {
+    await ElMessageBox.confirm(
+      unbinding
+        ? `解绑后「${row.realName}」将失去管理员身份，其全部登录会话将立即退出，确定解绑吗？`
+        : `绑定后「${row.realName}」可在前台切换到管理员身份进入后台；其当前登录会话将立即退出，确定绑定吗？`,
+      '提示',
+      { type: 'warning', confirmButtonText: unbinding ? '解绑' : '绑定' }
+    )
+  } catch {
+    return
+  }
+  await updateUserAdminRole(row.id, !unbinding)
+  ElMessage.success(unbinding ? '已解绑管理员角色' : '已绑定管理员角色')
   load()
 }
 

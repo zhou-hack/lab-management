@@ -5,6 +5,7 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.labmanage.common.log.OperationLog;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
+import com.labmanage.roles.dto.UserAdminRoleDTO;
 import com.labmanage.roles.dto.UserCreateDTO;
 import com.labmanage.roles.dto.UserEnabledDTO;
 import com.labmanage.roles.dto.UserPageQueryDTO;
@@ -84,6 +85,15 @@ public class SystemUserController {
     public Result<Void> resetPassword(@PathVariable Long id, @Valid @RequestBody UserPasswordResetDTO dto) {
         StpUtil.checkSafe();
         sysUserService.resetPassword(id, dto);
+        return Result.success();
+    }
+
+    @Operation(summary = "绑定/解绑老师账号的管理员角色（变更踢出会话）")
+    @SaCheckPermission("system:user:bind_role")
+    @OperationLog(moduleCode = "system", actionCode = "system:user:bind_role", targetTable = "sys_user_role", targetId = "#id")
+    @PutMapping("/{id}/admin_role")
+    public Result<Void> updateAdminRole(@PathVariable Long id, @Valid @RequestBody UserAdminRoleDTO dto) {
+        sysUserService.updateAdminRole(id, dto);
         return Result.success();
     }
 }
