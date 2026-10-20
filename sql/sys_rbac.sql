@@ -89,7 +89,7 @@ CREATE TABLE sys_user (
     person_no           VARCHAR(64)  NULL                    COMMENT '学工号（唯一，删除后不复用）',
     department_id       BIGINT       NOT NULL                COMMENT '所属部门（→ sys_department.id）',
     password_hash       VARCHAR(255) NULL                    COMMENT '密码散列（带算法参数；管理员必填）',
-    password_changed_at DATETIME(3)  NULL                    COMMENT '最近改密时间（UTC，90 天强制更换依据）',
+    password_changed_at DATETIME(3)  NULL                    COMMENT '最近改密时间（UTC，为空表示初始/被重置密码，首登强制改密依据）',
     failed_login_count  INT          NOT NULL DEFAULT 0      COMMENT '连续登录失败次数（达 5 次锁定 30 分钟）',
     locked_until        DATETIME(3)  NULL                    COMMENT '锁定截止时间（UTC）',
     enabled             TINYINT      NOT NULL DEFAULT 1      COMMENT '启用：1正常 0停用',
@@ -323,7 +323,7 @@ INSERT INTO sys_role (id, role_code, role_name, enabled) VALUES
 (4, 'ASSISTANT', '老师助理', 1);
 
 -- 初始管理员账号（password_hash 为占位值，部署前必须替换为 BCrypt 密文并强制首登修改；
--- 密码规则：长度 ≥8 位且含数字+字母，90 天强制更换）
+-- 密码规则：长度 ≥8 位且含数字+字母，不设有效期）
 INSERT INTO sys_user (id, roster_id, user_type, real_name, account_name, phone, person_no,
                       department_id, password_hash, failed_login_count, enabled)
 VALUES (1, NULL, 'ADMIN', '系统管理员', 'admin', NULL, NULL,

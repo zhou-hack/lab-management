@@ -59,7 +59,7 @@
 
 ### 3.1 用户与角色分离
 
-- **用户类型（sys_user.user_type）**：STUDENT / TEACHER / ADMIN。决定登录方式与会话时长：学生/老师短信验证码登录、会话 2 小时；ADMIN 类型账密登录、会话 8 小时。
+- **用户类型（sys_user.user_type）**：STUDENT / TEACHER / ADMIN。决定登录方式：学生/老师短信验证码登录；ADMIN 类型账密登录。会话时长统一 8 小时（普通用户 2026-10-20 起由 2 小时放宽）。
 - **角色（sys_role.role_code）**：权限集合。主身份角色一人一值（sys_user_role 唯一行），ASSISTANT 是唯一可动态授予/回收的附加角色。
 - 用户类型与角色正交但受控：OPS_ADMIN 角色的账号 user_type 仍为 ADMIN（账密登录、8 小时会话），角色只决定权限集合。
 
@@ -207,9 +207,9 @@ assistant_grant_scope 表达授权权力，一单可含多种：
 | --- | --- | --- |
 | 登录方式 | 学生/老师短信验证码（首登匹配名单自动建档）；管理员账密 | AuthService |
 | 验证码 | 6 位数字，5 分钟有效，错误 5 次作废，60 秒重发间隔，日上限 | SmsCodeServiceImpl（内存存储+模拟通道，dev 返回 devCode） |
-| 密码 | ≥8 位含数字+字母，90 天强制更换（password_changed_at） | PUT /auth/password |
+| 密码 | ≥8 位含数字+字母；不设有效期，`password_changed_at` 为空（初始/被重置）时强制改密 | PUT /auth/password |
 | 锁定 | 连续 5 次密码错误锁 30 分钟（failed_login_count/locked_until），错误提示含剩余分钟 | AuthService |
-| 会话时长 | 学生/老师 2 小时，ADMIN 类型 8 小时（含 opsadmin） | StpUtil.login 按 user_type 设置 timeout |
+| 会话时长 | 学生/老师与 ADMIN 类型均为 8 小时（普通用户 2026-10-20 起由 2 小时放宽） | StpUtil.login 按 user_type 设置 timeout |
 | 二级确认 | 敏感操作（审批、报废处置等）先 POST /auth/password/confirm，通过后 Sa-Token 二级认证 300 秒内免再确认 | AuthService |
 | token 传输 | `Authorization: Bearer <token>`，前端存 sessionStorage | Axios 拦截器 |
 | 密码存储 | 仅 BCrypt 单向散列；admin/opsadmin 脚本为占位哈希，部署前必须替换并强制首登修改 | sys_rbac.sql / sys_ops_role.sql |

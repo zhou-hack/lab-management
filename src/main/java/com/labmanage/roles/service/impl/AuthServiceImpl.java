@@ -256,7 +256,7 @@ public class AuthServiceImpl implements AuthService {
     private LoginVO doLogin(SysUser user, boolean needSetPassword) {
         long timeout = UserType.ADMIN.name().equals(user.getUserType())
                 ? policyService.getInt("SESSION_TIMEOUT_ADMIN", "timeoutSeconds", 28800)
-                : policyService.getInt("SESSION_TIMEOUT_STUDENT_TEACHER", "timeoutSeconds", 7200);
+                : policyService.getInt("SESSION_TIMEOUT_STUDENT_TEACHER", "timeoutSeconds", 28800);
         StpUtil.login(user.getId(), new SaLoginParameter().setTimeout(timeout));
         List<String> roles = loadRoleCodes(user.getId());
         List<String> permissions = loadPermissionCodes(user.getId());
@@ -304,9 +304,8 @@ public class AuthServiceImpl implements AuthService {
         if (!UserType.ADMIN.name().equals(user.getUserType())) {
             return false;
         }
-        int expireDays = policyService.getInt("PASSWORD_EXPIRE_DAYS", "expireDays", 90);
-        Instant changedAt = user.getPasswordChangedAt();
-        return changedAt == null || changedAt.plus(Duration.ofDays(expireDays)).isBefore(Instant.now());
+        // 密码不设有效期（PASSWORD_EXPIRE_DAYS 策略已于 2026-10-20 移除），仅初始/被重置密码（changedAt 为空）强制首登修改
+        return user.getPasswordChangedAt() == null;
     }
 
     private SysUser currentUser() {

@@ -234,7 +234,7 @@ async function submit() {
   loading.value = true
   try {
     await store.login({ mode: mode.value, ...form })
-    // 强制改密（管理员密码到期 / 老师首登）优先于目标路由
+    // 强制改密（管理员首登/被重置 · 老师首登）优先于目标路由
     if (store.mustSetPassword) {
       router.push('/set_password')
       return

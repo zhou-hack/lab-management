@@ -152,8 +152,8 @@ space 目录及 space_campus / space_lab 两个页面菜单（ID 1000–1002）�
 实施规则：
 
 1. 连续 5 次密码错误锁定 30 分钟（`failed_login_count`/`locked_until`）；验证码 6 位数字、5 分钟有效、错误 5 次作废。
-2. 会话有效期按用户类型区分：学生/老师 2 小时、管理员 8 小时，登录时 `StpUtil.login(id, SaLoginParameter.setTimeout(...))` 设置。注意当前 `sa-token.timeout: 86400` 全局默认值与本规则不一致，roles 模块落地时修正。
-3. 90 天强制换密依据 `password_changed_at`；登录响应 `passwordChangeRequired=true` 时前端强制跳转改密页。
+2. 会话有效期按用户类型区分：学生/老师与管理员均为 8 小时（2026-10-20 起，普通用户由 2 小时放宽），登录时 `StpUtil.login(id, SaLoginParameter.setTimeout(...))` 设置。注意当前 `sa-token.timeout: 86400` 全局默认值与本规则不一致，roles 模块落地时修正。
+3. 密码不设有效期（PASSWORD_EXPIRE_DAYS 策略 2026-10-20 移除）；`password_changed_at` 为空（初始占位/被重置）时登录响应 `passwordChangeRequired=true`，前端强制跳转改密页。
 4. 首登建档事务：匹配有效名单（学工号+手机号）→ 创建 sys_user → 写入主身份 sys_user_role，角色由名单 `person_type` 派生，客户端不得指定。
 
 ---
