@@ -165,6 +165,27 @@ async function onUserCommand(command) {
 .admin_layout__menu {
   border-right: none;
   padding: 6px 0;
+  /* 菜单独立滚动区：固定高度 + 内部滚动。展开长菜单（如系统管理九个子项）时
+     不再撑高整个文档触发整页回流，消除展开瞬间的卡顿；
+     scrollbar-gutter 预留槽位，滚动条出现/消失不挤压菜单布局 */
+  height: calc(100vh - 56px);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--g4) transparent;
+}
+
+.admin_layout__menu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.admin_layout__menu::-webkit-scrollbar-thumb {
+  background: var(--g4);
+  border-radius: 3px;
+}
+
+.admin_layout__menu::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .admin_layout__menu_empty {

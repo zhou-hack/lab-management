@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -29,4 +30,12 @@ public interface LabBookingMapper extends BaseMapper<LabBooking> {
     @Select("SELECT COUNT(*) FROM lab_booking WHERE lab_id = #{labId} AND deleted = 0 "
             + "AND status IN ('PENDING', 'APPROVED')")
     long countActiveByLabId(@Param("labId") Long labId);
+
+    /**
+     * 超时未核对的待审批预约：PENDING 且开始时间已过（定时任务自动取消）。
+     * 限 200 条分批，避免单次扫描过大；按开始时间升序优先处理最早超时单。
+     */
+    @Select("SELECT * FROM lab_booking WHERE deleted = 0 AND status = 'PENDING' "
+            + "AND start_at <= #{now} ORDER BY start_at ASC LIMIT 200")
+    List<LabBooking> selectExpiredPending(@Param("now") Instant now);
 }

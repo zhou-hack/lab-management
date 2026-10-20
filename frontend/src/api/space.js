@@ -19,6 +19,21 @@ export function exportSpaces(params) {
   return request.get('/space/spaces/export', { params, responseType: 'blob' })
 }
 
+/** 下载导入模板（与导出同表头的空 CSV），返回 Blob */
+export function downloadImportTemplate() {
+  return request.get('/space/spaces/import/template', { responseType: 'blob' })
+}
+
+/**
+ * 场地批量导入（CSV/Excel，multipart 上传；部分成功）。
+ * resolve SpaceImportVO：{ total, successCount, failedCount, failures:[{rowNum,labName,reason,raw}] }
+ */
+export function importSpaces(file, onUploadProgress) {
+  const form = new FormData()
+  form.append('file', file)
+  return request.post('/space/spaces/import', form, { onUploadProgress })
+}
+
 /** 批量启停（target 仅 AVAILABLE/CLOSED）→ { updated, missing } */
 export function batchStatusSpaces(data) {
   return request.post('/space/spaces/batch_status', data)

@@ -9,6 +9,7 @@ import java.time.Instant;
  * <p>
  * runtimePhase 为派生展示字段（仅 APPROVED 有值）：UPCOMING 未开始 /
  * IN_USE 使用中 / FINISHED 已结束（按当前时间与预约起止比较，不落库）。
+ * checkinAt/checkoutAt 来自 document_event 的开门签到/结束清点记录。
  */
 public record BookingVO(
         String id,
@@ -23,6 +24,8 @@ public record BookingVO(
         String runtimePhase,
         String applicantId,
         String applicantName,
-        Instant createTime
+        Instant createTime,
+        Instant checkinAt,
+        Instant checkoutAt
 ) {
 }

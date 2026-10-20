@@ -7,6 +7,7 @@
 /** 设备物理状态 */
 export const EQUIPMENT_STATUS = {
   IDLE: { label: '空闲', pill: 'pill--ok' },
+  IN_USE: { label: '借出中', pill: 'pill--warn' },
   MAINTAINING: { label: '维护中', pill: 'pill--warn' },
   SCRAPPED: { label: '已报废', pill: 'pill--muted' }
 }
@@ -21,6 +22,29 @@ export const EQUIPMENT_STATUS_OPTIONS = Object.entries(EQUIPMENT_STATUS).map(([v
 export const VALUE_LEVEL = {
   NORMAL: { label: '普通', pill: 'pill--muted' },
   VALUABLE: { label: '贵重', pill: 'pill--warn' }
+}
+
+/** 设备使用申请单状态（三权级两级审批七态机） */
+export const BOOKING_STATUS = {
+  PENDING_TEACHER: { label: '待教师初审', pill: 'pill--warn' },
+  PENDING_ADMIN: { label: '待管理员终审', pill: 'pill--warn' },
+  APPROVED: { label: '已批准', pill: 'pill--ok' },
+  CHECKED_OUT: { label: '已借出', pill: 'pill--warn' },
+  RETURNED: { label: '已归还', pill: 'pill--muted' },
+  REJECTED: { label: '已驳回', pill: 'pill--danger' },
+  CANCELLED: { label: '已撤销', pill: 'pill--muted' }
+}
+
+/** 申请状态筛选项 */
+export const BOOKING_STATUS_OPTIONS = Object.entries(BOOKING_STATUS).map(([value, meta]) => ({
+  value,
+  label: meta.label
+}))
+
+/** 归还状态 */
+export const RETURN_CONDITION = {
+  NORMAL: { label: '完好', pill: 'pill--ok' },
+  DAMAGED: { label: '损坏', pill: 'pill--danger' }
 }
 
 /**

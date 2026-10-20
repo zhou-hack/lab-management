@@ -6,7 +6,7 @@
           设备管理
         </h2>
         <p class="t-sub">
-          型号按分类分组（分类目录已并入型号面板）· 台账按设备型号分组；点击面板头部展开或收起，侧栏菜单直达对应面板
+          型号按分类分组（分类目录已并入型号面板）· 台账按设备型号分组；默认双面板展开，点击面板头部可收起
         </p>
       </div>
       <el-button
@@ -64,8 +64,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, reactive, ref } from 'vue'
 import { Goods, Notebook } from '@element-plus/icons-vue'
 import ModelSection from '@/views/admin/equipment/ModelManage.vue'
 import AssetSection from '@/views/admin/equipment/AssetManage.vue'
@@ -75,7 +74,7 @@ import AssetSection from '@/views/admin/equipment/AssetManage.vue'
  * - 分类目录已并入型号面板的「管理分类」抽屉，不再单独成页
  * - 型号按所属分类分组折叠，台账按设备型号分组折叠；面板可各自展开收起、允许同时展开，
  *   收起时子组件 DOM 保留，查询条件与分页状态不丢失
- * - 侧栏两个子菜单路由（model/asset）共用本页，进入时自动展开对应面板并滚动定位
+ * - 侧栏单菜单 /admin/equipment 直达本页，默认双面板全展开
  * - 子组件首次展开才请求数据（懒加载），计数由子组件上报展示于面板头
  */
 
@@ -98,46 +97,17 @@ const panels = [
   }
 ]
 
-const PANEL_BY_PATH = {
-  '/admin/equipment/model': 'model',
-  '/admin/equipment/asset': 'asset'
-}
-
-const route = useRoute()
-
 /** 面板计数（子组件上报；null 表示未加载） */
 const counts = reactive({ model: null, asset: null })
 
-const activePanels = ref([PANEL_BY_PATH[route.path] || 'model'])
+/** 单页承载型号与台账，默认双面板全展开 */
+const activePanels = ref(panels.map((p) => p.key))
 
 const allOpen = computed(() => activePanels.value.length === panels.length)
 
 function toggleAll() {
   activePanels.value = allOpen.value ? [] : panels.map((p) => p.key)
 }
-
-/** 路由进入/切换时展开对应面板并滚动定位（侧栏菜单直达体验） */
-function focusPanel(key) {
-  if (!activePanels.value.includes(key)) {
-    activePanels.value.push(key)
-  }
-  nextTick(() => {
-    document
-      .querySelector(`[data-panel="${key}"]`)
-      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  })
-}
-
-watch(
-  () => route.path,
-  (path) => {
-    const key = PANEL_BY_PATH[path]
-    if (key) {
-      focusPanel(key)
-    }
-  },
-  { immediate: true }
-)
 </script>
 
 <style scoped>

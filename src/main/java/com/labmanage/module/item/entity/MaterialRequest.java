@@ -3,6 +3,7 @@ package com.labmanage.module.item.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.labmanage.common.core.BaseEntity;
 import com.labmanage.module.item.enums.MaterialRequestStatus;
+import com.labmanage.module.item.enums.RequestType;
 
 import java.time.Instant;
 
@@ -18,10 +19,10 @@ public class MaterialRequest extends BaseEntity {
     /** 领用实验室 ID（空间模块建成前允许 NULL） */
     private Long labId;
 
-    /** 归属老师 ID（登录模块接入后由会话写入） */
+    /** 归属老师 ID（登录模块接入后由会话写入；PROXY 时代理代领绑定的责任老师，取源申领单归属老师） */
     private Long ownerTeacherId;
 
-    /** 经办人 ID（助理代领时为助理本人） */
+    /** 经办人 ID（学生代理代领时为代理学生本人） */
     private Long operatorId;
 
     /** 命中的助理授权 ID */
@@ -44,6 +45,12 @@ public class MaterialRequest extends BaseEntity {
 
     /** 用途 */
     private String purpose;
+
+    /** 申领类型：SELF 本人申领 / PROXY 学生代理代领 */
+    private RequestType requestType;
+
+    /** 源申领单 ID（PROXY 时引用的老师已审核通过的申领单） */
+    private Long sourceRequestId;
 
     /** 状态 */
     private MaterialRequestStatus status;
@@ -136,6 +143,22 @@ public class MaterialRequest extends BaseEntity {
         this.purpose = purpose;
     }
 
+    public RequestType getRequestType() {
+        return requestType;
+    }
+
+    public void setRequestType(RequestType requestType) {
+        this.requestType = requestType;
+    }
+
+    public Long getSourceRequestId() {
+        return sourceRequestId;
+    }
+
+    public void setSourceRequestId(Long sourceRequestId) {
+        this.sourceRequestId = sourceRequestId;
+    }
+
     public MaterialRequestStatus getStatus() {
         return status;
     }
@@ -154,6 +177,7 @@ public class MaterialRequest extends BaseEntity {
     public boolean cancellable() {
         return status == MaterialRequestStatus.DRAFT
                 || status == MaterialRequestStatus.PENDING
+                || status == MaterialRequestStatus.TEACHER_APPROVED
                 || status == MaterialRequestStatus.APPROVED
                 || status == MaterialRequestStatus.PARTIALLY_FULFILLED;
     }

@@ -4,10 +4,17 @@
     filterable
     remote
     clearable
+    style="min-width: 180px"
+    popper-class="item-select-popper"
     :remote-method="searchOptions"
     :loading="searching"
     :placeholder="placeholder"
   >
+    <el-option
+      v-if="allOption"
+      :label="allLabel"
+      value=""
+    />
     <el-option
       v-for="l in options"
       :key="l.id"
@@ -24,11 +31,14 @@ import { getStockLocation, pageLocations } from '@/api/item'
 /**
  * 库位远程搜索选择器
  * 下拉按关键词远程搜索（一次 20 条），替代一次性预取全量库位；
- * 编辑场景预置 ID 时自动拉取详情回显名称
+ * 编辑场景预置 ID 时自动拉取详情回显名称；
+ * 工具栏筛选场景传 allOption 在首部显示「全部」选项（选中即清空过滤）
  */
 const model = defineModel({ type: String, default: '' })
 defineProps({
-  placeholder: { type: String, default: '输入编码/名称搜索库位' }
+  placeholder: { type: String, default: '输入编码/名称搜索库位' },
+  allOption: { type: Boolean, default: false },
+  allLabel: { type: String, default: '全部库位' }
 })
 
 const options = ref([])

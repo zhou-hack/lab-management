@@ -9,11 +9,15 @@ import com.labmanage.module.equipment.dto.AssetPageQuery;
 import com.labmanage.module.equipment.dto.AssetTransferRequest;
 import com.labmanage.module.equipment.dto.AssetUpdateRequest;
 import com.labmanage.module.equipment.service.AssetService;
+import com.labmanage.module.equipment.vo.AssetImportResultVO;
 import com.labmanage.module.equipment.vo.AssetVO;
 import com.labmanage.module.equipment.vo.CustodianOptionVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,8 +25,15 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -88,8 +99,31 @@ public class AssetController {
     @Operation(summary = "价值定级")
     @SaCheckPermission("equipment:asset:classify")
     @PutMapping("/{id}/classification")
-    public Result<Void> classify(@PathVariable String id, @Valid @RequestBody AssetClassifyRequest request) {
+    public Result<Void> classify(String id, @Valid @RequestBody AssetClassifyRequest request) {
         assetService.classify(id, request);
         return Result.success();
+    }
+
+    @Operation(summary = "台账导出（xlsx，按当前筛选全量导出，导出文件可作导入模板）")
+    @SaCheckPermission("equipment:asset:export")
+    @GetMapping("/export")
+    public ResponseEntity<byte[]> export(AssetPageQuery query) {
+        byte[] bytes = assetService.export(query);
+        String stamp = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
+                .withZone(ZoneId.of("Asia/Shanghai")).format(Instant.now());
+        String filename = URLEncoder.encode("设备台账_" + stamp + ".xlsx", StandardCharsets.UTF_8)
+                .replace("+", "%20");
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + filename)
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(bytes);
+    }
+
+    @Operation(summary = "台账导入（xlsx，按表头列名解析；行级错误跳过并在结果中报告）")
+    @SaCheckPermission("equipment:asset:import")
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<AssetImportResultVO> importAssets(@RequestParam("file") MultipartFile file) {
+        return Result.success(assetService.importAssets(file));
     }
 }

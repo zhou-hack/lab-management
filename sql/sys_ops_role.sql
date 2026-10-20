@@ -28,14 +28,19 @@ VALUES (2, NULL, 'ADMIN', '运维管理员', 'opsadmin', NULL, NULL,
 -- 账号角色绑定
 INSERT IGNORE INTO sys_user_role (id, user_id, role_id, enabled) VALUES (2, 2, 5, 1);
 
--- 角色权限绑定：库内全部启用权限（动态 ID 段 5000+，重复执行幂等）
-INSERT IGNORE INTO sys_role_permission (id, role_id, permission_id, enabled)
+-- 角色权限/菜单绑定：库内全部启用项（动态 ID 段 5000+）。
+-- 先删后插而非 INSERT IGNORE：ROW_NUMBER 随权限集合变化，中途新增权限后
+-- IGNORE 会因 ID 撞车跳过新权限；整组重建保证每次执行结果一致，
+-- 后续模块新增权限后重跑本脚本即可同步绑定。
+DELETE FROM sys_role_permission WHERE role_id = 5;
+DELETE FROM sys_role_menu WHERE role_id = 5;
+
+INSERT INTO sys_role_permission (id, role_id, permission_id, enabled)
 SELECT 5000 + ROW_NUMBER() OVER (ORDER BY id), 5, id, 1
 FROM sys_permission
 WHERE enabled = 1 AND deleted = 0;
 
--- 角色菜单绑定：库内全部启用菜单（动态 ID 段 5000+，重复执行幂等）
-INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, enabled)
+INSERT INTO sys_role_menu (id, role_id, menu_id, enabled)
 SELECT 5000 + ROW_NUMBER() OVER (ORDER BY id), 5, id, 1
 FROM sys_menu
 WHERE enabled = 1 AND deleted = 0;

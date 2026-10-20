@@ -1,6 +1,7 @@
 package com.labmanage.module.item.service;
 
 import com.labmanage.common.result.PageResult;
+import com.labmanage.module.item.dto.StockBalanceExportQuery;
 import com.labmanage.module.item.dto.StockBalanceQuery;
 import com.labmanage.module.item.dto.StockBalanceWarningUpdateDTO;
 import com.labmanage.module.item.dto.StockMovementQuery;
@@ -9,6 +10,8 @@ import com.labmanage.module.item.vo.StockBalanceVO;
 import com.labmanage.module.item.vo.StockMovementVO;
 import com.labmanage.module.item.vo.StockWarningVO;
 
+import java.util.List;
+
 /**
  * 库存查询服务（余额、台账、预警）与预警配置
  */
@@ -16,6 +19,9 @@ public interface StockQueryService {
 
     /** 库存余额分页查询（含预警状态与建议补货量） */
     PageResult<StockBalanceVO> pageBalance(StockBalanceQuery query);
+
+    /** 库存余额全量列表（导出用；镜像分页筛选，不分页） */
+    List<StockBalanceVO> listBalanceForExport(StockBalanceExportQuery query);
 
     /** 库存台账（流水）分页查询 */
     PageResult<StockMovementVO> pageMovement(StockMovementQuery query);

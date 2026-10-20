@@ -3,9 +3,12 @@ package com.labmanage.module.item.service;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.module.item.dto.StocktakeCountDTO;
 import com.labmanage.module.item.dto.StocktakeCreateDTO;
+import com.labmanage.module.item.dto.StocktakeExportQuery;
 import com.labmanage.module.item.dto.StocktakeQuery;
 import com.labmanage.module.item.vo.StocktakeDetailVO;
 import com.labmanage.module.item.vo.StocktakeVO;
+
+import java.util.List;
 
 /**
  * 盘点服务（建单快照 → 开始冻结 → 实盘录入 → 提交复核生成调账 → 审批过账解冻）
@@ -17,6 +20,9 @@ public interface StocktakeService {
 
     /** 分页查询 */
     PageResult<StocktakeVO> page(StocktakeQuery query);
+
+    /** 全量列表（导出用；镜像分页筛选，不分页） */
+    List<StocktakeVO> listForExport(StocktakeExportQuery query);
 
     /** 详情（含盘点行） */
     StocktakeDetailVO get(String id);

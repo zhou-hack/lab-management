@@ -3,6 +3,7 @@ package com.labmanage.module.item.service.impl;
 import com.labmanage.common.exception.BusinessException;
 import com.labmanage.module.item.dto.StocktakeCountDTO;
 import com.labmanage.module.item.dto.StocktakeCreateDTO;
+import com.labmanage.module.item.dto.StocktakeExportQuery;
 import com.labmanage.module.item.entity.StockBalance;
 import com.labmanage.module.item.entity.StockDocument;
 import com.labmanage.module.item.entity.StockDocumentLine;
@@ -21,6 +22,7 @@ import com.labmanage.module.item.mapper.StockLocationMapper;
 import com.labmanage.module.item.mapper.StocktakeLineMapper;
 import com.labmanage.module.item.mapper.StocktakeMapper;
 import com.labmanage.module.item.service.StockDocumentService;
+import com.labmanage.module.item.vo.StocktakeVO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -132,6 +134,32 @@ class StocktakeServiceImplTest {
     }
 
     // ------------------------------------------------------------------ create
+
+    // ------------------------------------------------------------- listForExport
+
+    @Test
+    void listForExportMapsVosWithLocationNames() {
+        Stocktake counting = stocktake(601L, StocktakeStatus.COUNTING);
+        Stocktake cancelled = stocktake(602L, StocktakeStatus.CANCELLED);
+        when(stocktakeMapper.selectList(any())).thenReturn(List.of(counting, cancelled));
+        StockLocation named = location(100L);
+        named.setLocationName("一号实验室 A 区药品柜");
+        when(locationMapper.selectByIds(anyCollection())).thenReturn(List.of(named));
+
+        StocktakeExportQuery query = new StocktakeExportQuery();
+        query.setLocationId("100");
+        query.setStatus(StocktakeStatus.COUNTING);
+
+        List<StocktakeVO> vos = service.listForExport(query);
+
+        assertEquals(2, vos.size());
+        assertEquals("601", vos.get(0).id());
+        assertEquals("一号实验室 A 区药品柜", vos.get(0).locationName());
+        assertEquals(StocktakeStatus.COUNTING, vos.get(0).status());
+        assertEquals("602", vos.get(1).id());
+        assertEquals(StocktakeStatus.CANCELLED, vos.get(1).status());
+    }
+
 
     @Test
     void createSnapshotsAllBalances() {

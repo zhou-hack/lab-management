@@ -11,6 +11,7 @@ import com.labmanage.module.space.enums.SpaceType;
 import com.labmanage.module.space.service.SpaceService;
 import com.labmanage.module.space.vo.SpaceBatchStatusVO;
 import com.labmanage.module.space.vo.SpaceDetailVO;
+import com.labmanage.module.space.vo.SpaceImportVO;
 import com.labmanage.module.space.vo.SpaceListVO;
 import com.labmanage.module.space.vo.SpaceOptionVO;
 import com.labmanage.module.space.vo.SpaceStatsVO;
@@ -28,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -69,6 +71,28 @@ public class SpaceController {
     @SaCheckPermission("space:space:update")
     public Result<SpaceBatchStatusVO> batchStatus(@Valid @RequestBody SpaceBatchStatusDTO dto) {
         return Result.success(spaceService.batchStatus(dto));
+    }
+
+    /** 导入模板下载（表头与导出完全一致的空 CSV，UTF-8 BOM） */
+    @GetMapping("/import/template")
+    @SaCheckPermission("space:space:create")
+    public ResponseEntity<byte[]> importTemplate() {
+        byte[] csv = spaceService.importTemplateCsv();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=spaces_import_template.csv")
+                .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                .body(csv);
+    }
+
+    /**
+     * 场地批量导入（CSV/Excel，单文件 ≤10MB、≤5000 数据行；部分成功）。
+     * 权限复用 space:space:create；仅写 lab 表，不影响预约等下游业务。
+     */
+    @PostMapping("/import")
+    @SaCheckPermission("space:space:create")
+    public Result<SpaceImportVO> importSpaces(@RequestParam("file") MultipartFile file) {
+        return Result.success(spaceService.importSpaces(file));
     }
 
     @GetMapping("/options")

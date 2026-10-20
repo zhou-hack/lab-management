@@ -18,6 +18,9 @@ public class StockBalanceQuery extends BasePageQuery {
     @Schema(description = "物料 ID", example = "1234567890123456789")
     private String skuId;
 
+    @Schema(description = "物料分类 ID（按物料归属分类过滤）", example = "1234567890123456789")
+    private String categoryId;
+
     public String getLabId() {
         return labId;
     }
@@ -40,5 +43,13 @@ public class StockBalanceQuery extends BasePageQuery {
 
     public void setSkuId(String skuId) {
         this.skuId = skuId;
+    }
+
+    public String getCategoryId() {
+        return categoryId;
+    }
+
+    public void setCategoryId(String categoryId) {
+        this.categoryId = categoryId;
     }
 }

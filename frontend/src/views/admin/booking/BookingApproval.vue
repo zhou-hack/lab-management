@@ -79,6 +79,7 @@
         >
           <template #default="{ row }">
             <el-button
+              v-permission="'booking:lab:approve'"
               link
               type="success"
               @click="onApprove(row)"
@@ -86,6 +87,7 @@
               批准
             </el-button>
             <el-button
+              v-permission="'booking:lab:approve'"
               link
               type="danger"
               @click="onReject(row)"

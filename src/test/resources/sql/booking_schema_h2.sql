@@ -8,6 +8,9 @@
 
 DROP TABLE IF EXISTS lab_slot;
 DROP TABLE IF EXISTS lab_booking;
+DROP TABLE IF EXISTS document_event;
+DROP TABLE IF EXISTS approval_task;
+DROP TABLE IF EXISTS biz_document;
 DROP TABLE IF EXISTS lab;
 DROP TABLE IF EXISTS sys_user;
 
@@ -102,3 +105,76 @@ CREATE TABLE lab_slot (
 );
 
 CREATE INDEX idx_lab_slot_conflict ON lab_slot (lab_id, released_at, start_at, end_at);
+
+-- ============================================================================
+-- 权级流程三表（对应 sql/booking_flow_deploy.sql，H2 不建外键）
+-- ============================================================================
+
+CREATE TABLE biz_document (
+    id              BIGINT       NOT NULL,
+    document_no     VARCHAR(64)  NOT NULL,
+    document_type   VARCHAR(32)  NOT NULL,
+    owner_user_id   BIGINT       NOT NULL,
+    department_id   BIGINT       NOT NULL,
+    policy_id       BIGINT       NULL,
+    submitted_at    TIMESTAMP(3) NULL,
+    idempotency_key VARCHAR(128) NOT NULL,
+    create_time     TIMESTAMP(3) NOT NULL,
+    update_time     TIMESTAMP(3) NOT NULL,
+    deleted         TINYINT      NOT NULL DEFAULT 0,
+    create_user_id  BIGINT       NULL,
+    update_user_id  BIGINT       NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_biz_document_no UNIQUE (document_no),
+    CONSTRAINT uk_biz_document_idem UNIQUE (owner_user_id, document_type, idempotency_key)
+);
+
+CREATE TABLE approval_task (
+    id                     BIGINT       NOT NULL,
+    document_id            BIGINT       NOT NULL,
+    stage_code             VARCHAR(64)  NOT NULL,
+    sequence_no            INT          NOT NULL,
+    round_no               INT          NOT NULL,
+    required_role          VARCHAR(64)  NOT NULL,
+    assigned_user_id       BIGINT       NULL,
+    assigned_department_id BIGINT       NULL,
+    status                 VARCHAR(32)  NOT NULL,
+    available_at           TIMESTAMP(3) NOT NULL,
+    remind_at              TIMESTAMP(3) NULL,
+    escalate_at            TIMESTAMP(3) NULL,
+    timeout_at             TIMESTAMP(3) NULL,
+    timeout_action         VARCHAR(32)  NOT NULL,
+    decided_by             BIGINT       NULL,
+    decided_at             TIMESTAMP(3) NULL,
+    decision_comment       CLOB         NULL,
+    create_time            TIMESTAMP(3) NOT NULL,
+    update_time            TIMESTAMP(3) NOT NULL,
+    deleted                TINYINT      NOT NULL DEFAULT 0,
+    create_user_id         BIGINT       NULL,
+    update_user_id         BIGINT       NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_approval_task UNIQUE (document_id, stage_code, sequence_no, round_no)
+);
+
+CREATE TABLE document_event (
+    id              BIGINT       NOT NULL,
+    document_id     BIGINT       NOT NULL,
+    event_type      VARCHAR(32)  NOT NULL,
+    from_status     VARCHAR(32)  NULL,
+    to_status       VARCHAR(32)  NULL,
+    actor_id        BIGINT       NULL,
+    actor_type      VARCHAR(32)  NOT NULL,
+    occurred_at     TIMESTAMP(3) NOT NULL,
+    reason          CLOB         NULL,
+    task_id         BIGINT       NULL,
+    request_key     VARCHAR(128) NOT NULL,
+    create_time     TIMESTAMP(3) NOT NULL,
+    update_time     TIMESTAMP(3) NOT NULL,
+    deleted         TINYINT      NOT NULL DEFAULT 0,
+    create_user_id  BIGINT       NULL,
+    update_user_id  BIGINT       NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_document_event UNIQUE (document_id, request_key)
+);
+
+CREATE INDEX idx_document_event_type ON document_event (document_id, event_type, occurred_at);

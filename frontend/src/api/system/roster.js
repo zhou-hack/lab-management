@@ -28,3 +28,20 @@ export function updateRoster(id, data) {
 export function updateRosterEnabled(id, enabled) {
   return request.put(`/system/rosters/${id}/enabled`, { enabled })
 }
+
+/** 导出名单 CSV（Blob，筛选条件同分页列表；大结果集放宽超时） */
+export function exportRosters(params) {
+  return request.get('/system/rosters/export', { params, responseType: 'blob', timeout: 60000 })
+}
+
+/** 下载批量导入模板 CSV（Blob） */
+export function downloadRosterImportTemplate() {
+  return request.get('/system/rosters/import_template', { responseType: 'blob' })
+}
+
+/** 批量导入名单 CSV（multipart，部分成功；逐行入库放宽超时）→ 导入结果 RosterImportResultVO */
+export function importRosters(file) {
+  const form = new FormData()
+  form.append('file', file)
+  return request.post('/system/rosters/import', form, { timeout: 60000 })
+}

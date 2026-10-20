@@ -5,9 +5,12 @@
         v-model="query.movementType"
         clearable
         placeholder="全部类型"
-        class="w140"
         @change="pager.search"
       >
+        <el-option
+          label="全部类型"
+          value=""
+        />
         <el-option
           v-for="(cfg, value) in movementTypeMap"
           :key="value"
@@ -19,9 +22,12 @@
         v-model="query.status"
         clearable
         placeholder="全部状态"
-        class="w140"
         @change="pager.search"
       >
+        <el-option
+          label="全部状态"
+          value=""
+        />
         <el-option
           v-for="(cfg, value) in documentStatusMap"
           :key="value"

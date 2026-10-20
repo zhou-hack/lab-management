@@ -12,11 +12,13 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 物料申领单审批 DTO（逐行写批准量；未指定的行按申请量批准）
+ * 物料申领单审批 DTO（逐行写批准量；未指定的行：老师审核按申请量批准，
+ * 管理员终审保持既有批准量，代领行尚未写入批准量时按申请量）
  */
 @Schema(description = "物料申领单审批参数")
 public record MaterialRequestApproveDTO(
-        @Schema(description = "行批准量（为空时全部行按申请量批准）")
+        @Schema(description = "行批准量（为空时：老师审核全部行按申请量批准；"
+                + "管理员终审保持既有批准量，代领行按申请量）")
         List<@Valid ApproveLineDTO> lines
 ) {
 

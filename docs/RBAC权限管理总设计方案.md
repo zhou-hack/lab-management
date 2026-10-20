@@ -71,7 +71,7 @@
 | TEACHER | 2 | 授课老师 | 静态绑定助理授权 3 项（23-25）+ 业务模块增量 | 名单首登自动建档派生 | 本人 + 课程名单计算，不可登记范围行 |
 | STUDENT | 3 | 在校学生 | 业务模块增量 | 名单首登自动建档派生 | 仅本人数据 |
 | ASSISTANT | 4 | 老师助理（附加角色） | 不持久化，由有效 assistant_grant 动态计算 | 老师授权产生，到期/撤销自动还原 | 授权范围（OFFERING/LAB + ISSUE/RETURN） |
-| OPS_ADMIN | 5 | 最高级运维管理员 | 静态绑定全部权限（当前 39 项：system 1-27 + space 1000-1011；后续模块新增权限随各自脚本同步绑定） | 仅 SQL 预置（sql/sys_ops_role.sql），页面不可创建 | 不受范围约束（面向全系统数据与配置；实现层豁免见 SysScopeServiceImpl.isOpsAdmin） |
+| OPS_ADMIN | 5 | 最高级运维管理员 | 静态绑定全部权限（当前 40 项：system 1-28 + space 1000-1011；后续模块新增权限随各自脚本同步绑定） | 仅 SQL 预置（sql/sys_ops_role.sql），页面不可创建；其权限绑定锁定不可页面调整（40900），其余 4 个预置角色的权限绑定可由运维管理员整集替换（system:role:assign） | 不受范围约束（面向全系统数据与配置；实现层豁免见 SysScopeServiceImpl.isOpsAdmin） |
 
 层级关系：OPS_ADMIN 为最高级运维角色，普通 ADMIN 无法通过任何页面操作创建或提升账号为 OPS_ADMIN；ASSISTANT 附加在 STUDENT 之上，授权期内同时持有 STUDENT + ASSISTANT。
 
@@ -126,7 +126,7 @@
 | 助理授权创建 | 踢学生会话，重登装配 ASSISTANT | AssistantGrantServiceImpl.create |
 | 助理授权撤销 | 踢学生会话，助理身份随重登消失 | AssistantGrantServiceImpl.revoke |
 | 数据范围增删 | 范围实时查询无缓存，无需踢会话 | SysScopeService 直查 sys_user_data_scope |
-| 角色权限调整（一期只读，不开放） | 预留：踢该角色全部用户会话 | 一期无入口 |
+| 角色权限调整 | ✅ 已实现（OPS_ADMIN 整集替换，锁 OPS_ADMIN 角色）：踢该角色全部用户会话（含 ASSISTANT 动态持有者） | SysRoleServiceImpl.assignPermissions → evictRoleHolders |
 
 ### 4.4 前端镜像层
 
@@ -278,9 +278,9 @@ RBAC 核心 11 表（sql/sys_rbac.sql）：sys_department、sys_person_roster、
 | --- | --- |
 | 认证链路（登录/验证码/首登建档/profile/改密/二级确认/注销） | ✅ 已落地并验证 |
 | 锁定限流、会话分时长、动态 ASSISTANT 装配 | ✅ 已落地并验证 |
-| 用户/名单/组织/角色只读/数据范围/预约限制/操作日志/参数配置 | ✅ 已落地并验证 |
+| 用户/名单（含 CSV 导出与批量导入）/组织/角色只读/数据范围/预约限制/操作日志/参数配置 | ✅ 已落地并验证 |
 | 助理授权（创建/撤销/审计 + 权限缓存失效闭环） | ✅ 已落地并验证（范围表已建，业务接入待分组 B→E） |
-| OPS_ADMIN 运维角色 | ✅ 已落地并验证；2026-10-15 由运维子集调整为全部权限（39 项绑定 + ADMIN 菜单集，实况验证通过） |
+| OPS_ADMIN 运维角色 | ✅ 已落地并验证；2026-10-15 由运维子集调整为全部权限；2026-10-17 增至 42 项并新增角色权限整集替换（system:role:assign，锁 OPS_ADMIN 角色） |
 | 敏感端点二级认证强制执行（checkSafe + 40101 + 前端确认弹窗重试） | ✅ 已落地并验证（策略发布等敏感端点接入） |
 | 空间模块（校区/楼栋/实验室/开放规则 + 空间数据范围 CAMPUS/BUILDING/LAB） | ✅ 已落地并验证（27/27 项 E2E，权限 ID 1000–1011） |
 | course/schedule 教学基础与 asset/booking/item/maintain/report 权限登记 | ⬜ 随分组 B→E |

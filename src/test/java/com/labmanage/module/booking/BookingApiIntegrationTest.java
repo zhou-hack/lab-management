@@ -336,6 +336,35 @@ class BookingApiIntegrationTest {
     // ------------------------------------------------------------------ 取消
 
     @Test
+    @DisplayName("越权拦截：教师（无 booking:lab:approve）直接调用批准/驳回接口均 40300，预约状态不变")
+    void approveReject_forbiddenForTeacher() throws Exception {
+        // 待审批单 A：教师尝试越权批准
+        JsonNode a = createBookingOn("2026-12-17", teacherToken);
+        String idA = a.path("data").path("id").asText();
+        JsonNode approveDenied = post("/api/v1/booking/labs/" + idA + "/approve", null, teacherToken);
+        assertThat(approveDenied.path("code").asInt()).isEqualTo(40300);
+
+        // 待审批单 B：教师尝试越权驳回（即便带了原因也拒绝）
+        JsonNode b = createBookingOn("2026-12-18", teacherToken);
+        String idB = b.path("data").path("id").asText();
+        JsonNode rejectDenied = post("/api/v1/booking/labs/" + idB + "/reject",
+                "{\"reason\": \"教师越权尝试驳回\"}", teacherToken);
+        assertThat(rejectDenied.path("code").asInt()).isEqualTo(40300);
+
+        // 两单仍为 PENDING，且驳回单没有写入任何驳回原因
+        assertThat(get("/api/v1/booking/labs/" + idA, teacherToken)
+                .path("data").path("status").asText()).isEqualTo("PENDING");
+        JsonNode detailB = get("/api/v1/booking/labs/" + idB, teacherToken);
+        assertThat(detailB.path("data").path("status").asText()).isEqualTo("PENDING");
+        assertThat(detailB.path("data").path("rejectReason").isNull()
+                || detailB.path("data").path("rejectReason").isMissingNode()).isTrue();
+
+        // 管理员仍可正常审批单 A，证明拦截按权限而非接口故障
+        assertThat(post("/api/v1/booking/labs/" + idA + "/approve", null, adminToken)
+                .path("code").asInt()).isZero();
+    }
+
+    @Test
     @DisplayName("取消失败（非申请人本人）：40300")
     void cancel_byNonApplicant() throws Exception {
         JsonNode created = createBookingOn("2026-12-15", teacherToken);

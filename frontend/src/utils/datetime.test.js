@@ -8,6 +8,7 @@ import {
   shanghaiDayRange,
   shanghaiLocalToIso,
   todayShanghai,
+  toShOffsetIso,
   toUtcIso
 } from './datetime'
 
@@ -116,5 +117,21 @@ describe('UTC↔上海往返', () => {
   it('往返一致', () => {
     const utc = toUtcIso('2026-03-01 08:30:00')
     expect(formatInstant(utc, { withSeconds: true })).toBe('2026-03-01 08:30:00')
+  })
+})
+
+describe('toShOffsetIso', () => {
+  it('Date 按上海墙钟输出 +08:00 偏移入参', () => {
+    expect(toShOffsetIso(new Date('2026-10-13T01:00:00.000Z'))).toBe('2026-10-13T09:00:00+08:00')
+  })
+
+  it('UTC 16:00 输出为上海次日 00:00（跨日进位）', () => {
+    expect(toShOffsetIso(new Date('2026-10-13T16:00:00.000Z'))).toBe('2026-10-14T00:00:00+08:00')
+  })
+
+  it('非法输入返回 null', () => {
+    expect(toShOffsetIso(null)).toBeNull()
+    expect(toShOffsetIso('2026-10-13T09:00:00Z')).toBeNull()
+    expect(toShOffsetIso(new Date('invalid'))).toBeNull()
   })
 })

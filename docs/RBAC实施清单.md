@@ -32,16 +32,17 @@
 
 | permission_code | 名称 | 归属角色 |
 | --- | --- | --- |
-| system:user:list / get / create / update / enable | 用户管理 | ADMIN |
-| system:roster:list / create / update / enable | 预录名单管理 | ADMIN |
-| system:department:list / create / update / enable | 组织管理 | ADMIN |
-| system:role:list | 角色与权限查看（一期角色预置只读） | ADMIN |
-| system:scope:list / grant | 数据范围查看 / 授权 | ADMIN |
-| system:restriction:list / create / revoke | 预约限制（手动冻结/撤销） | ADMIN |
-| system:log:list | 操作日志查询 | ADMIN |
-| system:policy:list / publish | 策略参数查看 / 发布 | ADMIN |
-| system:grant:list / create / revoke | 助理授权（老师本人） | TEACHER |
-| system:grant:audit | 助理授权全局审计 | ADMIN |
+| system:user:list / get / create / update / enable / reset_password | 用户管理 | ADMIN / OPS_ADMIN（createAdmin 固定绑 ADMIN 角色且调用方须全校写；OPS_ADMIN 账号仅 OPS_ADMIN 本人可编辑/启停/重置） |
+| system:roster:list / create / update / enable / export / import | 预录名单管理（export 导出 CSV 复用列表筛选；import 批量导入 CSV 部分成功、需二级认证） | ADMIN / OPS_ADMIN |
+| system:department:list / create / update / enable | 组织管理 | ADMIN / OPS_ADMIN |
+| system:role:list | 角色与权限查看（角色仍 SQL 预置不可增删） | ADMIN / OPS_ADMIN |
+| system:role:assign | 调整角色权限（整集替换 + 踢持有者会话；锁 OPS_ADMIN 角色） | 仅 OPS_ADMIN |
+| system:scope:list / grant | 数据范围查看 / 授权 | ADMIN / OPS_ADMIN |
+| system:restriction:list / create / revoke | 预约限制（手动冻结/撤销） | ADMIN / OPS_ADMIN |
+| system:log:list | 操作日志查询 | ADMIN / OPS_ADMIN |
+| system:policy:list / publish | 策略参数查看 / 发布 | ADMIN / OPS_ADMIN |
+| system:grant:list / create / revoke | 助理授权（老师本人） | TEACHER / OPS_ADMIN |
+| system:grant:audit | 助理授权全局审计 | ADMIN / OPS_ADMIN |
 
 ### 2.2 space 模块（随空间脚本登记）
 

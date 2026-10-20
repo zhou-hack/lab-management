@@ -24,14 +24,32 @@ const viewModules = {
   BookingAdminList: () => import('@/views/admin/booking/BookingList.vue'),
   BookingApproval: () => import('@/views/admin/booking/BookingApproval.vue'),
   BookingUserList: () => import('@/views/booking/BookingList.vue'),
-  // equipment 模块（型号/台账两菜单共用整合页，分类并入型号面板抽屉）
+  // equipment 模块（单页定稿：菜单 EquipmentManage；旧两菜单 key 保留兼容）
+  EquipmentManage: () => import('@/views/admin/equipment/EquipmentManage.vue'),
   EquipmentModel: () => import('@/views/admin/equipment/EquipmentManage.vue'),
   EquipmentAsset: () => import('@/views/admin/equipment/EquipmentManage.vue'),
+  // equipment 三权级设备使用申请（用户端三页 + 管理端审批页）
+  EquipmentDirectory: () => import('@/views/equipment/EquipmentDirectory.vue'),
+  MyEquipmentBookings: () => import('@/views/equipment/MyEquipmentBookings.vue'),
+  EquipmentTeacherApprove: () => import('@/views/equipment/EquipmentTeacherApprove.vue'),
+  EquipmentBookingManage: () => import('@/views/admin/equipment/EquipmentBookingManage.vue'),
   // item 模块（单工作台形态，内部分页签）
-  ItemWorkspace: () => import('@/views/item/ItemWorkspace.vue')
+  ItemWorkspace: () => import('@/views/item/ItemWorkspace.vue'),
+  // item 学生代理代领（菜单 205；复用申领面板，领取由后端 assistant_grant 动态放行）
+  ItemAssistantPickup: () => import('@/views/item/ItemAssistantPickup.vue')
 }
 
 const addedRouteNames = []
+
+/**
+ * 最近一次注册成功的页面路径（已命中本地组件白名单）。
+ * 供登录落地页回退使用：后端菜单缺首页（如 /admin/home）时避免跳入 404。
+ */
+let registeredPaths = { admin: [], front: [] }
+
+export function getRegisteredPaths() {
+  return registeredPaths
+}
 
 function walkMenus(menus, visit) {
   for (const menu of menus || []) {
@@ -71,4 +89,5 @@ export function removeDynamicRoutes() {
       router.removeRoute(name)
     }
   }
+  registeredPaths = { admin: [], front: [] }
 }

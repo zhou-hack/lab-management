@@ -18,6 +18,9 @@ public class StockMovementQuery extends BasePageQuery {
     @Schema(description = "物料 ID", example = "1234567890123456789")
     private String skuId;
 
+    @Schema(description = "物料分类 ID", example = "1234567890123456789")
+    private String categoryId;
+
     @Schema(description = "单据 ID", example = "1234567890123456789")
     private String stockDocumentId;
 
@@ -44,6 +47,14 @@ public class StockMovementQuery extends BasePageQuery {
 
     public void setSkuId(String skuId) {
         this.skuId = skuId;
+    }
+
+    public String getCategoryId() {
+        return categoryId;
+    }
+
+    public void setCategoryId(String categoryId) {
+        this.categoryId = categoryId;
     }
 
     public String getStockDocumentId() {

@@ -12,15 +12,22 @@ export const documentStatusMap = {
   CANCELLED: { label: '已取消', type: 'info' }
 }
 
-/** 物料申领单状态 */
+/** 物料申领单状态（两级审核：SELF 经 草稿→老师已审核→已批准；PROXY 创建即老师已审核） */
 export const requestStatusMap = {
   DRAFT: { label: '草稿', type: 'info' },
   PENDING: { label: '待审批', type: 'warning' },
+  TEACHER_APPROVED: { label: '老师已审核', type: 'primary' },
   APPROVED: { label: '已批准', type: 'primary' },
   PARTIALLY_FULFILLED: { label: '部分实发', type: 'warning' },
   FULFILLED: { label: '全部实发', type: 'success' },
   REJECTED: { label: '已拒绝', type: 'danger' },
   CANCELLED: { label: '已取消', type: 'info' }
+}
+
+/** 申领类型 */
+export const requestTypeMap = {
+  SELF: { label: '本人申领', type: 'primary' },
+  PROXY: { label: '学生代理代领', type: 'warning' }
 }
 
 /** 盘点单状态 */

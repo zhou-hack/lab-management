@@ -2,6 +2,7 @@ package com.labmanage.module.booking.service;
 
 import com.labmanage.common.result.PageResult;
 import com.labmanage.module.booking.dto.BookingCancelDTO;
+import com.labmanage.module.booking.dto.BookingCheckoutDTO;
 import com.labmanage.module.booking.dto.BookingCreateDTO;
 import com.labmanage.module.booking.dto.BookingPageQuery;
 import com.labmanage.module.booking.dto.BookingRejectDTO;
@@ -15,23 +16,31 @@ import java.time.LocalDate;
 /**
  * 场地预约业务接口。
  * <p>
- * 一期：TEACHER/ADMIN 发起、ADMIN 审批；PENDING/APPROVED/REJECTED/CANCELLED 四态，
- * IN_USE/FINISHED 派生展示；待审批不占用时段（提交与审批双重冲突校验，
- * 最后批准者遇冲突拒绝不抢占）；审批事务按场地行锁串行化，防并发双写。
+ * 权级流程（仅教师发起、学生只读、管理员审批）：
+ * 提交(PENDING/待管理员核对) → 批准(APPROVED) → 开门签到(IN_USE 派生态)
+ * → 结束清点(FINISHED 派生态)；驳回整单 REJECTED（原因详情可见）；
+ * 本人可撤销；开始时间已过仍未核对由定时任务自动取消。
+ * IN_USE/FINISHED 不落 lab_booking，仅由 document_event 与时间派生展示。
  */
 public interface BookingService {
 
-    /** 提交预约申请（PENDING，不写占用） */
+    /** 提交预约申请（PENDING + 建单据/核对任务/提交事件，不写占用） */
     BookingDetailVO create(BookingCreateDTO dto);
 
-    /** 申请人本人取消（PENDING 直接取消；APPROVED 同步释放占用） */
+    /** 申请人本人取消（PENDING 直接取消；APPROVED 同步释放占用），写撤销事件 */
     void cancel(Long id, BookingCancelDTO dto);
 
-    /** 审批通过（场地行锁内复核冲突后写 lab_slot） */
+    /** 管理员核对通过（任务 APPROVED + 批准事件 + 场地行锁内写占用） */
     void approve(Long id);
 
-    /** 驳回（原因必填，回显申请人） */
+    /** 管理员整单驳回（任务 REJECTED + 驳回事件，原因必填回显申请人） */
     void reject(Long id, BookingRejectDTO dto);
+
+    /** 管理员开门签到（APPROVED 且到达开始时间，写 CHECKIN 事件） */
+    void checkin(Long id);
+
+    /** 管理员结束清点（已签到，写 CHECKOUT 事件并释放占用槽） */
+    void checkout(Long id, BookingCheckoutDTO dto);
 
     /** 我的预约分页（当前登录人为申请人） */
     PageResult<BookingVO> pageMine(BookingPageQuery query);
@@ -39,7 +48,10 @@ public interface BookingService {
     /** 全部预约分页（审批视角） */
     PageResult<BookingVO> pageAll(BookingPageQuery query);
 
-    /** 预约详情（申请人本人或持有审批权限） */
+    /** 预约情况只读分页（booking:lab:view，学生只读：看预约情况与批准/驳回结果） */
+    PageResult<BookingVO> pageBoard(BookingPageQuery query);
+
+    /** 预约详情（申请人本人或持有审批权限，附流程时间线） */
     BookingDetailVO detail(Long id);
 
     /** 场地某日可用时段（上海本地日期，返回未释放占用） */
@@ -47,4 +59,7 @@ public interface BookingService {
 
     /** 预约状态统计（预约管理页卡片） */
     BookingStatsVO stats();
+
+    /** 定时任务：开始时间已过仍待管理员核对的预约自动取消 */
+    int autoCancelExpired();
 }
