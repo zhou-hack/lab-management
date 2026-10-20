@@ -9,7 +9,7 @@
 | 后端框架 | Spring Boot | 4.1.1 |
 | Java 运行与编译 | Eclipse Temurin JDK 17 | 17.0.20.1+1，Java 17 LTS 最新稳定补丁 |
 | ORM | MyBatis-Plus | 3.5.17，使用 Boot 4 专用 starter |
-| 认证与权限 | Sa-Token | 1.46.0，使用 Boot 4 专用 starter，采用 RBAC |
+| 认证与权限 | JWT（jjwt） | 0.12.6，HS256 无状态会话 + RBAC（已替代 Sa-Token） |
 | 数据库 | MySQL | 8.4.11 LTS |
 | JDBC 驱动 | MySQL Connector/J | 26.7.0 |
 | 接口文档 | Knife4j / Swagger（OpenAPI） | Knife4j UI 4.5.0 + springdoc 3.1.1 |
@@ -40,21 +40,21 @@
 
 ### 后端依赖版本决策
 
-截至 2026-10-13，按官方发布记录和 Maven Central 元数据锁定以下版本。MyBatis-Plus、Sa-Token、Knife4j 的这些发布未标注 LTS，因此采用最新稳定正式版，不将其称为 LTS，不使用快照或预发布版。
+截至 2026-10-13，按官方发布记录和 Maven Central 元数据锁定以下版本。MyBatis-Plus、Knife4j 的这些发布未标注 LTS，因此采用最新稳定正式版，不将其称为 LTS，不使用快照或预发布版；jjwt 固定 0.12.6 稳定版（2026-10-20 登录重写时引入，替代 Sa-Token）。
 
 | Maven 坐标 | 固定版本 | 用途 |
 | --- | --- | --- |
 | `com.baomidou:mybatis-plus-spring-boot4-starter` | 3.5.17 | Spring Boot 4 ORM 集成 |
 | `com.baomidou:mybatis-plus-jsqlparser` | 3.5.17 | 分页插件等 SQL 解析能力，与 ORM 版本一致 |
-| `cn.dev33:sa-token-spring-boot4-starter` | 1.46.0 | Spring Boot 4 认证与授权集成 |
+| `io.jsonwebtoken:jjwt-api` / `jjwt-impl` / `jjwt-jackson` | 0.12.6 | JWT access/refresh 双 token 签发与校验 |
 | `com.github.xiaoymin:knife4j-openapi3-ui` | 4.5.0 | Knife4j 文档页面静态资源 |
 | `org.springdoc:springdoc-openapi-starter-webmvc-ui` | 3.1.1 | OpenAPI 生成及 Swagger 配置端点，支持 Boot 4 |
 
 Knife4j 4.5.0 的 `knife4j-openapi3-jakarta-spring-boot-starter` 面向 Boot 3，不作为本项目 Boot 4 的集成依赖。采用独立 UI 资源加 springdoc 3.1.1，初始化时配置文档页面资源访问和 OpenAPI 端点；为旧版 UI 使用 `springdoc.api-docs.version: OPENAPI_3_0`。此组合是本项目集成方案，尚未进行应用级运行验证，也不表示 Knife4j 官方提供 Boot 4 starter。
 
-初始化必须验证应用启动、分页查询、Sa-Token 鉴权，以及 `/doc.html`、`/v3/api-docs`、`/v3/api-docs/swagger-config` 的访问、接口模型展示和 Bearer token 调试。Knife4j starter 提供的增强配置不能直接视为独立 UI 方案已支持。
+初始化必须验证应用启动、分页查询、JWT 鉴权（取盐、登录、刷新、401 拦截），以及 `/doc.html`、`/v3/api-docs`、`/v3/api-docs/swagger-config` 的访问、接口模型展示和 Bearer token 调试。Knife4j starter 提供的增强配置不能直接视为独立 UI 方案已支持。
 
-版本依据：[MyBatis-Plus 3.5.17](https://github.com/baomidou/mybatis-plus/releases/tag/v3.5.17)、[Sa-Token 1.46.0](https://github.com/dromara/Sa-Token/releases/tag/v1.46.0)、[Knife4j 4.5.0](https://github.com/xiaoymin/knife4j/releases/tag/v4.5.0)、[springdoc 官方兼容说明](https://springdoc.org/#what-is-the-compatibility-matrix-of-springdoc-openapi-with-spring-boot)。
+版本依据：[MyBatis-Plus 3.5.17](https://github.com/baomidou/mybatis-plus/releases/tag/v3.5.17)、[jjwt 0.12.6](https://github.com/jwtk/jjwt/releases/tag/0.12.6)、[Knife4j 4.5.0](https://github.com/xiaoymin/knife4j/releases/tag/v4.5.0)、[springdoc 官方兼容说明](https://springdoc.org/#what-is-the-compatibility-matrix-of-springdoc-openapi-with-spring-boot)。
 
 ### 前端工具与实现约定
 
@@ -81,7 +81,7 @@ ESLint 使用 `eslint.config.js`，按浏览器源码与 Node.js 配置文件分
 ```text
 com.labmanage
 ├── common          返回体、错误码、异常、分页、工具类
-├── config          Sa-Token、跨域、Knife4j、序列化配置
+├── config          JWT 安全、跨域、Knife4j、序列化配置
 ├── roles           用户、角色、菜单、权限，RBAC 核心
 ├── module          业务模块，按场地、设备、物料分子包
 └── LabApplication  启动类
@@ -155,11 +155,12 @@ JSON 接口统一返回 `code`、`msg`、`data`，成功时 `code = 0`，失败�
 - 数据库密码、token 密钥等使用环境变量或本地未跟踪配置，不提交真实凭据。测试使用独立数据库。
 - 业务展示与日历规则使用 `Asia/Shanghai`；接口时间点、后端计算与数据库存储统一使用 UTC，具体格式及转换规则见下一节。
 - 跨域允许来源按环境配置白名单，明确允许的方法和请求头，包括 `Authorization`；放行预检 OPTIONS。采用 token 请求头认证，不依赖跨域 cookie，不开放任意来源。
-- 本项目采用 `sessionStorage` 保存 token，通过统一工具读写，以浏览器标签页会话为生命周期。Sa-Token 配置接收 `Authorization: Bearer <token>`，Axios 统一添加该请求头。
+- 口令不上明文：登录与敏感操作确认前，前端按账号 `GET /auth/salt` 取该账号 BCrypt 盐前缀，用 bcryptjs 以同一盐复算出口令哈希后上传，服务端常量时间比对库中哈希。哈希即凭据可被重放，内网/开发场景接受该风险；传输层安全仍以 HTTPS 为准，禁止在任何场景直传明文口令。
+- 本项目采用 `sessionStorage` 保存 access/refresh 双 token，通过统一工具读写，以浏览器标签页会话为生命周期。Axios 统一添加 `Authorization: Bearer <access token>`；401 时先以 refresh token 单飞刷新（`POST /auth/refresh` 轮换双 token）并重试原请求，刷新失败才清态跳登录。
 - Axios 统一解包 `code/msg/data` 并处理网络错误；401 清除 token、用户、权限及已注册动态路由，跳转登录；403 提示无权限。退出登录同时调用后端注销接口并清理前端状态。
 - RBAC 关系为用户关联角色、角色关联菜单及权限。权限标识采用 `模块:资源:操作`（例如 `item:material:create`）；前后端使用同一份标识。
 - 登录后获取当前用户、菜单与权限；Vue Router 通过本地组件白名单映射菜单注册动态路由，刷新后重新加载，退出时移除。禁止直接执行后端下发的组件路径或代码。
-- 按钮使用 `v-permission` 自定义指令控制可见性，路由守卫检查登录与页面权限；后端使用 Sa-Token 对每个受保护接口执行权限校验。隐藏菜单或按钮不能代替后端授权。
+- 按钮使用 `v-permission` 自定义指令控制可见性（随业务页面重建恢复登记），路由守卫检查登录与页面权限；后端对每个受保护接口执行权限校验（`@RequirePermission`）。隐藏菜单或按钮不能代替后端授权。
 - Knife4j 仅在开发和测试环境按需启用；接口定义同步维护入参、出参、分页、权限要求和错误响应。
 
 ## 5. 时间与 UTC 规范
