@@ -20,8 +20,8 @@
         :collapse-transition="false"
         router
       >
-        <!-- 固定「首页」在最上方（规范 7.4） -->
-        <el-menu-item index="/admin/home">
+        <!-- 固定「首页」在最上方（规范 7.4）；路径角色中性，学生/教师共用 -->
+        <el-menu-item index="/home">
           <el-icon><HomeFilled /></el-icon>
           <template #title>
             首页
@@ -52,10 +52,10 @@
             <el-icon><Fold v-if="!collapsed" /><Expand v-else /></el-icon>
           </el-button>
           <el-breadcrumb separator="/">
-            <el-breadcrumb-item :to="{ path: '/admin/home' }">
+            <el-breadcrumb-item :to="{ path: '/home' }">
               首页
             </el-breadcrumb-item>
-            <el-breadcrumb-item v-if="route.path !== '/admin/home'">
+            <el-breadcrumb-item v-if="route.path !== '/home'">
               {{ route.meta.title || '' }}
             </el-breadcrumb-item>
           </el-breadcrumb>
@@ -127,12 +127,12 @@ const avatarChar = computed(() => {
 
 // 后台侧栏（2026-10-19 三权级适配）：顶层 /admin 目录根（如「管理端」）解包为顶级入口，
 // 其余顶层节点（扁平 /admin 页面、用户端 /equipment 页面）原样渲染；
-// F 按钮与 /admin/home 节点不渲染（固定首页由布局自身渲染，规范 7.4）
+// F 按钮与 /home 节点不渲染（固定首页由布局自身渲染，规范 7.4）
 const adminMenus = computed(() => {
   const filterTree = (nodes) =>
     (nodes || [])
       .filter((n) => n.menuType !== 'F' && n.visible !== '1')
-      .filter((n) => (n.path || n.componentKey) !== '/admin/home')
+      .filter((n) => (n.path || n.componentKey) !== '/home')
       .map((n) => ({ ...n, children: filterTree(n.children) }))
       .filter((n) => n.menuType === 'C' || n.children.length)
   const top = []

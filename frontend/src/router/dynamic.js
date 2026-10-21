@@ -7,7 +7,7 @@ import AdminLayout from '@/layout/admin/AdminLayout.vue'
  * 业务页面落地时在此登记（key 与 sys_menu.route_path 一致）。
  */
 const viewModules = {
-  '/admin/home': () => import('@/views/admin/home/AdminHome.vue'),
+  '/home': () => import('@/views/admin/home/AdminHome.vue'),
   // 设备管理单页（产品定稿不设子菜单）：型号 + 设备台账双折叠面板，
   // 分类目录在型号面板的「管理分类」抽屉内
   '/admin/equipment': () => import('@/views/admin/equipment/EquipmentManage.vue'),
@@ -53,12 +53,13 @@ export function registerDynamicRoutes(menus) {
     })
   })
 
-  // 固定首页：不依赖后端菜单下发（规范 7.4「固定首页」），菜单树未含时补注册
-  if (!children.some((r) => r.path === '/admin/home')) {
+  // 固定首页：不依赖后端菜单下发（规范 7.4「固定首页」），菜单树未含时补注册；
+  // 路径用角色中性的 /home（学生/教师与管理员共用同一布局，见 store.homePath）
+  if (!children.some((r) => r.path === '/home')) {
     children.unshift({
-      path: '/admin/home',
+      path: '/home',
       name: 'dyn_home_fixed',
-      component: viewModules['/admin/home'],
+      component: viewModules['/home'],
       meta: { title: '首页', icon: null, perms: null, menuId: 'fixed_home' }
     })
   }

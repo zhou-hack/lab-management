@@ -5,7 +5,7 @@ import { registerDynamicRoutes, removeDynamicRoutes } from '@/router/dynamic'
 
 /**
  * 用户会话 store：登录后由 /auth/user_menus 拉取真实用户/角色/权限/菜单。
- * 产品形态 2026-10-14：纯管理端，仅 ADMIN 可用，登录直达 /admin/home。
+ * 三权级形态（2026-10-19）：ADMIN 进 /home，学生/教师进第一个用户端页面。
  */
 export const useUserStore = defineStore('user', {
   state: () => ({
@@ -19,17 +19,17 @@ export const useUserStore = defineStore('user', {
   getters: {
     isAdmin: (state) => state.roles.includes('ADMIN'),
     /**
-     * 登录落地页：菜单含 /admin 子树（管理员）进管理端首页；
+     * 登录落地页：菜单含 /admin 子树（管理员）进固定首页 /home；
      * 学生/教师（用户端菜单挂 NULL 根）进第一个可见 PAGE。
      */
     homePath: (state) => {
       const menus = state.menus || []
       const hasAdminTree = menus.some((m) => (m.path || '').startsWith('/admin'))
       if (hasAdminTree || !menus.length) {
-        return '/admin/home'
+        return '/home'
       }
       const firstPage = menus.find((m) => m.menuType === 'C' && m.path)
-      return firstPage ? firstPage.path : '/admin/home'
+      return firstPage ? firstPage.path : '/home'
     }
   },
   actions: {
