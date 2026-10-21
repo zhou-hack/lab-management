@@ -21,9 +21,6 @@ public record AssetCreateRequest(
         @Size(max = 128, message = "序列号长度不能超过 128")
         String serialNo,
 
-        @NotNull(message = "保管实验室不能为空")
-        Long labId,
-
         @NotNull(message = "归口部门不能为空")
         Long departmentId,
 

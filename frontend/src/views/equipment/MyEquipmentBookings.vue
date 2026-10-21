@@ -30,6 +30,13 @@
         <el-button @click="search">
           查询
         </el-button>
+        <el-button
+          v-permission="'equipment:booking:apply'"
+          type="primary"
+          @click="openApply"
+        >
+          申请使用
+        </el-button>
       </div>
     </div>
 
@@ -74,10 +81,10 @@
           >
             <template #default="{ row }">
               <div class="booking_time">
-                {{ formatInstant(row.startAt) }}
+                {{ formatSh(row.startAt) }}
               </div>
               <div class="booking_time booking_time--to">
-                ~ {{ formatInstant(row.endAt) }}
+                ~ {{ formatSh(row.endAt) }}
               </div>
             </template>
           </el-table-column>
@@ -142,7 +149,7 @@
             width="140"
           >
             <template #default="{ row }">
-              {{ formatInstant(row.createTime) }}
+              {{ formatSh(row.createTime) }}
             </template>
           </el-table-column>
           <el-table-column
@@ -178,7 +185,7 @@
         >
           <Tickets />
         </el-icon>
-        暂无申请记录，可在「设备目录」提交使用申请
+        暂无申请记录，可点击「申请使用」提交使用申请
       </div>
       <el-pagination
         v-model:current-page="query.pageNum"
@@ -190,6 +197,12 @@
         @change="load"
       />
     </div>
+
+    <!-- 申请使用（共享弹窗：无预选资产，弹窗内搜索选择设备） -->
+    <BookingApplyDialog
+      ref="applyDialogRef"
+      @success="load"
+    />
   </div>
 </template>
 
@@ -199,10 +212,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Tickets } from '@element-plus/icons-vue'
 import { cancelBooking, pageMyBookings } from '@/api/equipment'
 import { BOOKING_STATUS, BOOKING_STATUS_OPTIONS, VALUE_LEVEL, enumMeta } from '@/utils/enums'
-import { formatInstant } from '@/utils/datetime'
+import { formatSh } from '@/utils/datetime'
+import BookingApplyDialog from '@/components/BookingApplyDialog.vue'
 
 /**
- * 我的设备申请（学生/教师用户端）：本人申请分页列表 + 状态筛选 + 借出前撤销。
+ * 我的设备申请（学生/教师用户端）：本人申请分页列表 + 状态筛选 + 借出前撤销；
+ * 顶部「申请使用」入口打开共享申请弹窗（弹窗内搜索选择在架设备）。
  */
 const query = reactive({
   pageNum: 1,
@@ -238,6 +253,14 @@ async function load() {
 function search() {
   query.pageNum = 1
   load()
+}
+
+/* ---------------- 申请使用 ---------------- */
+
+const applyDialogRef = ref()
+
+function openApply() {
+  applyDialogRef.value?.open()
 }
 
 async function cancel(row) {

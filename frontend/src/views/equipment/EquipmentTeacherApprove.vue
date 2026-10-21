@@ -78,10 +78,10 @@
           >
             <template #default="{ row }">
               <div class="booking_time">
-                {{ formatInstant(row.startAt) }}
+                {{ formatSh(row.startAt) }}
               </div>
               <div class="booking_time booking_time--to">
-                ~ {{ formatInstant(row.endAt) }}
+                ~ {{ formatSh(row.endAt) }}
               </div>
             </template>
           </el-table-column>
@@ -99,7 +99,7 @@
             width="140"
           >
             <template #default="{ row }">
-              {{ formatInstant(row.createTime) }}
+              {{ formatSh(row.createTime) }}
             </template>
           </el-table-column>
           <el-table-column
@@ -218,7 +218,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Tickets } from '@element-plus/icons-vue'
 import { pageTeacherPending, teacherReview } from '@/api/equipment'
 import { VALUE_LEVEL, enumMeta } from '@/utils/enums'
-import { formatInstant } from '@/utils/datetime'
+import { formatSh } from '@/utils/datetime'
 
 /**
  * 设备申请初审（教师端）：指定审批教师为本人、状态固定 PENDING_TEACHER 的待办分页。

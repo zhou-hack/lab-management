@@ -202,3 +202,30 @@ export function toShOffsetIso(date) {
   const hour = parts.hour === '24' ? '00' : parts.hour
   return `${parts.year}-${parts.month}-${parts.day}T${hour}:${parts.minute}:${parts.second}+08:00`
 }
+
+/**
+ * Date → 按上海墙钟解释的 RFC 3339 入参（+08:00 偏移），后端 OffsetDateTime → Instant。
+ * 与 formatSh 成对：出参按上海展示、入参按上海解释，均不依赖浏览器本地时区。
+ * 例：UTC 2026-10-13T01:00:00.000Z → '2026-10-13T09:00:00+08:00'。
+ */
+export function toShOffsetIso(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return null
+  }
+  const options = {
+    timeZone: SH_TZ,
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  }
+  const parts = {}
+  for (const part of new Intl.DateTimeFormat('en-CA', options).formatToParts(date)) {
+    parts[part.type] = part.value
+  }
+  const hour = parts.hour === '24' ? '00' : parts.hour
+  return `${parts.year}-${parts.month}-${parts.day}T${hour}:${parts.minute}:${parts.second}+08:00`
+}

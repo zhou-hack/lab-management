@@ -1,15 +1,13 @@
 package com.labmanage.module.equipment.dto;
 
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /**
- * 设备迁移登记请求（仅允许空闲且无冲突业务的资产迁移）
+ * 设备迁移登记请求（仅允许空闲且无冲突业务的资产迁移；空间模块移除后迁移仅调整存放位置）
  */
 public record AssetTransferRequest(
-        @NotNull(message = "目标实验室不能为空")
-        Long toLabId,
-
+        @NotBlank(message = "目标存放位置不能为空")
         @Size(max = 255, message = "目标存放位置长度不能超过 255")
         String toLocation,
 

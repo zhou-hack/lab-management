@@ -100,10 +100,10 @@
           >
             <template #default="{ row }">
               <div class="booking_time">
-                {{ formatInstant(row.startAt) }}
+                {{ formatSh(row.startAt) }}
               </div>
               <div class="booking_time booking_time--to">
-                ~ {{ formatInstant(row.endAt) }}
+                ~ {{ formatSh(row.endAt) }}
               </div>
             </template>
           </el-table-column>
@@ -125,7 +125,7 @@
             width="140"
           >
             <template #default="{ row }">
-              {{ formatInstant(row.createTime) }}
+              {{ formatSh(row.createTime) }}
             </template>
           </el-table-column>
           <el-table-column
@@ -358,7 +358,7 @@ import {
   returnBooking
 } from '@/api/equipment'
 import { BOOKING_STATUS, BOOKING_STATUS_OPTIONS, VALUE_LEVEL, enumMeta } from '@/utils/enums'
-import { formatInstant } from '@/utils/datetime'
+import { formatSh } from '@/utils/datetime'
 
 /**
  * 设备使用审批（管理端）：全部申请分页 + 状态筛选。
