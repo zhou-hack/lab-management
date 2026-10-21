@@ -1,6 +1,6 @@
 package com.labmanage.module.item.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.item.dto.StockWarningQuery;
@@ -28,7 +28,7 @@ public class StockWarningController {
     }
 
     @Operation(summary = "分页查询库存预警")
-    @SaCheckPermission("item:warning:list")
+    @RequirePermission("item:warning:list")
     @GetMapping("/page")
     public Result<PageResult<StockWarningVO>> page(@Valid StockWarningQuery query) {
         return Result.success(stockQueryService.pageWarning(query));

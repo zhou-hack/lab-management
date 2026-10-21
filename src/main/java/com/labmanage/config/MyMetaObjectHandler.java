@@ -1,6 +1,6 @@
 package com.labmanage.config;
 
-import cn.dev33.satoken.stp.StpUtil;
+import com.labmanage.common.utils.SecurityUtils;
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
 import org.apache.ibatis.reflection.MetaObject;
 import org.springframework.stereotype.Component;
@@ -34,7 +34,7 @@ public class MyMetaObjectHandler implements MetaObjectHandler {
 
     private Long currentUserId() {
         try {
-            return StpUtil.isLogin() ? StpUtil.getLoginIdAsLong() : null;
+            return SecurityUtils.isLogin() ? SecurityUtils.currentUserId() : null;
         } catch (Exception e) {
             return null;
         }

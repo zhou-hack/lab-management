@@ -1,7 +1,7 @@
 package com.labmanage.roles.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
-import cn.dev33.satoken.stp.StpUtil;
+import com.labmanage.common.security.RequirePermission;
+import com.labmanage.common.utils.SecurityUtils;
 import com.labmanage.common.log.OperationLog;
 import com.labmanage.common.result.Result;
 import com.labmanage.roles.dto.RolePermissionAssignDTO;
@@ -35,25 +35,25 @@ public class SystemRoleController {
     }
 
     @Operation(summary = "角色权限只读列表（角色 + 权限 + 菜单 + 绑定用户数）")
-    @SaCheckPermission("system:role:list")
+    @RequirePermission("system:role:list")
     @GetMapping
     public Result<List<RoleDetailVO>> list() {
         return Result.success(roleService.listDetail());
     }
 
     @Operation(summary = "全部启用权限（角色权限编辑选项）")
-    @SaCheckPermission("system:role:assign")
+    @RequirePermission("system:role:assign")
     @GetMapping("/permissions")
     public Result<List<PermissionOptionVO>> permissionOptions() {
         return Result.success(roleService.listPermissionOptions());
     }
 
     @Operation(summary = "整集替换角色权限绑定（OPS_ADMIN 锁定；踢出该角色持有者会话；敏感操作需二级认证）")
-    @SaCheckPermission("system:role:assign")
+    @RequirePermission("system:role:assign")
     @OperationLog(moduleCode = "system", actionCode = "system:role:assign", targetTable = "sys_role_permission", targetId = "#id")
     @PutMapping("/{id}/permissions")
     public Result<Void> assignPermissions(@PathVariable Long id, @Valid @RequestBody RolePermissionAssignDTO dto) {
-        StpUtil.checkSafe();
+        SecurityUtils.checkSafe();
         roleService.assignPermissions(id, dto);
         return Result.success();
     }

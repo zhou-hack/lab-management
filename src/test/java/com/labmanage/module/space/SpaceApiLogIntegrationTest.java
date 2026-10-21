@@ -1,12 +1,13 @@
 package com.labmanage.module.space;
 
-import cn.dev33.satoken.stp.StpInterface;
-import cn.dev33.satoken.stp.StpUtil;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.labmanage.common.result.Result;
+import com.labmanage.common.security.JwtService;
+import com.labmanage.common.security.LoginUser;
+import com.labmanage.roles.service.AuthService;
 import com.labmanage.module.space.service.impl.SpaceServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -56,10 +57,8 @@ import java.util.List;
 class SpaceApiLogIntegrationTest {
 
     /**
-     * 测试专用登录端点（路径在 /api/v1 之外，绕开 SaTokenConfig 的路由级登录校验）。
-     * Sa-Token 1.46.0 的上下文由 HTTP 过滤器在请求线程初始化，
-     * 测试线程直接调用 StpUtil.login() 会抛「上下文尚未初始化」，
-     * 故经由真实 HTTP 请求完成登录并回传 token。
+     * 测试专用登录端点（路径在 /api/v1 之外，绕开 JwtAuthFilter 的登录校验），
+     * 直接签发真实 JWT access token 回传。
      */
     @TestConfiguration(proxyBeanMethods = false)
     static class TestAuthConfig {
@@ -67,20 +66,25 @@ class SpaceApiLogIntegrationTest {
         @RestController
         static class TestAuthController {
 
+            private final JwtService jwtService;
+
+            TestAuthController(JwtService jwtService) {
+                this.jwtService = jwtService;
+            }
+
             @GetMapping("/test/login")
             Result<String> login() {
-                StpUtil.login(1L);
-                return Result.success(StpUtil.getTokenValue());
+                return Result.success(jwtService.issueAccess(1L, null));
             }
         }
     }
 
     /**
-     * 以 Mock 替换 roles 模块的 StpInterfaceImpl（生产实现查 RBAC 库表，
-     * H2 测试库无这些表）：为登录用户 1 放开场地模块全部权限。
+     * 以 Mock 替换 AuthService（生产实现查 RBAC 库表，H2 测试库无这些表）：
+     * 为登录用户 1 放开场地模块全部权限。
      */
     @MockitoBean
-    private StpInterface stpInterface;
+    private AuthService authService;
 
     @LocalServerPort
     private int port;
@@ -95,11 +99,10 @@ class SpaceApiLogIntegrationTest {
 
     @BeforeEach
     void login() throws Exception {
-        Mockito.when(stpInterface.getPermissionList(Mockito.any(), Mockito.any()))
-                .thenReturn(List.of("space:space:list", "space:space:read", "space:space:create",
-                        "space:space:update", "space:space:delete"));
-        Mockito.when(stpInterface.getRoleList(Mockito.any(), Mockito.any()))
-                .thenReturn(List.of("ADMIN"));
+        Mockito.when(authService.buildLoginUser(Mockito.any(), Mockito.any()))
+                .thenReturn(new LoginUser(1L, "ADMIN", List.of("ADMIN"),
+                        List.of("space:space:list", "space:space:read", "space:space:create",
+                                "space:space:update", "space:space:delete"), null));
         // Spring Boot 上下文在测试实例创建阶段才启动，其日志系统初始化会重置
         // logback context，因此捕获器须在上下文就绪后（此时）挂载，不能用 @BeforeAll
         if (logAppender == null) {

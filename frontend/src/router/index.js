@@ -15,12 +15,6 @@ const staticRoutes = [
     meta: { title: '登录' }
   },
   {
-    path: '/set_password',
-    name: 'SetPassword',
-    component: () => import('@/views/login/SetPasswordView.vue'),
-    meta: { title: '设置密码' }
-  },
-  {
     path: '/',
     name: 'AdminLayout',
     component: AdminLayout,
@@ -75,18 +69,9 @@ router.beforeEach(async (to) => {
       store.resetState()
       return { path: '/login', query: { redirect: to.fullPath } }
     }
-    // 强制改密期间无需重放目标路由，直接进入设置密码页
-    if (store.mustSetPassword && to.path !== '/set_password') {
-      return { path: '/set_password' }
-    }
     // 用完整路径重放：动态路由刚注册，需触发新一轮匹配才能命中；
     // 不用 {...to} 展开是避免 to 命中兜底 404 记录时携带其记录信息
     return to.fullPath
-  }
-
-  // 强制改密拦截：标志来自登录响应 / profile，刷新后仍生效
-  if (store.mustSetPassword && to.path !== '/set_password') {
-    return { path: '/set_password' }
   }
 
   if (to.path === '/login') {

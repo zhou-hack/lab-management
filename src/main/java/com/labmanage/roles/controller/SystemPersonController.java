@@ -1,6 +1,6 @@
 package com.labmanage.roles.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.roles.dto.PersonPageQueryDTO;
@@ -28,7 +28,7 @@ public class SystemPersonController {
     }
 
     @Operation(summary = "统一人员分页（名单+账号）")
-    @SaCheckPermission(value = { "system:user:list", "system:roster:list" })
+    @RequirePermission(value = { "system:user:list", "system:roster:list" })
     @GetMapping
     public Result<PageResult<PersonPageItemVO>> page(@Validated PersonPageQueryDTO query) {
         return Result.success(personService.page(query));

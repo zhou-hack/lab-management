@@ -68,9 +68,6 @@
               >
                 切换身份（{{ roleLabel(store.switchableRoles[0]) }}）
               </el-dropdown-item>
-              <el-dropdown-item command="setPassword">
-                修改密码
-              </el-dropdown-item>
               <el-dropdown-item command="logout">
                 退出登录
               </el-dropdown-item>
@@ -118,10 +115,6 @@ const roleLabels = { ADMIN: '管理员', TEACHER: '老师', STUDENT: '学生', O
 const roleLabel = (code) => roleLabels[code] || code
 
 async function onUserCommand(command) {
-  if (command === 'setPassword') {
-    router.push('/set_password')
-    return
-  }
   if (command === 'switchRole') {
     const target = store.switchableRoles[0]
     try {

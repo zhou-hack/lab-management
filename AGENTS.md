@@ -13,22 +13,23 @@
 
 ## 技术与目录
 
-- 后端固定使用 Spring Boot 4.1.1、Eclipse Temurin JDK 17.0.20.1+1、MyBatis-Plus 3.5.17、Sa-Token 1.46.0、MySQL 8.4.11 LTS、Connector/J 26.7.0、Knife4j UI 4.5.0、springdoc 3.1.1、Maven 3.10.0、Maven Wrapper 3.3.4；不得静默更换已指定版本。
+- 后端固定使用 Spring Boot 4.1.1、Eclipse Temurin JDK 17.0.20.1+1、MyBatis-Plus 3.5.17、jjwt 0.12.6、MySQL 8.4.11 LTS、Connector/J 26.7.0、Knife4j UI 4.5.0、springdoc 3.1.1、Maven 3.10.0、Maven Wrapper 3.3.4；不得静默更换已指定版本。
 - Spring Boot 4.1.1 支持 Java 17 到 26，团队选择 Java 17 LTS 的最新稳定补丁。设置 `java.version = 17`、release 17，开发、测试、CI 保持一致，不启用预览特性。Spring Framework、Jackson、Tomcat、JUnit 与构建插件由 Boot 依赖管理控制；Connector/J 显式固定为 26.7.0，初始化时验证连接、事务及日期读写。
-- MyBatis-Plus 使用 `com.baomidou:mybatis-plus-spring-boot4-starter`，分页解析模块 `mybatis-plus-jsqlparser` 同为 3.5.17；Sa-Token 使用 `cn.dev33:sa-token-spring-boot4-starter:1.46.0`。
+- MyBatis-Plus 使用 `com.baomidou:mybatis-plus-spring-boot4-starter`，分页解析模块 `mybatis-plus-jsqlparser` 同为 3.5.17；JWT 使用 `io.jsonwebtoken:jjwt-api/jjwt-impl/jjwt-jackson:0.12.6`（HS256，无状态会话，已替代 Sa-Token）。
 - 文档集成采用 `com.github.xiaoymin:knife4j-openapi3-ui:4.5.0` 加 `org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1`，OpenAPI 输出配置为 `OPENAPI_3_0`。不直接使用面向 Boot 3 的 Knife4j Jakarta starter；初始化时验证页面、资源、OpenAPI 配置端点及 Bearer token 调试，此组合尚未进行应用级运行验证。
-- 上述 MyBatis-Plus、Sa-Token、Knife4j 版本按 2026-10-13 官方发布记录与 Maven Central 核实为最新稳定版，发布未标注 LTS，不宣称它们是 LTS。
+- 上述 MyBatis-Plus、Knife4j 版本按 2026-10-13 官方发布记录与 Maven Central 核实为最新稳定版；jjwt 固定 0.12.6 稳定版。发布均未标注 LTS，不宣称它们是 LTS。
 - 仓库为单体布局：后端 Maven 工程在仓库根目录（`pom.xml`、`src/main`、`src/test`、`.mvn`），前端独立工程在 `frontend/`，数据库脚本在 `sql/`，产品与规范文档在 `docs/`。
 - 根包固定为 `com.labmanage`，启动类为 `LabApplication`。公共代码放在 `common`，配置放在 `config`，用户、角色、菜单及权限放在 `roles`，场地、设备、物料业务放在 `module` 的对应子包。
 - 控制器负责校验和请求编排，service 负责业务，mapper 负责数据库访问；使用 DTO / VO 定义接口契约，不直接暴露实体或 ORM 分页对象。
 - 后端公共地基已建立，新增模块在 `roles` 或 `module/{业务}` 下自行搭建，并复用公共层：
   - `common/core`: `BaseEntity`（含 id/createTime/updateTime/deleted）、`BasePageQuery`（pageNum/pageSize 校验）
   - `common/result`: `Result<T>`（code/msg/data）、`PageResult<T>`（records/total/pageNum/pageSize）、`ResultCode` 枚举
-  - `common/exception`: `BusinessException` + `GlobalExceptionHandler`（统一处理校验、Sa-Token、404、500）
+  - `common/exception`: `BusinessException` + `GlobalExceptionHandler`（统一处理校验、认证、404、500）
   - `common/serializer`: `InstantSerializer`（UTC 三位毫秒输出）、`InstantDeserializer`（ISO 8601 偏移量解析）
-  - `common/utils`: `PageUtils`（MyBatis-Plus Page 与 PageResult 互转）
-  - `config`: `JacksonConfig`、`MybatisPlusConfig`（分页插件）、`MyMetaObjectHandler`（审计字段填充）
-  - 实体继承 `BaseEntity` 并加 `@TableName`；DTO 使用 record + Jakarta Validation；VO 使用 record；Service 接口+实现；Controller 加 `@SaCheckPermission` 并返回 `Result`/`PageResult`。
+  - `common/utils`: `PageUtils`（MyBatis-Plus Page 与 PageResult 互转）、`SecurityUtils`（当前登录态/权限判断/二级认证）
+  - `common/security`: `JwtService`（access/refresh 签发与校验）、`JwtAuthFilter`（/api/v1 认证过滤）、`AuthContext`/`LoginUser`（ThreadLocal 登录态）、`@RequirePermission` + 切面（AND/OR 权限校验）
+  - `config`: `JacksonConfig`、`MybatisPlusConfig`（分页插件）、`MyMetaObjectHandler`（审计字段填充）、`SecurityConfig`（过滤器注册）
+  - 实体继承 `BaseEntity` 并加 `@TableName`；DTO 使用 record + Jakarta Validation；VO 使用 record；Service 接口+实现；Controller 加 `@RequirePermission` 并返回 `Result`/`PageResult`。
 - 前端固定使用 Node.js 24.21.0 LTS、npm 12.2.0、Vue 3.5.43、Vite 8.3.4、Element Plus 2.14.7、Vue Router 5.4.0、Pinia 4.0.3、Axios 1.20.0、ESLint 10.12.0；采用 JavaScript、Vue 单文件组件与 `script setup`。前端工程根目录为 `frontend/`，源码在 `frontend/src` 下按 `api`、`components`、`layout`、`router`、`store`、`utils`、`views` 分目录；`@` 别名指向 `frontend/src`。
 - 配套依赖为 `@vitejs/plugin-vue` 6.0.10、`@element-plus/icons-vue` 2.3.2、`@vue/devtools-api` 8.2.1、`@eslint/js` 10.0.1、`eslint-plugin-vue` 10.11.1、`vue-eslint-parser` 10.4.1、`globals` 17.13.0；测试使用 Vitest 5.0.4、Vue Test Utils 2.5.1、jsdom 30.1.2。ESLint 使用 flat config。
 - 除团队已指定的版本或 Java 17 发布线外，新增版本按 2026-10-13 核实的最新稳定正式版固定。直接依赖写精确版本，提交 npm 锁文件；Node.js、npm 同步记录在 `engines`、`packageManager` 和 CI，Node.js 自带 npm 需升级至 12.2.0。禁止用 `--force` 或 `--legacy-peer-deps` 掩盖依赖冲突。
@@ -53,7 +54,7 @@
 - 类型记号：`CODE=VARCHAR(64)`、`NAME=VARCHAR(128)`、`SHORT=VARCHAR(32)`（Java 枚举映射，不用 MySQL ENUM）、`BOOL=TINYINT`（仅 0/1，加 CHECK）、`QTY=DECIMAL(18,3)`、`MONEY=DECIMAL(18,2)`、`PRICE=DECIMAL(18,4)`、`DATE=DATE`（纯日期）、`CLOCK=TIME(0)`（上海本地节次）。
 - 外键默认 `RESTRICT`，不级联删除历史业务；审计字段 `create_user_id/update_user_id` 不建外键（避免组织/用户循环依赖）；跨模块引用（如 `source_document_id`）只建列与索引，外键由所属模块脚本补充；`sys_user_data_scope` 与 `assistant_grant_scope` 的 campus/building/lab 列为预留（空间功能已于 2026-10-20 下线），不建外键。
 - 唯一与删除：业务码、学工号逻辑删除后不复用；关系表保持一行唯一（组合唯一建索引），不用 `(业务键, deleted)` 解决重复创建；含可空列的目标去重使用生成列归一（参照 `sys_user_data_scope.scope_target_id`）。
-- RBAC 定稿规则：预置角色 `ADMIN/TEACHER/STUDENT/ASSISTANT/OPS_ADMIN`；学生/老师首登须匹配 `sys_person_roster` 预录名单，不能自行提升身份；老师账号可经用户管理页叠加绑定/解绑 `ADMIN` 角色（`system:user:bind_role`，仅老师可绑、调用方须全校写，变更踢该老师会话）；一人多角色时登录默认以主身份角色为活动角色，权限/菜单按活动角色装配，`POST /api/v1/auth/switch_role` 会话内直接切换（不校验）；`ASSISTANT` 不持久化到 `sys_user_role`，由有效 `assistant_grant` 动态计算；`OPS_ADMIN`（运维管理员）为最高级运维角色，仅 SQL 预置不开放页面创建，绑定全部权限（后续模块新增权限随各自脚本同步绑定），不受数据范围约束，opsadmin 账号仅 OPS_ADMIN 本人可编辑/启停/重置；角色本身仍 SQL 预置不可增删，但 OPS_ADMIN 角色权限绑定锁定不可页面调整（40900），其余 4 个预置角色的权限绑定可由运维管理员整集替换（`system:role:assign` 仅绑 OPS_ADMIN，变更踢该角色持有者会话）；系统管理（用户/名单/组织/角色/数据范围/参数配置/授权审计）整体归 OPS_ADMIN 专属（2026-10-20 起；预约限制页面与接口 2026-10-21 下线，`user_booking_restriction` 表与 Mapper 保留供预约模块逾期冻结使用），ADMIN 仅保留操作日志页且仅可见业务模块日志（module_code 不含 system/auth）；管理员数据范围用 `sys_user_data_scope`（一期开放 ALL/DEPARTMENT + READ/WRITE；CAMPUS/BUILDING/LAB 预留不开放），无范围记录不自动授予全校数据。
+- RBAC 定稿规则：预置角色 `ADMIN/TEACHER/STUDENT/ASSISTANT/OPS_ADMIN`；学生/老师首登须匹配 `sys_person_roster` 预录名单，不能自行提升身份；老师账号可经用户管理页叠加绑定/解绑 `ADMIN` 角色（`system:user:bind_role`，仅老师可绑、调用方须全校写，JWT 无状态会话不踢人，变更随 access 短时效自然生效）；一人多角色时登录默认以主身份角色为活动角色，权限/菜单按活动角色装配，`POST /api/v1/auth/switch_role` 校验持有后重签双 token；`ASSISTANT` 不持久化到 `sys_user_role`，由有效 `assistant_grant` 动态计算；`OPS_ADMIN`（运维管理员）为最高级运维角色，仅 SQL 预置不开放页面创建，绑定全部权限（后续模块新增权限随各自脚本同步绑定），不受数据范围约束，opsadmin 账号仅 OPS_ADMIN 本人可编辑/启停/重置；角色本身仍 SQL 预置不可增删，但 OPS_ADMIN 角色权限绑定锁定不可页面调整（40900），其余 4 个预置角色的权限绑定可由运维管理员整集替换（`system:role:assign` 仅绑 OPS_ADMIN，变更随持有者 access 过期自然生效）；系统管理（用户/名单/组织/角色/数据范围/参数配置/授权审计）整体归 OPS_ADMIN 专属（2026-10-20 起；预约限制页面与接口 2026-10-21 下线，`user_booking_restriction` 表与 Mapper 保留供预约模块逾期冻结使用），ADMIN 仅保留操作日志页且仅可见业务模块日志（module_code 不含 system/auth）；管理员数据范围用 `sys_user_data_scope`（一期开放 ALL/DEPARTMENT + READ/WRITE；CAMPUS/BUILDING/LAB 预留不开放），无范围记录不自动授予全校数据。
 - 初始数据：预置部门"设备处"（id=1）、5 个角色、管理员 `admin`（id=1）与运维管理员 `opsadmin`（id=2）（密码哈希均为占位值，部署前必须替换并强制首登修改）；权限与菜单初始数据由业务模块脚本按 `模块:资源:操作` 规范登记。
 - 权限标识规范 `模块:资源:操作`（如 `item:material:create`），前后端一致，登记在 `sys_permission`。
 
@@ -70,10 +71,12 @@
 
 ## 权限与环境
 
-- 使用 Sa-Token 实现 RBAC：用户关联角色，角色关联菜单与权限。权限标识为 `模块:资源:操作`，前后端一致。
-- 每个受保护接口由后端校验权限；前端使用路由守卫、动态菜单及 `v-permission`，不能依赖前端隐藏按钮保证授权。
+- 使用 JWT 无状态会话实现 RBAC：用户关联角色，角色关联菜单与权限。权限标识为 `模块:资源:操作`，前后端一致。
+- 登录仅支持账号密码：前端先 `GET /auth/salt` 按账号取该账号 BCrypt 盐前缀，用 bcryptjs 以同一盐复算出口令哈希后上传，服务端常量时间比对库中哈希，全程不传输明文口令；哈希即凭据可被重放，内网/开发场景接受该风险，传输层安全仍以 HTTPS 为准。
+- 双 token：access（2 小时）+ refresh（7 天），HS256 签名，密钥经 `JWT_SECRET` 环境变量注入（≥32 字节）；`POST /auth/refresh` 轮换双 token。角色与权限每请求实时从库加载，变更即时生效，无会话缓存；无状态会话无法主动踢人，依赖 access 短时效自然过期。
+- 每个受保护接口由后端校验权限（`@RequirePermission`）；前端使用路由守卫、动态菜单及 `v-permission`，不能依赖前端隐藏按钮保证授权。
 - 动态路由使用本地组件白名单映射；登录及刷新加载权限，注销或 401 后移除动态路由并清理用户状态。
-- token 存在 `sessionStorage`，通过统一工具访问；Axios 添加 `Authorization: Bearer <token>`，后端配置对应读取方式。
+- access/refresh token 存在 `sessionStorage`，通过统一工具访问；Axios 添加 `Authorization: Bearer <access token>`，401 时先单飞刷新并重试原请求，刷新失败再清态跳登录。
 - Axios 统一处理返回体、401、403 和网络错误，页面不得重复实现认证逻辑。
 - 环境为 `dev`、`test`，使用对应 profile 配置及独立数据库；敏感配置由环境变量或未跟踪本地配置提供。
 - 跨域来源使用环境白名单，允许必要请求头及 OPTIONS；不依赖跨域 cookie。Knife4j 按开发、测试环境启用。

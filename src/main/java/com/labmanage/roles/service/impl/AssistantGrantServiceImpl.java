@@ -1,6 +1,6 @@
 package com.labmanage.roles.service.impl;
 
-import cn.dev33.satoken.stp.StpUtil;
+import com.labmanage.common.utils.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.labmanage.common.exception.BusinessException;
@@ -63,7 +63,7 @@ public class AssistantGrantServiceImpl implements AssistantGrantService {
 
     @Override
     public PageResult<GrantPageItemVO> pageMine(GrantPageQueryDTO query) {
-        return pageByTeacher(StpUtil.getLoginIdAsLong(), query);
+        return pageByTeacher(SecurityUtils.currentUserId(), query);
     }
 
     @Override
@@ -74,7 +74,7 @@ public class AssistantGrantServiceImpl implements AssistantGrantService {
     @Override
     @Transactional
     public void create(GrantCreateDTO dto) {
-        Long teacherId = StpUtil.getLoginIdAsLong();
+        Long teacherId = SecurityUtils.currentUserId();
         Instant now = Instant.now();
         if (!dto.endAt().isAfter(dto.startAt())) {
             throw new BusinessException(40000, "授权结束时间必须晚于开始时间");
@@ -119,7 +119,7 @@ public class AssistantGrantServiceImpl implements AssistantGrantService {
         if (grant == null) {
             throw new BusinessException(40400, "授权记录不存在");
         }
-        Long loginId = StpUtil.getLoginIdAsLong();
+        Long loginId = SecurityUtils.currentUserId();
         if (!grant.getTeacherId().equals(loginId)) {
             throw new BusinessException(40300, "只能撤销本人发起的授权");
         }

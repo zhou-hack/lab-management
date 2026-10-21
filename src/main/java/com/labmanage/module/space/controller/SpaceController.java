@@ -1,6 +1,6 @@
 package com.labmanage.module.space.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.space.dto.SpaceBatchStatusDTO;
@@ -49,14 +49,14 @@ public class SpaceController {
     }
 
     @GetMapping
-    @SaCheckPermission("space:space:list")
+    @RequirePermission("space:space:list")
     public Result<PageResult<SpaceListVO>> page(@Valid @ModelAttribute SpacePageQuery query) {
         return Result.success(spaceService.page(query));
     }
 
     /** CSV 导出（与分页同条件；UTF-8 BOM，时间按上海时区展示） */
     @GetMapping("/export")
-    @SaCheckPermission("space:space:list")
+    @RequirePermission("space:space:list")
     public ResponseEntity<byte[]> export(@Valid @ModelAttribute SpacePageQuery query) {
         byte[] csv = spaceService.exportCsv(query);
         String filename = "spaces_" + LocalDate.now() + ".csv";
@@ -68,14 +68,14 @@ public class SpaceController {
 
     /** 批量启停（target 仅 AVAILABLE/CLOSED；停用为危险操作，前端需二次确认） */
     @PostMapping("/batch_status")
-    @SaCheckPermission("space:space:update")
+    @RequirePermission("space:space:update")
     public Result<SpaceBatchStatusVO> batchStatus(@Valid @RequestBody SpaceBatchStatusDTO dto) {
         return Result.success(spaceService.batchStatus(dto));
     }
 
     /** 导入模板下载（表头与导出完全一致的空 CSV，UTF-8 BOM） */
     @GetMapping("/import/template")
-    @SaCheckPermission("space:space:create")
+    @RequirePermission("space:space:create")
     public ResponseEntity<byte[]> importTemplate() {
         byte[] csv = spaceService.importTemplateCsv();
         return ResponseEntity.ok()
@@ -90,13 +90,13 @@ public class SpaceController {
      * 权限复用 space:space:create；仅写 lab 表，不影响预约等下游业务。
      */
     @PostMapping("/import")
-    @SaCheckPermission("space:space:create")
+    @RequirePermission("space:space:create")
     public Result<SpaceImportVO> importSpaces(@RequestParam("file") MultipartFile file) {
         return Result.success(spaceService.importSpaces(file));
     }
 
     @GetMapping("/options")
-    @SaCheckPermission("space:space:list")
+    @RequirePermission("space:space:list")
     public Result<List<SpaceOptionVO>> options(@RequestParam(required = false) SpaceType labType,
                                                 @RequestParam(required = false) Integer minCapacity,
                                                 @RequestParam(required = false) Boolean availableOnly,
@@ -105,45 +105,45 @@ public class SpaceController {
     }
 
     @GetMapping("/stats")
-    @SaCheckPermission("space:space:list")
+    @RequirePermission("space:space:list")
     public Result<SpaceStatsVO> stats() {
         return Result.success(spaceService.stats());
     }
 
     @GetMapping("/{id}")
-    @SaCheckPermission("space:space:read")
+    @RequirePermission("space:space:read")
     public Result<SpaceDetailVO> detail(@PathVariable Long id) {
         return Result.success(spaceService.detail(id));
     }
 
     @PostMapping
-    @SaCheckPermission("space:space:create")
+    @RequirePermission("space:space:create")
     public Result<SpaceDetailVO> create(@Valid @RequestBody SpaceCreateDTO dto) {
         return Result.success(spaceService.create(dto));
     }
 
     @PutMapping("/{id}")
-    @SaCheckPermission("space:space:update")
+    @RequirePermission("space:space:update")
     public Result<SpaceDetailVO> update(@PathVariable Long id, @Valid @RequestBody SpaceUpdateDTO dto) {
         return Result.success(spaceService.update(id, dto));
     }
 
     @PostMapping("/{id}/enable")
-    @SaCheckPermission("space:space:update")
+    @RequirePermission("space:space:update")
     public Result<Void> enable(@PathVariable Long id) {
         spaceService.enable(id);
         return Result.success();
     }
 
     @PostMapping("/{id}/disable")
-    @SaCheckPermission("space:space:update")
+    @RequirePermission("space:space:update")
     public Result<Void> disable(@PathVariable Long id) {
         spaceService.disable(id);
         return Result.success();
     }
 
     @DeleteMapping("/{id}")
-    @SaCheckPermission("space:space:delete")
+    @RequirePermission("space:space:delete")
     public Result<Void> delete(@PathVariable Long id) {
         spaceService.delete(id);
         return Result.success();

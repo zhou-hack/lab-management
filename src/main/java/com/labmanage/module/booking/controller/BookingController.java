@@ -1,6 +1,6 @@
 package com.labmanage.module.booking.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.booking.dto.BookingCancelDTO;
@@ -44,19 +44,19 @@ public class BookingController {
     }
 
     @PostMapping
-    @SaCheckPermission("booking:lab:create")
+    @RequirePermission("booking:lab:create")
     public Result<BookingDetailVO> create(@Valid @RequestBody BookingCreateDTO dto) {
         return Result.success(bookingService.create(dto));
     }
 
     @GetMapping
-    @SaCheckPermission("booking:lab:list")
+    @RequirePermission("booking:lab:list")
     public Result<PageResult<BookingVO>> pageMine(@Valid @ModelAttribute BookingPageQuery query) {
         return Result.success(bookingService.pageMine(query));
     }
 
     @GetMapping("/all")
-    @SaCheckPermission("booking:lab:approve")
+    @RequirePermission("booking:lab:approve")
     public Result<PageResult<BookingVO>> pageAll(@Valid @ModelAttribute BookingPageQuery query) {
         return Result.success(bookingService.pageAll(query));
     }
@@ -66,19 +66,19 @@ public class BookingController {
      * 全量查看预约情况与批准/驳回结果，不提供任何写操作。
      */
     @GetMapping("/board")
-    @SaCheckPermission("booking:lab:view")
+    @RequirePermission("booking:lab:view")
     public Result<PageResult<BookingVO>> pageBoard(@Valid @ModelAttribute BookingPageQuery query) {
         return Result.success(bookingService.pageBoard(query));
     }
 
     @GetMapping("/stats")
-    @SaCheckPermission("booking:lab:approve")
+    @RequirePermission("booking:lab:approve")
     public Result<BookingStatsVO> stats() {
         return Result.success(bookingService.stats());
     }
 
     @GetMapping("/availability")
-    @SaCheckPermission("booking:lab:create")
+    @RequirePermission("booking:lab:create")
     public Result<AvailabilityVO> availability(
             @RequestParam Long spaceId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
@@ -90,23 +90,23 @@ public class BookingController {
      * [now, now+24h) 窗口重叠的记录，按开始时间升序。（任意预约权限可读）
      */
     @GetMapping("/recent")
-    @SaCheckPermission(value = {"booking:lab:view", "booking:lab:list",
-            "booking:lab:create", "booking:lab:approve"}, mode = cn.dev33.satoken.annotation.SaMode.OR)
+    @RequirePermission(value = {"booking:lab:view", "booking:lab:list",
+            "booking:lab:create", "booking:lab:approve"}, mode = RequirePermission.Mode.OR)
     public Result<java.util.List<com.labmanage.module.booking.vo.BookingVO>> recent(
             @RequestParam Long spaceId) {
         return Result.success(bookingService.recent(spaceId));
     }
 
     @GetMapping("/{id}")
-    @SaCheckPermission(
+    @RequirePermission(
             value = {"booking:lab:list", "booking:lab:view", "booking:lab:approve"},
-            mode = cn.dev33.satoken.annotation.SaMode.OR)
+            mode = RequirePermission.Mode.OR)
     public Result<BookingDetailVO> detail(@PathVariable Long id) {
         return Result.success(bookingService.detail(id));
     }
 
     @PostMapping("/{id}/cancel")
-    @SaCheckPermission("booking:lab:cancel")
+    @RequirePermission("booking:lab:cancel")
     public Result<Void> cancel(@PathVariable Long id,
                                @Valid @RequestBody(required = false) BookingCancelDTO dto) {
         bookingService.cancel(id, dto);
@@ -114,14 +114,14 @@ public class BookingController {
     }
 
     @PostMapping("/{id}/approve")
-    @SaCheckPermission("booking:lab:approve")
+    @RequirePermission("booking:lab:approve")
     public Result<Void> approve(@PathVariable Long id) {
         bookingService.approve(id);
         return Result.success();
     }
 
     @PostMapping("/{id}/reject")
-    @SaCheckPermission("booking:lab:approve")
+    @RequirePermission("booking:lab:approve")
     public Result<Void> reject(@PathVariable Long id, @Valid @RequestBody BookingRejectDTO dto) {
         bookingService.reject(id, dto);
         return Result.success();
@@ -132,7 +132,7 @@ public class BookingController {
      * 写 document_event(CHECKIN)，IN_USE 为派生态不落库。
      */
     @PostMapping("/{id}/checkin")
-    @SaCheckPermission("booking:lab:approve")
+    @RequirePermission("booking:lab:approve")
     public Result<Void> checkin(@PathVariable Long id) {
         bookingService.checkin(id);
         return Result.success();
@@ -143,7 +143,7 @@ public class BookingController {
      * 写 document_event(CHECKOUT) 并释放占用槽，FINISHED 为派生态。
      */
     @PostMapping("/{id}/checkout")
-    @SaCheckPermission("booking:lab:approve")
+    @RequirePermission("booking:lab:approve")
     public Result<Void> checkout(@PathVariable Long id,
                                  @Valid @RequestBody(required = false) BookingCheckoutDTO dto) {
         bookingService.checkout(id, dto);

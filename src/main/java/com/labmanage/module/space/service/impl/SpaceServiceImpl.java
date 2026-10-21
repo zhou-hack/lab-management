@@ -54,7 +54,7 @@ import java.util.regex.Pattern;
 /**
  * 场地业务实现（lab 单表）。
  * <p>
- * 授权说明：接口访问由 @SaCheckPermission 按权限标识控制（管理员全量、
+ * 授权说明：接口访问由 @RequirePermission 按权限标识控制（管理员全量、
  * 师生只读 space:space:list/read）。sys_user_data_scope 的 DEPARTMENT/CAMPUS/BUILDING
  * 行级范围在单表模式下无组织锚点列，一期不做行级过滤；LAB 级范围仍以
  * lab.id 为目标，删除前做引用检查。

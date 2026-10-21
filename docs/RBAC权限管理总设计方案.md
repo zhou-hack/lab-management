@@ -18,10 +18,10 @@
 
 | 原则 | 含义 | 落地体现 |
 | --- | --- | --- |
-| 服务端强制 | 每个受保护接口由后端校验权限，前端指令/菜单只是镜像 | `@SaCheckPermission` + 数据范围 Service 校验 |
+| 服务端强制 | 每个受保护接口由后端校验权限，前端指令/菜单只是镜像 | `@RequirePermission` + 数据范围 Service 校验 |
 | 最小权限 | 无范围记录不自动授予全校数据；无授权不获得助理身份 | sys_user_data_scope 空表即零范围；ASSISTANT 动态计算 |
-| 身份不可自提 | 用户不能通过客户端指定 user_type / role_code 提升身份 | 首登匹配 sys_person_roster 派生角色；OPS_ADMIN 仅 SQL 预置 |
-| 权限可即时回收 | 停用、撤销、范围收窄立即生效，不等会话自然过期 | `AuthService.evictSession` 踢会话强制重载 |
+| 身份不可自提 | 用户不能通过客户端指定 user_type / role_code 提升身份 | 名单核验派生角色；OPS_ADMIN 仅 SQL 预置 |
+| 权限可即时回收 | 停用、撤销、范围收窄在下一请求立即生效 | JWT 无缓存每请求实时加载权限；access 2 小时自然过期兜底 |
 | 审计只追加 | 操作日志不外键、不更新、不删除 | sys_operation_log 仅 INSERT |
 
 ---
@@ -36,11 +36,11 @@
 └──────────────┬─────────────────────────────────────────────────┘
                │ Authorization: Bearer <token>
 ┌──────────────▼─────────────────────────────────────────────────┐
-│ 后端（Spring Boot + Sa-Token + MyBatis-Plus）                     │
+│ 后端（Spring Boot + JWT/jjwt + MyBatis-Plus）                    │
 │                                                                 │
-│  认证层  AuthService：账密/短信验证码登录、首登建档、锁定限流、二级确认 │
-│  装配层  StpInterfaceImpl：会话缓存的角色/权限装配（踢会话即失效）      │
-│  校验层  @SaCheckPermission（功能权限）+ SysScopeService（数据范围）   │
+│  认证层  AuthService：账密登录、切换角色重签、锁定限流、二级确认      │
+│  装配层  JwtAuthFilter：解析 token 后每请求实时装配角色/权限         │
+│  校验层  @RequirePermission（功能权限）+ SysScopeService（数据范围）│
 │  授权层  AssistantGrantService：助理授权生命周期，动态派生 ASSISTANT   │
 │  审计层  @OperationLog AOP：独立事务写 sys_operation_log            │
 └──────────────┬─────────────────────────────────────────────────┘
@@ -59,10 +59,10 @@
 
 ### 3.1 用户与角色分离
 
-- **用户类型（sys_user.user_type）**：STUDENT / TEACHER / ADMIN。决定登录方式：学生/老师短信验证码登录；ADMIN 类型账密登录。会话时长统一 8 小时（普通用户 2026-10-20 起由 2 小时放宽）。
+- **用户类型（sys_user.user_type）**：STUDENT / TEACHER / ADMIN（OPS_ADMIN 账号 user_type 为 OPS_ADMIN）。登录方式统一账密（2026-10-20 起，短信验证码登录下线）；JWT 双 token：access 2 小时 + refresh 7 天。
 - **角色（sys_role.role_code）**：权限集合。主身份角色由 user_type 派生；老师账号可经用户管理页叠加绑定 ADMIN 角色（一人多角色，2026-10-20 起），ASSISTANT 是唯一可动态授予/回收的附加角色。
-- **活动角色（会话内生效身份视图）**：多角色用户登录后默认以主身份角色为活动角色，权限/菜单按活动角色装配；可经 POST /api/v1/auth/switch_role 在持有角色间直接切换（不校验），前端前台导航栏与后台右上角账户菜单提供切换入口。
-- 用户类型与角色正交但受控：OPS_ADMIN 角色的账号 user_type 仍为 ADMIN（账密登录、8 小时会话），角色只决定权限集合。
+- **活动角色（token 携带的生效身份视图）**：多角色用户登录后默认以主身份角色为活动角色，权限/菜单按活动角色装配；可经 POST /api/v1/auth/switch_role 在持有角色间切换（校验持有后重签双 token），前端右上角账户菜单提供切换入口。
+- 用户类型与角色正交但受控：角色只决定权限集合，user_type 决定主身份与默认活动角色。
 
 ### 3.2 五个预置角色
 
@@ -103,32 +103,32 @@
 ### 4.1 一次请求的完整校验链
 
 ```
-请求 → Sa-Token 登录校验（40100）
-     → StpInterfaceImpl 装配（会话缓存命中？直接用 : 实时装配回写）
-     → @SaCheckPermission("模块:资源:操作")（40300）
+请求 → JwtAuthFilter 解析 access token（无效/缺失 40100）
+     → AuthService.buildLoginUser 实时装配（活动角色 + 权限，无缓存）
+     → @RequirePermission("模块:资源:操作")（40300）
      → Controller 参数校验（40000）
      → Service 数据范围校验（仅管理员写操作，40300）
      → 业务规则校验（40400/40900）
      → @OperationLog 落审计（独立事务，不影响主流程）
 ```
 
-### 4.2 权限装配（StpInterfaceImpl）
+### 4.2 权限装配（AuthService.buildLoginUser）
 
 - 持有角色全集 = sys_user_role 静态角色 + 动态 ASSISTANT（assistant_grant 当前窗口存在有效行即追加）。
-- `getRoleCodeList` = 会话活动角色 + 动态 ASSISTANT；`getPermissionCodeList` = 活动角色（+ASSISTANT）对应的 sys_permission 集合。
-- 活动角色默认取主身份角色（user_type 派生，未持有时兜底第一个持有的非 ASSISTANT 角色），多角色用户可经 switch_role 会话内直接切换，切换即重新装配并回写会话缓存。
-- 结果按会话缓存；缓存不主动过期，**变更即踢会话**（见 4.3）。
+- 装配结果以 token 内活动角色 claim 为准：`roles` = 活动角色 + 动态 ASSISTANT；`permissions` = 活动角色（+ASSISTANT）对应的 sys_permission 集合，每请求实时从库加载。
+- 活动角色默认取主身份角色（user_type 派生，未持有时兜底第一个持有的非 ASSISTANT 角色），多角色用户可经 switch_role 切换（校验持有后重签双 token，claim 失效自动回退主身份）。
+- 无会话缓存：角色/权限变更下一请求立即生效；无状态会话无法主动踢人，依赖 access 2 小时自然过期。
 
-### 4.3 权限缓存失效矩阵
+### 4.3 权限失效矩阵（JWT 无状态，2026-10-20 起）
 
 | 变更场景 | 失效动作 | 实现位置 |
 | --- | --- | --- |
-| 用户被停用 | 立即踢该用户全部会话 | SysUserServiceImpl.updateEnabled → evictSession |
-| 助理授权创建 | 踢学生会话，重登装配 ASSISTANT | AssistantGrantServiceImpl.create |
-| 助理授权撤销 | 踢学生会话，助理身份随重登消失 | AssistantGrantServiceImpl.revoke |
-| 数据范围增删 | 范围实时查询无缓存，无需踢会话 | SysScopeService 直查 sys_user_data_scope |
-| 角色权限调整 | ✅ 已实现（OPS_ADMIN 整集替换，锁 OPS_ADMIN 角色）：踢该角色全部用户会话（含 ASSISTANT 动态持有者） | SysRoleServiceImpl.assignPermissions → evictRoleHolders |
-| 老师绑定/解绑管理员角色 | 踢该老师全部会话，重登按新持有角色装配 | SysUserServiceImpl.updateAdminRole → evictSession |
+| 用户被停用 | refresh 时拒绝轮换；access 最长 2 小时内自然失效 | AuthService.refresh 校验用户启用状态 |
+| 助理授权创建 | 下一请求实时装配自动追加 ASSISTANT，即时生效 | JwtAuthFilter → buildLoginUser |
+| 助理授权撤销 | 下一请求实时装配自动移除 ASSISTANT，即时生效 | JwtAuthFilter → buildLoginUser |
+| 数据范围增删 | 范围实时查询无缓存，下一请求即时生效 | SysScopeService 直查 sys_user_data_scope |
+| 角色权限调整 | ✅ 已实现（OPS_ADMIN 整集替换，锁 OPS_ADMIN 角色）：每请求实时加载，下一请求即时生效（含 ASSISTANT 动态持有者） | JwtAuthFilter → buildLoginUser |
+| 老师绑定/解绑管理员角色 | 持有角色实时加载；已签发 token 内活动角色若失效，装配时自动回退主身份 | AuthService.buildLoginUser |
 
 ### 4.4 前端镜像层
 
@@ -166,7 +166,7 @@
 
 ### 5.3 OPS_ADMIN 豁免
 
-OPS_ADMIN 绑定全部权限但不登记、也不需要范围行：`SysScopeServiceImpl.isOpsAdmin` 在 requireAllWrite / requireDepartmentWrite 入口对 OPS_ADMIN 直接放行（实现层豁免，接口权限码仍由 @SaCheckPermission 独立控制）。无此豁免时，其全量写权限将因"空表=零范围"全部落空；豁免后 OPS_ADMIN 成为真正面向全系统的兜底角色。
+OPS_ADMIN 绑定全部权限但不登记、也不需要范围行：`SysScopeServiceImpl.isOpsAdmin` 在 requireAllWrite / requireDepartmentWrite 入口对 OPS_ADMIN 直接放行（实现层豁免，接口权限码仍由 @RequirePermission 独立控制）。无此豁免时，其全量写权限将因"空表=零范围"全部落空；豁免后 OPS_ADMIN 成为真正面向全系统的兜底角色。
 
 ---
 
@@ -208,16 +208,16 @@ assistant_grant_scope 表达授权权力，一单可含多种：
 
 | 项 | 规则 | 实现 |
 | --- | --- | --- |
-| 登录方式 | 学生/老师短信验证码（首登匹配名单自动建档）；管理员账密 | AuthService |
-| 验证码 | 6 位数字，5 分钟有效，错误 5 次作废，60 秒重发间隔，日上限 | SmsCodeServiceImpl（内存存储+模拟通道，dev 返回 devCode） |
-| 密码 | ≥8 位含数字+字母；不设有效期，`password_changed_at` 为空（初始/被重置）时强制改密 | PUT /auth/password |
+| 登录方式 | 全部用户类型统一账号密码（2026-10-20 起短信验证码下线） | AuthService |
+| 口令传输 | 前端经 GET /auth/salt 取 BCrypt 盐前缀，bcryptjs 同盐复算哈希上传，服务端常量时间比对，明文不进入报文 | AuthService.salt/login |
+| 密码 | 8-64 位含字母数字，由服务端在设置时校验；密码由管理员预置或重置，强制改密链路已下线 | 用户管理重置 |
 | 锁定 | 连续 5 次密码错误锁 30 分钟（failed_login_count/locked_until），错误提示含剩余分钟 | AuthService |
-| 会话时长 | 学生/老师与 ADMIN 类型均为 8 小时（普通用户 2026-10-20 起由 2 小时放宽） | StpUtil.login 按 user_type 设置 timeout |
-| 二级确认 | 敏感操作（审批、报废处置等）先 POST /auth/password/confirm，通过后 Sa-Token 二级认证 300 秒内免再确认 | AuthService |
-| token 传输 | `Authorization: Bearer <token>`，前端存 sessionStorage | Axios 拦截器 |
-| 密码存储 | 仅 BCrypt 单向散列；admin/opsadmin 脚本为占位哈希，部署前必须替换并强制首登修改 | sys_rbac.sql / sys_ops_role.sql |
+| 会话时长 | JWT 双 token：access 2 小时 + refresh 7 天，全局统一；POST /auth/refresh 轮换双 token（用户停用即拒绝） | JwtService |
+| 二级确认 | 敏感操作（审批、报废处置等）先 POST /auth/password/confirm，通过后 300 秒内敏感接口免再确认（SecurityUtils.checkSafe） | AuthService.confirmPassword |
+| token 传输 | `Authorization: Bearer <access token>`，双 token 存 sessionStorage，401 先单飞刷新重试再清态跳登录 | Axios 拦截器 |
+| 密码存储 | 仅 BCrypt 单向散列；admin/opsadmin 脚本为占位哈希，部署前必须替换 | sys_rbac.sql / sys_ops_role.sql |
 
-首登建档事务：匹配有效名单（学工号+手机号）→ 创建 sys_user → 按名单 person_type 派生主身份角色写 sys_user_role，客户端不得指定。
+无状态会话无首登建档事务：`sys_person_roster` 名单表保留用于身份核验预留，登录直接使用预置账号。
 
 ---
 
@@ -273,7 +273,7 @@ RBAC 核心 11 表（sql/sys_rbac.sql）：sys_department、sys_person_roster、
 1. 在[权限清单.md](权限清单.md)功能矩阵确认功能归属角色（PRD 层）。
 2. 在[RBAC实施清单.md](RBAC实施清单.md)登记 `模块:资源:操作` 权限码与菜单（含 component_key 白名单名）。
 3. 模块建表脚本内登记本模块 sys_permission/sys_menu/sys_role_permission/sys_role_menu 初始数据，使用本模块 ID 段。
-4. 后端 Controller 加 `@SaCheckPermission`，写操作涉及部门归属的注入 SysScopeService 校验。
+4. 后端 Controller 加 `@RequirePermission`，写操作涉及部门归属的注入 SysScopeService 校验。
 5. 敏感操作（审批、处置）加二级确认；关键变更加 `@OperationLog` 埋点。
 6. 前端在 `router/dynamic.js` 登记组件白名单，页面按钮用 `v-permission`。
 7. 新增预置角色：sys_role 固定小 ID + RoleCode 枚举 + 绑定脚本 + 同步 AGENTS.md 与数据库设计.md（OPS_ADMIN 为范例）；一期仍不开放页面自定义角色。
@@ -284,12 +284,12 @@ RBAC 核心 11 表（sql/sys_rbac.sql）：sys_department、sys_person_roster、
 
 | 能力 | 状态 |
 | --- | --- |
-| 认证链路（登录/验证码/首登建档/profile/改密/二级确认/注销） | ✅ 已落地并验证 |
-| 锁定限流、会话分时长、动态 ASSISTANT 装配 | ✅ 已落地并验证 |
+| 认证链路（取盐/登录/刷新/profile/二级确认/注销，JWT 双 token） | ✅ 已落地并验证（2026-10-20 登录重写，Sa-Token 下线；2026-10-21 整合一人多角色） |
+| 锁定限流、动态 ASSISTANT 装配 | ✅ 已落地并验证 |
 | 用户/名单（含 CSV 导出与批量导入）/组织/角色只读/数据范围/操作日志/参数配置 | ✅ 已落地并验证；2026-10-20 起系统管理页面整体归 OPS_ADMIN 专属，ADMIN 仅保留操作日志页；2026-10-21 用户与名单合并为统一人员视图（菜单 system_user「人员管理」→ SystemUserRoster，名单与账号一行一人，列表走 GET /system/persons 需 system:user:list + system:roster:list 双权限，旧地址 /system/roster 静态重定向）；预约限制页面与接口 2026-10-21 下线（表与 countActive 保留供预约模块逾期冻结） |
 | 助理授权（创建/撤销/审计 + 权限缓存失效闭环） | ✅ 已落地并验证（范围表已建，业务接入待分组 B→E） |
 | OPS_ADMIN 运维角色 | ✅ 已落地并验证；2026-10-15 由运维子集调整为全部权限；2026-10-17 新增角色权限整集替换（system:role:assign，锁 OPS_ADMIN 角色）；2026-10-20 空间功能下线后回至 30 项，同日新增 system:user:bind_role 后为 31 项；2026-10-20 系统管理整体划归 OPS_ADMIN 专属（ADMIN 剥离至仅操作日志 20，且日志仅可见业务模块）；2026-10-21 预约限制 3 项权限随页面接口下线后为 28 项 |
-| 一人多角色与活动角色切换 | ✅ 已落地并验证（2026-10-20）：老师可绑定 ADMIN，默认主身份登录，switch_role 会话内直接切换 |
+| 一人多角色与活动角色切换 | ✅ 已落地并验证（2026-10-20）：老师可绑定 ADMIN，默认主身份登录；2026-10-21 起 switch_role 校验持有后重签双 token（JWT 融合版） |
 | 敏感端点二级认证强制执行（checkSafe + 40101 + 前端确认弹窗重试） | ✅ 已落地并验证（策略发布等敏感端点接入） |
 | 空间模块（校区/楼栋/实验室/开放规则） | ❌ 已于 2026-10-20 整体下线（模块代码、页面、权限 1000–1011、菜单 1000–1002、四表全部移除；CAMPUS/BUILDING/LAB 范围类型回退为预留） |
 | course/schedule 教学基础与 asset/booking/item/maintain/report 权限登记 | ⬜ 随分组 B→E（原依赖 space 表的设计待重新评审） |
@@ -301,7 +301,7 @@ RBAC 核心 11 表（sql/sys_rbac.sql）：sys_department、sys_person_roster、
 ## 十四、已知边界与限制
 
 1. 运维账号保护已实现：目标用户持有 OPS_ADMIN 角色时，编辑/启停/重置仅 OPS_ADMIN 本人可操作（SysUserServiceImpl.requireOpsAdminOperator，普通管理员调用返回 40300），普通 ADMIN 无法接管 opsadmin 账号；OPS_ADMIN 对普通账号的编辑/启停/重置不受此限（停用/重置本人仍被 40900 拦截）。
-2. 会话缓存按会话隔离：助理授权在未来时刻生效的，学生已在线会话不会到点自动获得助理身份，需重新登录（授权创建时的踢会话只保证创建时点之后的重登生效）。
-3. 短信验证码为单实例内存存储+模拟通道；多实例部署需迁共享存储并接真实通道。
+2. 无状态会话的生效延迟：助理授权在未来时刻生效的，学生到点后下一请求即自动获得助理身份（每请求实时装配）；但已签发 access token 内的活动角色不会变化，依赖 refresh/重登更新（最长 2 小时）。
+3. 短信验证码链路已随登录重写下线（2026-10-20）；哈希即凭据可被重放的风险由内网/开发场景接受，传输层安全以 HTTPS 为准。
 4. 数据范围类型仅 ALL/DEPARTMENT 开放（写操作按所属部门校验）；CAMPUS/BUILDING/LAB 为预留类型，已随 2026-10-20 空间功能下线不再开放。部门精确匹配不继承。
 5. 跨归口只读（显式 READ 行）规则已定，READ 行的页面化发放随业务模块可见性需求接入。

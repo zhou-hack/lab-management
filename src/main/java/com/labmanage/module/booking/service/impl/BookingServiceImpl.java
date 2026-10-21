@@ -1,6 +1,6 @@
 package com.labmanage.module.booking.service.impl;
 
-import cn.dev33.satoken.stp.StpUtil;
+import com.labmanage.common.utils.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -384,8 +384,8 @@ public class BookingServiceImpl implements BookingService {
     public BookingDetailVO detail(Long id) {
         Long operatorId = SecurityUtils.currentUserId();
         LabBooking booking = requireBooking(id);
-        boolean canViewAll = StpUtil.hasPermission("booking:lab:approve")
-                || StpUtil.hasPermission("booking:lab:view");
+        boolean canViewAll = SecurityUtils.hasPermission("booking:lab:approve")
+                || SecurityUtils.hasPermission("booking:lab:view");
         if (!booking.getApplicantId().equals(operatorId) && !canViewAll) {
             log.warn("[预约详情] 非申请人且无查看权限，拒绝：操作人={}, 预约ID={}, 申请人={}",
                     operatorId, id, booking.getApplicantId());

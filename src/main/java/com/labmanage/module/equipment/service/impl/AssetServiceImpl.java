@@ -1,6 +1,6 @@
 package com.labmanage.module.equipment.service.impl;
 
-import cn.dev33.satoken.stp.StpUtil;
+import com.labmanage.common.utils.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.labmanage.common.exception.BusinessException;
@@ -97,7 +97,7 @@ public class AssetServiceImpl implements AssetService {
 
     @Override
     public PageResult<AssetVO> page(AssetPageQuery query) {
-        LambdaQueryWrapper<EquipmentAsset> wrapper = buildWrapper(query, StpUtil.hasPermission(PERM_ASSET_UPDATE));
+        LambdaQueryWrapper<EquipmentAsset> wrapper = buildWrapper(query, SecurityUtils.hasPermission(PERM_ASSET_UPDATE));
         Page<EquipmentAsset> page = assetMapper.selectPage(PageUtils.toPage(query), wrapper);
         return PageResult.of(assemble(page.getRecords()), page.getTotal(), query.getPageNum(), query.getPageSize());
     }
@@ -180,7 +180,7 @@ public class AssetServiceImpl implements AssetService {
         history.setFromLocation(asset.getLocationDetail());
         history.setToLocation(request.toLocation());
         history.setMovedAt(Instant.now());
-        history.setOperatorId(StpUtil.getLoginIdAsLong());
+        history.setOperatorId(SecurityUtils.currentUserId());
         history.setReason(request.reason());
         locationHistoryMapper.insert(history);
 
@@ -194,7 +194,7 @@ public class AssetServiceImpl implements AssetService {
         EquipmentAsset asset = requireAsset(Ids.parse(id));
         asset.setValueLevel(request.valueLevel());
         asset.setClassificationReason(request.classificationReason());
-        asset.setClassifiedBy(StpUtil.getLoginIdAsLong());
+        asset.setClassifiedBy(SecurityUtils.currentUserId());
         asset.setClassifiedAt(Instant.now());
         assetMapper.updateById(asset);
     }
@@ -246,7 +246,7 @@ public class AssetServiceImpl implements AssetService {
 
     @Override
     public byte[] export(AssetPageQuery query) {
-        LambdaQueryWrapper<EquipmentAsset> wrapper = buildWrapper(query, StpUtil.hasPermission(PERM_ASSET_UPDATE));
+        LambdaQueryWrapper<EquipmentAsset> wrapper = buildWrapper(query, SecurityUtils.hasPermission(PERM_ASSET_UPDATE));
         List<EquipmentAsset> assets = assetMapper.selectList(wrapper);
         List<AssetVO> rows = assemble(assets);
         Map<String, Instant> createTimeById = assets.stream()

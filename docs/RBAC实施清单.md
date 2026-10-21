@@ -135,25 +135,26 @@ space 目录及 space_campus / space_lab 两个页面菜单（ID 1000–1002）�
 
 ## 四、认证接口契约
 
-前缀 `/api/v1`；token 经 `Authorization: Bearer <token>` 传递，前端存 sessionStorage。除标记「公开」的接口外均需登录。
+前缀 `/api/v1`；access token 经 `Authorization: Bearer <token>` 传递，前端双 token 存 sessionStorage。除标记「公开」的接口外均需登录。
+
+**口令传输（2026-10-20 起，替代 RSA 公钥方案）**：登录、敏感操作确认的口令字段一律 BCrypt 哈希上传。前端先经 `GET /auth/salt` 按账号取该账号盐前缀（库存哈希前 29 位），用 bcryptjs 以同一盐复算出 60 位哈希后提交，服务端与库中哈希做常量时间比对，明文不进入报文；新密码强度（8-64 位含字母数字）在设置时由服务端校验。哈希即凭据可被重放，内网/开发场景接受该风险；传输层安全仍以 HTTPS 为准。
 
 | 接口 | 方法/路径 | 说明 | 关键入参 | 成功 data | 主要错误 |
 | --- | --- | --- | --- | --- | --- |
-| 账号密码登录（公开） | POST /auth/login | 管理员 | accountName, password | token, userId, realName, userType, roles, passwordChangeRequired | 40100 凭据错误/账号锁定（msg 含剩余分钟）；40000 参数校验 |
-| 发送短信验证码（公开） | POST /auth/sms/send | 学生/老师 | phone | ttlSeconds | 40000 手机号格式；40900 触发限流（60s 重发/日上限） |
-| 验证码登录（公开） | POST /auth/sms/login | 首登匹配 sys_person_roster 自动建档并派生角色 | phone, code | 同登录 + needSetPassword（老师 true） | 40100 验证码错误/失效；40900 名单未匹配或已停用 |
-| 当前身份 | GET /auth/profile | 登录后/刷新时加载 | — | userId, realName, userType, roles, permissions, menus, activeRole, switchableRoles | 40100 未登录 |
-| 切换活动角色 | POST /auth/switch_role | 多角色用户会话内直接切换身份视图（不校验），重新装配权限/菜单 | roleCode | 同 profile（新活动角色全量装配） | 40300 未持有该角色/目标为 ASSISTANT |
-| 设置/修改密码 | PUT /auth/password | 学生/老师首次设置免旧密码；管理员必须旧密码 | oldPassword?, newPassword | null | 40000 密码规则（≥8 位含数字字母）；40100 旧密码错误 |
-| 敏感操作确认 | POST /auth/password/confirm | 审批、报废处置等二次确认，通过后开启 Sa-Token 二级认证 | password | validSeconds（300，期内敏感接口免再确认） | 40100 密码错误 |
-| 注销 | POST /auth/logout | 前端移除动态路由并清理状态 | — | null | — |
+| 口令盐（公开） | GET /auth/salt | 登录/确认前按账号取 BCrypt 盐前缀；账号不存在/未设密码返回统一 40100 防账号枚举 | accountName | salt | 40100 账号或密码错误 |
+| 账号密码登录（公开） | POST /auth/login | 全部用户类型统一账密登录 | accountName, password（哈希） | accessToken, refreshToken, expiresIn, userId, realName, userType, accountName, roles, activeRole | 40100 凭据错误/账号锁定（msg 含剩余次数或分钟）；40000 参数校验 |
+| 刷新令牌（公开） | POST /auth/refresh | 轮换 access + refresh 双 token，保留活动角色 | refreshToken | 同登录 | 40100 refresh 无效或过期 |
+| 当前身份 | GET /auth/profile | 登录后/刷新时加载 | — | userId, realName, userType, accountName, roles, permissions, menus, activeRole, switchableRoles | 40100 未登录 |
+| 切换活动角色 | POST /auth/switch_role | 多角色用户校验持有后重签双 token，重新装配权限/菜单 | roleCode | 同 profile（新活动角色全量装配）+ 新双 token | 40300 未持有该角色/目标为 ASSISTANT |
+| 敏感操作确认 | POST /auth/password/confirm | 审批、报废处置等二次确认，通过后 300 秒内敏感接口免再确认 | password（哈希） | validSeconds（300） | 40100 密码错误 |
+| 注销 | POST /auth/logout | 无状态 no-op；前端清理双 token 与状态即可 | — | null | — |
 
 实施规则：
 
-1. 连续 5 次密码错误锁定 30 分钟（`failed_login_count`/`locked_until`）；验证码 6 位数字、5 分钟有效、错误 5 次作废。
-2. 会话有效期按用户类型区分：学生/老师与管理员均为 8 小时（2026-10-20 起，普通用户由 2 小时放宽），登录时 `StpUtil.login(id, SaLoginParameter.setTimeout(...))` 设置。注意当前 `sa-token.timeout: 86400` 全局默认值与本规则不一致，roles 模块落地时修正。
-3. 密码不设有效期（PASSWORD_EXPIRE_DAYS 策略 2026-10-20 移除）；`password_changed_at` 为空（初始占位/被重置）时登录响应 `passwordChangeRequired=true`，前端强制跳转改密页。
-4. 首登建档事务：匹配有效名单（学工号+手机号）→ 创建 sys_user → 写入主身份 sys_user_role，角色由名单 `person_type` 派生，客户端不得指定。
+1. 连续 5 次密码错误锁定 30 分钟（`failed_login_count`/`locked_until`），错误提示含剩余次数或剩余分钟。
+2. 会话时长全局统一：access 2 小时、refresh 7 天，不再按用户类型区分；`POST /auth/refresh` 在用户仍启用时轮换双 token。
+3. 90 天强制换密、首登强制设密链路已随登录重写下线；密码由管理员在用户管理中预置或重置。
+4. 短信验证码登录与名单首登自动建档已下线，登录入口仅账密；`sys_person_roster` 名单表保留用于身份核验预留。
 
 ---
 
@@ -161,10 +162,12 @@ space 目录及 space_campus / space_lab 两个页面菜单（ID 1000–1002）�
 
 | # | 事项 | 已定方案 | 落地位置 |
 | --- | --- | --- | --- |
-| 1 | 短信通道与验证码存储 | 一期单实例：应用内存存储 + 模拟通道（验证码写日志）；多实例再迁共享存储 | SmsCodeServiceImpl |
-| 2 | 权限缓存失效 | Sa-Token 会话缓存角色权限；变更通过 `AuthService.evictSession` 踢会话强制重载 | StpInterfaceImpl / AuthService |
+| 1 | 短信通道与验证码存储 | 已随登录重写下线（2026-10-20）：登录入口仅账密，短信相关服务与端点整体移除 | —（已删除） |
+| 2 | 权限缓存失效 | JWT 无状态后不再缓存：角色权限每请求实时从库加载，变更即时生效；无状态会话无法主动踢人，依赖 access 2 小时自然过期 | JwtAuthFilter / AuthService |
 | 3 | 安全参数入 business_policy | 已登记 9 项（含 SMS_CODE_MAX_FAIL=5），见 [sql/sys_policy.sql](../sql/sys_policy.sql) | PolicyService 读取缓存 |
 | 4 | assistant_grant 两表 SQL 归属 | 单独脚本 [sql/assistant_grant.sql](../sql/assistant_grant.sql)，随 roles 模块先行落地 | 已建表 |
 | 5 | admin 初始密码 | 脚本保持占位；dev 库已替换为开发用散列，生产部署前必须替换并强制首登修改 | 部署 checklist |
 
 > roles 模块认证链路已实现并通过应用级验证（2026-10-14）：登录/验证码/首登建档/profile/改密/二级确认/注销、动态 ASSISTANT 计算、锁定与限流。ASSISTANT 增量权限随物料模块登记后生效。
+>
+> 2026-10-20 登录重写：Sa-Token 整体下线，改 JWT 无状态双 token；口令传输由 RSA 公钥改为 BCrypt 盐预取 + 前端复算哈希；短信验证码、强制改密、名单首登建档链路删除；`@SaCheckPermission` 全面替换为 `@RequirePermission`。2026-10-21 整合：JWT 与一人多角色融合，access/refresh 携带活动角色，switch_role 校验持有后重签双 token。

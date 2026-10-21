@@ -1,43 +1,36 @@
 package com.labmanage.roles.service.impl;
 
-import cn.dev33.satoken.stp.StpUtil;
-import cn.dev33.satoken.stp.parameter.SaLoginParameter;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.labmanage.common.exception.BusinessException;
+import com.labmanage.common.security.JwtService;
+import com.labmanage.common.security.LoginUser;
+import com.labmanage.common.utils.SecurityUtils;
 import com.labmanage.roles.dto.AccountLoginDTO;
 import com.labmanage.roles.dto.PasswordConfirmDTO;
-import com.labmanage.roles.dto.PasswordUpdateDTO;
-import com.labmanage.roles.dto.SmsLoginDTO;
-import com.labmanage.roles.dto.SmsSendDTO;
+import com.labmanage.roles.dto.RefreshTokenDTO;
 import com.labmanage.roles.dto.SwitchRoleDTO;
 import com.labmanage.roles.entity.SysMenu;
-import com.labmanage.roles.entity.SysPersonRoster;
 import com.labmanage.roles.entity.SysRole;
 import com.labmanage.roles.entity.SysUser;
 import com.labmanage.roles.entity.SysUserRole;
 import com.labmanage.roles.enums.RoleCode;
-import com.labmanage.roles.enums.UserType;
 import com.labmanage.roles.mapper.AssistantGrantMapper;
 import com.labmanage.roles.mapper.SysMenuMapper;
 import com.labmanage.roles.mapper.SysPermissionMapper;
-import com.labmanage.roles.mapper.SysPersonRosterMapper;
 import com.labmanage.roles.mapper.SysRoleMapper;
 import com.labmanage.roles.mapper.SysUserMapper;
 import com.labmanage.roles.mapper.SysUserRoleMapper;
 import com.labmanage.roles.service.AuthService;
 import com.labmanage.roles.service.PolicyService;
-import com.labmanage.roles.service.SmsCodeService;
 import com.labmanage.roles.vo.ConfirmVO;
 import com.labmanage.roles.vo.LoginVO;
 import com.labmanage.roles.vo.MenuVO;
 import com.labmanage.roles.vo.ProfileVO;
-import com.labmanage.roles.vo.SmsSendVO;
-import org.springframework.core.env.Environment;
-import org.springframework.dao.DuplicateKeyException;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import com.labmanage.roles.vo.SaltVO;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -46,17 +39,21 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 认证服务实现。
+ * 认证服务实现（JWT 无状态会话 + 活动角色）。
+ * <p>
+ * 口令链路：客户端按账号预取盐 → 本地 bcrypt 算出与库中一致的哈希 → 上传，
+ * 服务端常量时间比对，全程无明文传输（内网/开发场景接受哈希即凭据的重放风险）。
+ * <p>
+ * 多角色（一人多角色）：登录默认以主身份为活动角色，access/refresh token 均携带
+ * 活动角色声明；/auth/switch_role 校验目标角色后重签 token 对，权限/菜单按活动角色装配。
  */
 @Service
 public class AuthServiceImpl implements AuthService {
 
-    /** 敏感操作二级认证有效期（秒） */
-    private static final long SAFE_AUTH_SECONDS = 300;
+    /** BCrypt 哈希的盐前缀长度（$2a$10$ + 22 字符盐） */
+    private static final int BCRYPT_SALT_PREFIX_LENGTH = 29;
 
     private final SysUserMapper userMapper;
-
-    private final SysPersonRosterMapper rosterMapper;
 
     private final SysUserRoleMapper userRoleMapper;
 
@@ -68,31 +65,34 @@ public class AuthServiceImpl implements AuthService {
 
     private final AssistantGrantMapper grantMapper;
 
-    private final SmsCodeService smsCodeService;
-
     private final PolicyService policyService;
 
-    private final BCryptPasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
-    private final Environment environment;
-
-    public AuthServiceImpl(SysUserMapper userMapper, SysPersonRosterMapper rosterMapper,
-                           SysUserRoleMapper userRoleMapper, SysRoleMapper roleMapper,
-                           SysPermissionMapper permissionMapper, SysMenuMapper menuMapper,
-                           AssistantGrantMapper grantMapper, SmsCodeService smsCodeService,
-                           PolicyService policyService, BCryptPasswordEncoder passwordEncoder,
-                           Environment environment) {
+    public AuthServiceImpl(SysUserMapper userMapper, SysUserRoleMapper userRoleMapper,
+                           SysRoleMapper roleMapper, SysPermissionMapper permissionMapper,
+                           SysMenuMapper menuMapper, AssistantGrantMapper grantMapper,
+                           PolicyService policyService, JwtService jwtService) {
         this.userMapper = userMapper;
-        this.rosterMapper = rosterMapper;
         this.userRoleMapper = userRoleMapper;
         this.roleMapper = roleMapper;
         this.permissionMapper = permissionMapper;
         this.menuMapper = menuMapper;
         this.grantMapper = grantMapper;
-        this.smsCodeService = smsCodeService;
         this.policyService = policyService;
-        this.passwordEncoder = passwordEncoder;
-        this.environment = environment;
+        this.jwtService = jwtService;
+    }
+
+    @Override
+    public SaltVO salt(String accountName) {
+        SysUser user = userMapper.selectOne(Wrappers.<SysUser>lambdaQuery()
+                .eq(SysUser::getAccountName, accountName));
+        // 账号不存在与未设密码返回同一错误，不泄露账号是否存在
+        if (user == null || user.getPasswordHash() == null
+                || user.getPasswordHash().length() < BCRYPT_SALT_PREFIX_LENGTH) {
+            throw new BusinessException(40100, "账号或密码错误");
+        }
+        return new SaltVO(user.getPasswordHash().substring(0, BCRYPT_SALT_PREFIX_LENGTH));
     }
 
     @Override
@@ -104,149 +104,93 @@ public class AuthServiceImpl implements AuthService {
         }
         checkUsable(user);
         if (user.getPasswordHash() == null) {
-            throw new BusinessException(40100, "该账号未设置密码，请使用验证码登录");
+            throw new BusinessException(40100, "该账号未设置密码，请联系管理员重置");
         }
-        if (!passwordEncoder.matches(dto.password(), user.getPasswordHash())) {
+        if (!hashEquals(dto.password(), user.getPasswordHash())) {
             onPasswordFail(user);
         }
         resetPasswordFail(user);
-        return doLogin(user, false);
+        List<String> heldRoles = loadRoleCodes(user.getId());
+        return issueTokens(user, defaultActiveRole(user, heldRoles), heldRoles);
     }
 
     @Override
-    public SmsSendVO sendSmsCode(SmsSendDTO dto) {
-        SmsCodeService.SendResult result = smsCodeService.send(dto.phone());
-        // 模拟通道联调：仅 dev 环境回显验证码，其他环境置空
-        boolean devProfile = List.of(environment.getActiveProfiles()).contains("dev");
-        return new SmsSendVO(result.ttlSeconds(), devProfile ? result.code() : null);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public LoginVO smsLogin(SmsLoginDTO dto) {
-        smsCodeService.verify(dto.phone(), dto.code());
-        SysUser user = userMapper.selectOne(Wrappers.<SysUser>lambdaQuery()
-                .eq(SysUser::getPhone, dto.phone()));
-        if (user == null) {
-            user = registerFromRoster(dto.phone());
+    public LoginVO refresh(RefreshTokenDTO dto) {
+        JwtService.Parsed parsed = jwtService.parse(dto.refreshToken(), JwtService.TYPE_REFRESH);
+        if (parsed == null) {
+            throw new BusinessException(40100, "refresh token 无效或已过期");
         }
-        checkUsable(user);
-        boolean needSetPassword = needSetPassword(user);
-        return doLogin(user, needSetPassword);
+        SysUser user = userMapper.selectById(parsed.userId());
+        if (user == null || !Integer.valueOf(1).equals(user.getEnabled())) {
+            throw new BusinessException(40100, "账号不存在或已停用");
+        }
+        List<String> heldRoles = loadRoleCodes(user.getId());
+        // 刷新时保留原活动角色；角色已被解绑等失效场景回退默认活动角色
+        String activeRole = resolveActiveRole(user, heldRoles, parsed.activeRole());
+        return issueTokens(user, activeRole, heldRoles);
     }
 
     @Override
     public ProfileVO profile() {
-        Long userId = StpUtil.getLoginIdAsLong();
-        SysUser user = userMapper.selectById(userId);
+        LoginUser current = SecurityUtils.currentUser();
+        SysUser user = userMapper.selectById(current.userId());
         if (user == null || !Integer.valueOf(1).equals(user.getEnabled())) {
             throw new BusinessException(40100, "账号不存在或已停用");
         }
-        return assembleSession(user);
+        List<String> heldRoles = loadRoleCodes(user.getId());
+        return assembleProfile(user, resolveActiveRole(user, heldRoles, current.activeRole()), heldRoles);
     }
 
     @Override
-    public ProfileVO switchRole(SwitchRoleDTO dto) {
-        SysUser user = currentUser();
+    public LoginVO switchRole(SwitchRoleDTO dto) {
+        LoginUser current = SecurityUtils.currentUser();
+        SysUser user = userMapper.selectById(current.userId());
+        if (user == null || !Integer.valueOf(1).equals(user.getEnabled())) {
+            throw new BusinessException(40100, "账号不存在或已停用");
+        }
         List<String> heldRoles = loadRoleCodes(user.getId());
         String target = dto.roleCode().trim();
         if (RoleCode.ASSISTANT.name().equals(target) || !heldRoles.contains(target)) {
             throw new BusinessException(40300, "未持有该角色，无法切换");
         }
-        return assembleProfile(user, target, heldRoles);
-    }
-
-    /**
-     * 默认活动角色：主身份（user_type 派生，与角色码一致）若持有则取之；
-     * 否则取第一个持有的非 ASSISTANT 角色（如 opsadmin 仅持 OPS_ADMIN 的兜底）。
-     */
-    private String defaultActiveRole(SysUser user, List<String> heldRoles) {
-        if (heldRoles.contains(user.getUserType())) {
-            return user.getUserType();
-        }
-        return heldRoles.stream()
-                .filter(code -> !RoleCode.ASSISTANT.name().equals(code))
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(40100, "账号未分配有效角色"));
-    }
-
-    /**
-     * 按会话活动角色装配（缺省/失效取默认）并回写缓存；登录、profile、StpInterface 兜底共用。
-     */
-    private ProfileVO assembleSession(SysUser user) {
-        List<String> heldRoles = loadRoleCodes(user.getId());
-        Object cached = StpUtil.getSession().get(SESSION_ACTIVE_ROLE);
-        String activeRole = cached instanceof String cachedRole
-                && heldRoles.contains(cachedRole)
-                && !RoleCode.ASSISTANT.name().equals(cachedRole)
-                ? cachedRole : defaultActiveRole(user, heldRoles);
-        return assembleProfile(user, activeRole, heldRoles);
-    }
-
-    /**
-     * 活动角色装配：roles = 活动角色 + 动态 ASSISTANT；权限/菜单按活动角色出
-     * （ASSISTANT 现无静态绑定，其 roleId 一并查询天然兼容未来增量）；结果回写会话缓存。
-     */
-    private ProfileVO assembleProfile(SysUser user, String activeRole, List<String> heldRoles) {
-        boolean assistant = heldRoles.contains(RoleCode.ASSISTANT.name());
-        List<String> roles = new ArrayList<>();
-        roles.add(activeRole);
-        if (assistant) {
-            roles.add(RoleCode.ASSISTANT.name());
-        }
-        // 一期角色均为预置枚举（自定义角色不开放），活动角色必在 RoleCode 内
-        List<Long> assembleRoleIds = new ArrayList<>();
-        assembleRoleIds.add(RoleCode.valueOf(activeRole).getId());
-        if (assistant) {
-            assembleRoleIds.add(RoleCode.ASSISTANT.getId());
-        }
-        List<String> permissions = permissionMapper.selectPermissionCodesByRoleIds(assembleRoleIds);
-        List<MenuVO> menus = buildMenuTree(menuMapper.selectMenusByRoleIds(assembleRoleIds));
-        List<String> switchableRoles = heldRoles.stream()
-                .filter(code -> !RoleCode.ASSISTANT.name().equals(code) && !code.equals(activeRole))
-                .toList();
-        StpUtil.getSession().set(SESSION_ACTIVE_ROLE, activeRole);
-        StpUtil.getSession().set(SESSION_ROLES, roles);
-        StpUtil.getSession().set(SESSION_PERMS, permissions);
-        return new ProfileVO(String.valueOf(user.getId()), user.getRealName(), user.getUserType(),
-                roles, permissions, menus, activeRole, switchableRoles,
-                passwordChangeRequired(user), needSetPassword(user));
-    }
-
-    /** 老师首登尚未设置敏感操作密码时须强制设置 */
-    private boolean needSetPassword(SysUser user) {
-        return user.getPasswordHash() == null && UserType.TEACHER.name().equals(user.getUserType());
-    }
-
-    @Override
-    public void updatePassword(PasswordUpdateDTO dto) {
-        SysUser user = currentUser();
-        if (user.getPasswordHash() != null) {
-            if (dto.oldPassword() == null || !passwordEncoder.matches(dto.oldPassword(), user.getPasswordHash())) {
-                throw new BusinessException(40100, "旧密码错误");
-            }
-        }
-        user.setPasswordHash(passwordEncoder.encode(dto.newPassword()));
-        user.setPasswordChangedAt(Instant.now());
-        userMapper.updateById(user);
+        return issueTokens(user, target, heldRoles);
     }
 
     @Override
     public ConfirmVO confirmPassword(PasswordConfirmDTO dto) {
         SysUser user = currentUser();
         if (user.getPasswordHash() == null) {
-            throw new BusinessException(40100, "尚未设置密码，请先设置后再进行敏感操作确认");
+            throw new BusinessException(40100, "尚未设置密码，请联系管理员重置");
         }
-        if (!passwordEncoder.matches(dto.password(), user.getPasswordHash())) {
+        if (!hashEquals(dto.password(), user.getPasswordHash())) {
             throw new BusinessException(40100, "密码错误");
         }
-        StpUtil.openSafe(SAFE_AUTH_SECONDS);
-        return new ConfirmVO((int) SAFE_AUTH_SECONDS);
+        SecurityUtils.openSafe();
+        return new ConfirmVO((int) SecurityUtils.SAFE_AUTH_SECONDS);
     }
 
     @Override
     public void logout() {
-        StpUtil.logout();
+        // 无状态 JWT：服务端不持有会话，客户端丢弃 token 即完成注销
+    }
+
+    @Override
+    public LoginUser buildLoginUser(Long userId, String claimedActiveRole) {
+        SysUser user = userMapper.selectById(userId);
+        if (user == null || !Integer.valueOf(1).equals(user.getEnabled())) {
+            return null;
+        }
+        List<String> heldRoles = loadRoleCodes(userId);
+        String activeRole = resolveActiveRole(user, heldRoles, claimedActiveRole);
+        boolean assistant = heldRoles.contains(RoleCode.ASSISTANT.name());
+        List<String> roles = new ArrayList<>();
+        roles.add(activeRole);
+        if (assistant) {
+            roles.add(RoleCode.ASSISTANT.name());
+        }
+        List<String> permissions = permissionMapper.selectPermissionCodesByRoleIds(
+                assembleRoleIds(activeRole, assistant));
+        return new LoginUser(userId, activeRole, roles, permissions, null);
     }
 
     @Override
@@ -274,74 +218,86 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public List<String> refreshSessionRoles(Long userId) {
-        SysUser user = userMapper.selectById(userId);
-        if (user == null) {
-            return List.of();
-        }
-        return assembleSession(user).roles();
-    }
-
-    @Override
-    public List<String> refreshSessionPermissions(Long userId) {
-        SysUser user = userMapper.selectById(userId);
-        if (user == null) {
-            return List.of();
-        }
-        return assembleSession(user).permissions();
-    }
-
-    @Override
     public void evictSession(Long userId) {
-        StpUtil.logout(userId);
+        // 无状态 JWT 无法主动踢会话；角色权限每请求实时加载，access token 最长 2h 自然过期
     }
 
     /**
-     * 首登建档：匹配有效预录名单，派生身份与主角色；客户端不得指定角色。
+     * 默认活动角色：主身份（user_type 派生，与角色码一致）若持有则取之；
+     * 否则取第一个持有的非 ASSISTANT 角色（如 opsadmin 仅持 OPS_ADMIN 的兜底）。
      */
-    private SysUser registerFromRoster(String phone) {
-        SysPersonRoster roster = rosterMapper.selectOne(Wrappers.<SysPersonRoster>lambdaQuery()
-                .eq(SysPersonRoster::getPhone, phone));
-        if (roster == null) {
-            throw new BusinessException(40900, "该手机号未在预录名单中，无法登录，请联系管理员");
+    private String defaultActiveRole(SysUser user, List<String> heldRoles) {
+        if (heldRoles.contains(user.getUserType())) {
+            return user.getUserType();
         }
-        if (!Integer.valueOf(1).equals(roster.getEnabled())) {
-            throw new BusinessException(40900, "预录名单已停用，请联系管理员");
-        }
-        SysUser user = new SysUser();
-        user.setUserType(roster.getPersonType());
-        user.setRosterId(roster.getId());
-        user.setPhone(phone);
-        user.setPersonNo(roster.getPersonNo());
-        user.setRealName(roster.getRealName());
-        user.setDepartmentId(roster.getDepartmentId());
-        user.setEnabled(1);
-        user.setFailedLoginCount(0);
-        SysUserRole userRole = new SysUserRole();
-        userRole.setEnabled(1);
-        try {
-            userMapper.insert(user);
-            userRole.setUserId(user.getId());
-            userRole.setRoleId(UserType.STUDENT.name().equals(roster.getPersonType())
-                    ? RoleCode.STUDENT.getId() : RoleCode.TEACHER.getId());
-            userRoleMapper.insert(userRole);
-        } catch (DuplicateKeyException e) {
-            throw new BusinessException(40900, "账号已存在，请重新验证登录");
-        }
-        return user;
+        return heldRoles.stream()
+                .filter(code -> !RoleCode.ASSISTANT.name().equals(code))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(40100, "账号未分配有效角色"));
     }
 
     /**
-     * 登录共通：校验可用性后签发会话，按默认活动角色装配角色权限入会话缓存。
+     * 校验 token 声明的活动角色：须为当前持有且非 ASSISTANT 的角色，否则回退默认。
      */
-    private LoginVO doLogin(SysUser user, boolean needSetPassword) {
-        long timeout = UserType.ADMIN.name().equals(user.getUserType())
-                ? policyService.getInt("SESSION_TIMEOUT_ADMIN", "timeoutSeconds", 28800)
-                : policyService.getInt("SESSION_TIMEOUT_STUDENT_TEACHER", "timeoutSeconds", 28800);
-        StpUtil.login(user.getId(), new SaLoginParameter().setTimeout(timeout));
-        ProfileVO profile = assembleSession(user);
-        return new LoginVO(StpUtil.getTokenValue(), String.valueOf(user.getId()), user.getRealName(),
-                user.getUserType(), profile.roles(), passwordChangeRequired(user), needSetPassword);
+    private String resolveActiveRole(SysUser user, List<String> heldRoles, String claimed) {
+        if (claimed != null && !claimed.isBlank()
+                && !RoleCode.ASSISTANT.name().equals(claimed)
+                && heldRoles.contains(claimed)) {
+            return claimed;
+        }
+        return defaultActiveRole(user, heldRoles);
+    }
+
+    /** 活动角色（+有效助理授权的 ASSISTANT）→ 装配用角色 ID 集合 */
+    private List<Long> assembleRoleIds(String activeRole, boolean assistant) {
+        List<Long> roleIds = new ArrayList<>();
+        roleIds.add(RoleCode.valueOf(activeRole).getId());
+        if (assistant) {
+            roleIds.add(RoleCode.ASSISTANT.getId());
+        }
+        return roleIds;
+    }
+
+    /** 按活动角色装配身份响应（角色/权限/菜单 + 可切换角色） */
+    private ProfileVO assembleProfile(SysUser user, String activeRole, List<String> heldRoles) {
+        boolean assistant = heldRoles.contains(RoleCode.ASSISTANT.name());
+        List<String> roles = new ArrayList<>();
+        roles.add(activeRole);
+        if (assistant) {
+            roles.add(RoleCode.ASSISTANT.name());
+        }
+        List<String> permissions = permissionMapper.selectPermissionCodesByRoleIds(
+                assembleRoleIds(activeRole, assistant));
+        List<MenuVO> menus = buildMenuTree(menuMapper.selectMenusByRoleIds(assembleRoleIds(activeRole, assistant)));
+        List<String> switchableRoles = heldRoles.stream()
+                .filter(code -> !RoleCode.ASSISTANT.name().equals(code) && !code.equals(activeRole))
+                .toList();
+        return new ProfileVO(String.valueOf(user.getId()), user.getRealName(), user.getUserType(),
+                user.getAccountName(), roles, permissions, menus, activeRole, switchableRoles);
+    }
+
+    /** 签发 access+refresh token 并装配响应（roles 按活动角色口径） */
+    private LoginVO issueTokens(SysUser user, String activeRole, List<String> heldRoles) {
+        boolean assistant = heldRoles.contains(RoleCode.ASSISTANT.name());
+        List<String> roles = new ArrayList<>();
+        roles.add(activeRole);
+        if (assistant) {
+            roles.add(RoleCode.ASSISTANT.name());
+        }
+        return new LoginVO(jwtService.issueAccess(user.getId(), activeRole),
+                jwtService.issueRefresh(user.getId(), activeRole),
+                jwtService.getAccessTtlSeconds(), String.valueOf(user.getId()), user.getRealName(),
+                user.getUserType(), user.getAccountName(), roles, activeRole);
+    }
+
+    /** 常量时间比对客户端 bcrypt 密文与库中哈希（防时序侧信道） */
+    private boolean hashEquals(String clientHash, String storedHash) {
+        if (clientHash == null || storedHash == null) {
+            return false;
+        }
+        return MessageDigest.isEqual(
+                clientHash.getBytes(StandardCharsets.UTF_8),
+                storedHash.getBytes(StandardCharsets.UTF_8));
     }
 
     private void checkUsable(SysUser user) {
@@ -378,19 +334,8 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
-    /**
-     * 首登强制改密：password_changed_at 为空表示初始/被重置密码，登录后须先改密。
-     * 密码不设有效期（PASSWORD_EXPIRE_DAYS 策略已于 2026-10-20 移除）。
-     */
-    private boolean passwordChangeRequired(SysUser user) {
-        if (!UserType.ADMIN.name().equals(user.getUserType())) {
-            return false;
-        }
-        return user.getPasswordChangedAt() == null;
-    }
-
     private SysUser currentUser() {
-        SysUser user = userMapper.selectById(StpUtil.getLoginIdAsLong());
+        SysUser user = userMapper.selectById(SecurityUtils.currentUserId());
         if (user == null || !Integer.valueOf(1).equals(user.getEnabled())) {
             throw new BusinessException(40100, "账号不存在或已停用");
         }

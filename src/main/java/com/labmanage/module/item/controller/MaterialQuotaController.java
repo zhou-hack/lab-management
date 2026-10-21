@@ -1,6 +1,6 @@
 package com.labmanage.module.item.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.item.dto.MaterialQuotaQuery;
@@ -35,7 +35,7 @@ public class MaterialQuotaController {
     }
 
     @Operation(summary = "批量登记定额", description = "开课实例 + 物料已存在则更新定额量，不存在则新增并启用")
-    @SaCheckPermission("item:quota:create")
+    @RequirePermission("item:quota:create")
     @PostMapping
     public Result<Void> upsert(@Valid @RequestBody MaterialQuotaUpsertDTO dto) {
         quotaService.upsert(dto);
@@ -43,14 +43,14 @@ public class MaterialQuotaController {
     }
 
     @Operation(summary = "分页查询定额")
-    @SaCheckPermission("item:quota:list")
+    @RequirePermission("item:quota:list")
     @GetMapping("/page")
     public Result<PageResult<MaterialQuotaVO>> page(@Valid MaterialQuotaQuery query) {
         return Result.success(quotaService.page(query));
     }
 
     @Operation(summary = "修改定额量")
-    @SaCheckPermission("item:quota:update")
+    @RequirePermission("item:quota:update")
     @PutMapping("/{id}")
     public Result<Void> update(@Parameter(description = "定额 ID") @PathVariable String id,
                                @Valid @RequestBody MaterialQuotaUpdateDTO dto) {
@@ -59,7 +59,7 @@ public class MaterialQuotaController {
     }
 
     @Operation(summary = "启用定额", description = "停用后新申请不再取默认定额，历史申领快照不变")
-    @SaCheckPermission("item:quota:enable")
+    @RequirePermission("item:quota:enable")
     @PostMapping("/{id}/enable")
     public Result<Void> enable(@Parameter(description = "定额 ID") @PathVariable String id) {
         quotaService.enable(id);
@@ -67,7 +67,7 @@ public class MaterialQuotaController {
     }
 
     @Operation(summary = "停用定额")
-    @SaCheckPermission("item:quota:enable")
+    @RequirePermission("item:quota:enable")
     @PostMapping("/{id}/disable")
     public Result<Void> disable(@Parameter(description = "定额 ID") @PathVariable String id) {
         quotaService.disable(id);

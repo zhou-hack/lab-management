@@ -1,6 +1,6 @@
 package com.labmanage.roles.service.impl;
 
-import cn.dev33.satoken.stp.StpUtil;
+import com.labmanage.common.utils.SecurityUtils;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.utils.PageUtils;
@@ -47,7 +47,7 @@ public class SysLogServiceImpl implements SysLogService {
             query.setKeyword(query.getKeyword().trim());
         }
         // 系统管理类日志（system/auth 模块）归 OPS_ADMIN 专属审计；ADMIN 仅可见其所管业务模块日志
-        boolean bizOnly = !StpUtil.getRoleList().contains(RoleCode.OPS_ADMIN.name());
+        boolean bizOnly = !SecurityUtils.currentRoles().contains(RoleCode.OPS_ADMIN.name());
         Page<LogPageItemVO> page = operationLogMapper.selectLogPage(PageUtils.toPage(query), query, bizOnly);
         return PageUtils.toPageResult(page);
     }

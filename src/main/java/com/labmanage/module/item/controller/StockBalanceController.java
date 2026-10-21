@@ -1,6 +1,6 @@
 package com.labmanage.module.item.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.item.dto.StockBalanceExportQuery;
@@ -51,14 +51,14 @@ public class StockBalanceController {
     }
 
     @Operation(summary = "分页查询库存余额")
-    @SaCheckPermission("item:balance:list")
+    @RequirePermission("item:balance:list")
     @GetMapping("/page")
     public Result<PageResult<StockBalanceVO>> page(@Valid StockBalanceQuery query) {
         return Result.success(stockQueryService.pageBalance(query));
     }
 
     @Operation(summary = "设置预警配置（安全库存与补货目标库存）")
-    @SaCheckPermission("item:balance:update")
+    @RequirePermission("item:balance:update")
     @PutMapping("/{id}/warning-config")
     public Result<Void> updateWarningConfig(
             @Parameter(description = "余额 ID") @PathVariable String id,
@@ -70,7 +70,7 @@ public class StockBalanceController {
     @Operation(summary = "批量导入期初余额（xlsx/csv；有效行组装为一张 OPENING 期初入库草稿单，走审批过账，不直接改写余额）",
             description = "每行为一个库位+SKU 组合，仅允许当前无余额的组合；库位/SKU 须存在且启用。"
                     + "非法与冲突行跳过并返回失败明细，导入结果含草稿单据 ID")
-    @SaCheckPermission("item:balance:import")
+    @RequirePermission("item:balance:import")
     @PostMapping("/import")
     public Result<ImportResultVO> importOpening(
             @Parameter(description = "导入文件（.xlsx / .csv）") @RequestParam("file") MultipartFile file) {
@@ -78,7 +78,7 @@ public class StockBalanceController {
     }
 
     @Operation(summary = "导出库存余额（按筛选条件导出全部匹配行，xlsx/csv）")
-    @SaCheckPermission("item:balance:export")
+    @RequirePermission("item:balance:export")
     @GetMapping("/export")
     public void export(@Valid StockBalanceExportQuery query, HttpServletResponse response) throws IOException {
         TransferFile file = stockTransferService.exportBalances(query);
@@ -86,7 +86,7 @@ public class StockBalanceController {
     }
 
     @Operation(summary = "下载期初余额导入模板（xlsx/csv，仅表头）")
-    @SaCheckPermission("item:balance:import")
+    @RequirePermission("item:balance:import")
     @GetMapping("/import-template")
     public void importTemplate(
             @Parameter(description = "模板格式：xlsx / csv") @RequestParam(defaultValue = "xlsx") String format,

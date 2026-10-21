@@ -1,8 +1,9 @@
 package com.labmanage.module.space;
 
-import cn.dev33.satoken.stp.StpInterface;
-import cn.dev33.satoken.stp.StpUtil;
 import com.labmanage.common.result.Result;
+import com.labmanage.common.security.JwtService;
+import com.labmanage.common.security.LoginUser;
+import com.labmanage.roles.service.AuthService;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -60,10 +61,15 @@ class SpaceImportIntegrationTest {
         @RestController
         static class TestAuthController {
 
+            private final JwtService jwtService;
+
+            TestAuthController(JwtService jwtService) {
+                this.jwtService = jwtService;
+            }
+
             @GetMapping("/test/login")
             Result<String> login() {
-                StpUtil.login(1L);
-                return Result.success(StpUtil.getTokenValue());
+                return Result.success(jwtService.issueAccess(1L, null));
             }
         }
     }
@@ -72,7 +78,7 @@ class SpaceImportIntegrationTest {
             "场地名称,类型,位置,容纳人数,开放时段,状态,配套设备,创建时间(上海),更新时间(上海)";
 
     @MockitoBean
-    private StpInterface stpInterface;
+    private AuthService authService;
 
     @LocalServerPort
     private int port;
@@ -86,11 +92,10 @@ class SpaceImportIntegrationTest {
 
     @BeforeEach
     void login() throws Exception {
-        Mockito.when(stpInterface.getPermissionList(Mockito.any(), Mockito.any()))
-                .thenReturn(List.of("space:space:list", "space:space:read", "space:space:create",
-                        "space:space:update", "space:space:delete"));
-        Mockito.when(stpInterface.getRoleList(Mockito.any(), Mockito.any()))
-                .thenReturn(List.of("ADMIN"));
+        Mockito.when(authService.buildLoginUser(Mockito.any(), Mockito.any()))
+                .thenReturn(new LoginUser(1L, "ADMIN", List.of("ADMIN"),
+                        List.of("space:space:list", "space:space:read", "space:space:create",
+                                "space:space:update", "space:space:delete"), null));
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("http://127.0.0.1:" + port + "/test/login"))
                 .GET()
@@ -305,11 +310,10 @@ class SpaceImportIntegrationTest {
     @Test
     @DisplayName("权限控制：无 space:space:create 权限调用导入返回 403")
     void importWithoutCreatePermission_forbidden() throws Exception {
-        Mockito.reset(stpInterface);
-        Mockito.when(stpInterface.getPermissionList(Mockito.any(), Mockito.any()))
-                .thenReturn(List.of("space:space:list", "space:space:read"));
-        Mockito.when(stpInterface.getRoleList(Mockito.any(), Mockito.any()))
-                .thenReturn(List.of("TEACHER"));
+        Mockito.reset(authService);
+        Mockito.when(authService.buildLoginUser(Mockito.any(), Mockito.any()))
+                .thenReturn(new LoginUser(1L, "TEACHER", List.of("TEACHER"),
+                        List.of("space:space:list", "space:space:read"), null));
 
         String csv = TEMPLATE_HEADER + "\r\nH301 越权实训室,实训室,H 楼,20,,,,\r\n";
         int status = uploadStatus("spaces.csv", "text/csv", csv.getBytes(StandardCharsets.UTF_8));

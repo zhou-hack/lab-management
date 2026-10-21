@@ -1,6 +1,6 @@
 package com.labmanage.roles.support;
 
-import cn.dev33.satoken.stp.StpUtil;
+import com.labmanage.common.utils.SecurityUtils;
 import com.labmanage.common.log.OperationLog;
 import com.labmanage.roles.entity.SysOperationLog;
 import com.labmanage.roles.entity.SysUser;
@@ -87,7 +87,7 @@ public class OperationLogAspect {
 
     private Long currentUserId() {
         try {
-            return StpUtil.isLogin() ? StpUtil.getLoginIdAsLong() : null;
+            return SecurityUtils.isLogin() ? SecurityUtils.currentUserId() : null;
         } catch (Exception e) {
             return null;
         }

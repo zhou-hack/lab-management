@@ -1,6 +1,6 @@
 package com.labmanage.roles.service.impl;
 
-import cn.dev33.satoken.stp.StpUtil;
+import com.labmanage.common.utils.SecurityUtils;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.labmanage.common.exception.BusinessException;
@@ -130,7 +130,7 @@ public class SysUserServiceImpl implements SysUserService {
         requireOpsAdminOperator(user);
         scopeService.requireDepartmentWrite(user.getDepartmentId());
         if (Integer.valueOf(0).equals(dto.enabled())) {
-            if (id.equals(StpUtil.getLoginIdAsLong())) {
+            if (id.equals(SecurityUtils.currentUserId())) {
                 throw new BusinessException(40900, "不能停用当前登录账号");
             }
             user.setEnabled(0);
@@ -150,7 +150,7 @@ public class SysUserServiceImpl implements SysUserService {
     public void resetPassword(Long id, UserPasswordResetDTO dto) {
         SysUser user = requireUser(id);
         requireOpsAdminOperator(user);
-        if (id.equals(StpUtil.getLoginIdAsLong())) {
+        if (id.equals(SecurityUtils.currentUserId())) {
             throw new BusinessException(40900, "不能重置当前登录账号密码，请使用修改密码");
         }
         scopeService.requireDepartmentWrite(user.getDepartmentId());
@@ -223,7 +223,7 @@ public class SysUserServiceImpl implements SysUserService {
         if (!authService.loadRoleCodes(target.getId()).contains(RoleCode.OPS_ADMIN.name())) {
             return;
         }
-        if (!StpUtil.getRoleList().contains(RoleCode.OPS_ADMIN.name())) {
+        if (!SecurityUtils.currentRoles().contains(RoleCode.OPS_ADMIN.name())) {
             throw new BusinessException(40300, "运维管理员账号仅运维管理员本人可操作");
         }
     }

@@ -1,6 +1,6 @@
 package com.labmanage.module.booking.service.impl;
 
-import cn.dev33.satoken.stp.StpUtil;
+import com.labmanage.common.utils.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -442,8 +442,8 @@ public class BookingSeriesServiceImpl implements BookingSeriesService {
     public SeriesDetailVO detail(Long id) {
         Long operatorId = SecurityUtils.currentUserId();
         LabBookingSeries series = requireSeries(id);
-        boolean canViewAll = StpUtil.hasPermission("booking:lab:approve")
-                || StpUtil.hasPermission("booking:lab:view");
+        boolean canViewAll = SecurityUtils.hasPermission("booking:lab:approve")
+                || SecurityUtils.hasPermission("booking:lab:view");
         if (!series.getApplicantId().equals(operatorId) && !canViewAll) {
             log.warn("[周期预约详情] 非申请本人且无查看权限，拒绝：操作人={}, 规则ID={}", operatorId, id);
             throw new BusinessException(ResultCode.FORBIDDEN.getCode(), "无权查看该周期预约详情");

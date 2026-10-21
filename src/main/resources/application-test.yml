@@ -7,8 +7,9 @@ spring:
   jpa:
     open-in-view: false
 
-sa-token:
-  is-log: false
+app:
+  jwt:
+    secret: ${JWT_SECRET:dev-only-jwt-secret-32-bytes-minimum!!}
 
 springdoc:
   api-docs:

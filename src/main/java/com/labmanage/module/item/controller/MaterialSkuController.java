@@ -1,6 +1,6 @@
 package com.labmanage.module.item.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.item.dto.MaterialSkuCreateDTO;
@@ -51,21 +51,21 @@ public class MaterialSkuController {
     }
 
     @Operation(summary = "分页查询物料")
-    @SaCheckPermission("item:material:list")
+    @RequirePermission("item:material:list")
     @GetMapping("/page")
     public Result<PageResult<MaterialSkuVO>> page(@Valid MaterialSkuQuery query) {
         return Result.success(skuService.page(query));
     }
 
     @Operation(summary = "物料详情")
-    @SaCheckPermission("item:material:list")
+    @RequirePermission("item:material:list")
     @GetMapping("/{id}")
     public Result<MaterialSkuVO> get(@Parameter(description = "物料 ID") @PathVariable String id) {
         return Result.success(skuService.get(id));
     }
 
     @Operation(summary = "新增物料")
-    @SaCheckPermission("item:material:create")
+    @RequirePermission("item:material:create")
     @PostMapping
     public Result<Void> create(@Valid @RequestBody MaterialSkuCreateDTO dto) {
         skuService.create(dto);
@@ -73,7 +73,7 @@ public class MaterialSkuController {
     }
 
     @Operation(summary = "修改物料")
-    @SaCheckPermission("item:material:update")
+    @RequirePermission("item:material:update")
     @PutMapping
     public Result<Void> update(@Valid @RequestBody MaterialSkuUpdateDTO dto) {
         skuService.update(dto);
@@ -81,7 +81,7 @@ public class MaterialSkuController {
     }
 
     @Operation(summary = "启用/停用物料")
-    @SaCheckPermission("item:material:enable")
+    @RequirePermission("item:material:enable")
     @PutMapping("/{id}/status")
     public Result<Void> updateStatus(
             @Parameter(description = "物料 ID") @PathVariable String id,
@@ -91,7 +91,7 @@ public class MaterialSkuController {
     }
 
     @Operation(summary = "删除物料（逻辑删除；被余额/单据明细/申领明细/定额引用时拒绝）")
-    @SaCheckPermission("item:material:delete")
+    @RequirePermission("item:material:delete")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@Parameter(description = "物料 ID") @PathVariable String id) {
         skuService.delete(id);
@@ -99,7 +99,7 @@ public class MaterialSkuController {
     }
 
     @Operation(summary = "批量导入物料（xlsx/csv，编码冲突与非法行跳过并返回失败明细）")
-    @SaCheckPermission("item:material:import")
+    @RequirePermission("item:material:import")
     @PostMapping("/import")
     public Result<ImportResultVO> importSkus(
             @Parameter(description = "导入文件（.xlsx / .csv）") @RequestParam("file") MultipartFile file) {
@@ -107,7 +107,7 @@ public class MaterialSkuController {
     }
 
     @Operation(summary = "导出物料（按筛选条件导出全部匹配行，xlsx/csv）")
-    @SaCheckPermission("item:material:export")
+    @RequirePermission("item:material:export")
     @GetMapping("/export")
     public void export(@Valid MaterialSkuExportQuery query, HttpServletResponse response) throws IOException {
         TransferFile file = transferService.exportSkus(query);
@@ -115,7 +115,7 @@ public class MaterialSkuController {
     }
 
     @Operation(summary = "下载物料导入模板（xlsx/csv，仅表头）")
-    @SaCheckPermission("item:material:import")
+    @RequirePermission("item:material:import")
     @GetMapping("/import-template")
     public void importTemplate(
             @Parameter(description = "模板格式：xlsx / csv") @RequestParam(defaultValue = "xlsx") String format,

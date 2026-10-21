@@ -1,68 +1,61 @@
 package com.labmanage.roles.service;
 
+import com.labmanage.common.security.LoginUser;
 import com.labmanage.roles.dto.AccountLoginDTO;
 import com.labmanage.roles.dto.PasswordConfirmDTO;
-import com.labmanage.roles.dto.PasswordUpdateDTO;
-import com.labmanage.roles.dto.SmsLoginDTO;
-import com.labmanage.roles.dto.SmsSendDTO;
+import com.labmanage.roles.dto.RefreshTokenDTO;
 import com.labmanage.roles.dto.SwitchRoleDTO;
 import com.labmanage.roles.vo.ConfirmVO;
 import com.labmanage.roles.vo.LoginVO;
 import com.labmanage.roles.vo.ProfileVO;
-import com.labmanage.roles.vo.SmsSendVO;
+import com.labmanage.roles.vo.SaltVO;
 
 import java.util.List;
 
 /**
- * 认证服务：登录、首登建档、身份装配、密码管理与注销。
+ * 认证服务：取盐、账号密码登录、token 刷新、身份装配、活动角色切换与注销。
+ * <p>
+ * 口令传输约定（2026-10-20 定稿）：客户端先按账号预取 BCrypt 盐，
+ * 本地算出与库中一致的哈希后上传，服务端常量时间比对，全程不传输明文密码。
  */
 public interface AuthService {
 
-    /** Sa-Token 会话缓存键：角色码集合 */
-    String SESSION_ROLES = "auth_roles";
+    /** 按账号预取 BCrypt 盐（登录/二级确认前调用） */
+    SaltVO salt(String accountName);
 
-    /** Sa-Token 会话缓存键：权限标识集合 */
-    String SESSION_PERMS = "auth_perms";
-
-    /** Sa-Token 会话缓存键：活动角色码（当前生效的身份视图） */
-    String SESSION_ACTIVE_ROLE = "auth_active_role";
-
-    /** 账号密码登录（管理员） */
+    /** 账号密码登录（password 为客户端 bcrypt 密文） */
     LoginVO login(AccountLoginDTO dto);
 
-    /** 发送短信验证码 */
-    SmsSendVO sendSmsCode(SmsSendDTO dto);
+    /** refresh token 换新（签发新 access+refresh 对，保留活动角色） */
+    LoginVO refresh(RefreshTokenDTO dto);
 
-    /** 验证码登录；无账号时匹配预录名单自动建档并派生角色 */
-    LoginVO smsLogin(SmsLoginDTO dto);
-
-    /** 当前身份（角色/权限/菜单，供动态路由与 v-permission） */
+    /** 当前身份（按活动角色装配角色/权限/菜单） */
     ProfileVO profile();
 
-    /** 切换活动角色（多角色用户会话内切换身份视图，重新装配并返回新身份） */
-    ProfileVO switchRole(SwitchRoleDTO dto);
+    /** 切换活动角色（多角色用户切换身份视图，重签 token 对并返回新身份装配） */
+    LoginVO switchRole(SwitchRoleDTO dto);
 
-    /** 设置/修改密码 */
-    void updatePassword(PasswordUpdateDTO dto);
-
-    /** 敏感操作二次密码确认（开启 Sa-Token 二级认证） */
+    /** 敏感操作二次密码确认（password 为客户端 bcrypt 密文，通过后开启二级认证有效期） */
     ConfirmVO confirmPassword(PasswordConfirmDTO dto);
 
-    /** 注销当前会话 */
+    /** 注销（无状态 JWT：服务端无会话可清，客户端丢弃 token 即可） */
     void logout();
 
-    /** 用户角色码集合：持久化角色 + 有效助理授权动态计算的 ASSISTANT */
+    /**
+     * 每请求装配登录态：校验 token 中的活动角色声明（失效/缺失时回退默认活动角色），
+     * 按活动角色实时加载角色与权限。
+     */
+    LoginUser buildLoginUser(Long userId, String claimedActiveRole);
+
+    /** 用户全部持有角色码集合：持久化角色 + 有效助理授权动态计算的 ASSISTANT */
     List<String> loadRoleCodes(Long userId);
 
-    /** 用户权限标识集合（持久化角色绑定；ASSISTANT 增量随物料模块落地） */
+    /** 用户权限标识集合（全部持有角色并集；活动角色过滤见 buildLoginUser） */
     List<String> loadPermissionCodes(Long userId);
 
-    /** StpInterface 兜底：按会话活动角色装配角色码集合并回写会话缓存 */
-    List<String> refreshSessionRoles(Long userId);
-
-    /** StpInterface 兜底：按会话活动角色装配权限标识集合并回写会话缓存 */
-    List<String> refreshSessionPermissions(Long userId);
-
-    /** 权限/名单/范围变更后踢掉会话强制重载（决策：变更踢会话） */
+    /**
+     * 权限/名单/范围变更后使凭据尽快失效。
+     * 无状态 JWT 无法主动踢会话；角色权限每请求实时加载，access token 最长 2h 自然过期。
+     */
     void evictSession(Long userId);
 }

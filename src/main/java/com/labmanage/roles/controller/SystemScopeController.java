@@ -1,7 +1,7 @@
 package com.labmanage.roles.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
-import cn.dev33.satoken.stp.StpUtil;
+import com.labmanage.common.security.RequirePermission;
+import com.labmanage.common.utils.SecurityUtils;
 import com.labmanage.common.log.OperationLog;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
@@ -40,14 +40,14 @@ public class SystemScopeController {
     }
 
     @Operation(summary = "范围授权分页列表")
-    @SaCheckPermission("system:scope:list")
+    @RequirePermission("system:scope:list")
     @GetMapping
     public Result<PageResult<ScopePageItemVO>> page(@Valid ScopePageQueryDTO query) {
         return Result.success(scopeService.page(query));
     }
 
     @Operation(summary = "可授权管理员下拉（启用中的 ADMIN）")
-    @SaCheckPermission("system:scope:grant")
+    @RequirePermission("system:scope:grant")
     @GetMapping("/admin_options")
     public Result<List<AdminOptionVO>> adminOptions(
             @RequestParam(required = false) @Size(max = 32, message = "关键字长度不能超过 32") String keyword) {
@@ -55,21 +55,21 @@ public class SystemScopeController {
     }
 
     @Operation(summary = "新增范围授权（同目标升降级通过增删行实现；敏感操作需二级认证）")
-    @SaCheckPermission("system:scope:grant")
+    @RequirePermission("system:scope:grant")
     @OperationLog(moduleCode = "system", actionCode = "system:scope:grant", targetTable = "sys_user_data_scope")
     @PostMapping
     public Result<Void> create(@Valid @RequestBody ScopeCreateDTO dto) {
-        StpUtil.checkSafe();
+        SecurityUtils.checkSafe();
         scopeService.create(dto);
         return Result.success();
     }
 
     @Operation(summary = "删除范围授权（物理删除，可重新授权；敏感操作需二级认证）")
-    @SaCheckPermission("system:scope:grant")
+    @RequirePermission("system:scope:grant")
     @OperationLog(moduleCode = "system", actionCode = "system:scope:revoke", targetTable = "sys_user_data_scope", targetId = "#id")
     @DeleteMapping("/{id}")
     public Result<Void> remove(@PathVariable Long id) {
-        StpUtil.checkSafe();
+        SecurityUtils.checkSafe();
         scopeService.remove(id);
         return Result.success();
     }

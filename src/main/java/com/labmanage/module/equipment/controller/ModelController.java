@@ -1,6 +1,6 @@
 package com.labmanage.module.equipment.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.equipment.dto.ModelCreateRequest;
@@ -35,14 +35,14 @@ public class ModelController {
     }
 
     @Operation(summary = "型号分页查询")
-    @SaCheckPermission("equipment:model:list")
+    @RequirePermission("equipment:model:list")
     @GetMapping
     public Result<PageResult<ModelVO>> page(ModelPageQuery query) {
         return Result.success(modelService.page(query));
     }
 
     @Operation(summary = "新增型号")
-    @SaCheckPermission("equipment:model:create")
+    @RequirePermission("equipment:model:create")
     @PostMapping
     public Result<Void> create(@Valid @RequestBody ModelCreateRequest request) {
         modelService.create(request);
@@ -50,7 +50,7 @@ public class ModelController {
     }
 
     @Operation(summary = "修改型号")
-    @SaCheckPermission("equipment:model:update")
+    @RequirePermission("equipment:model:update")
     @PutMapping("/{id}")
     public Result<Void> update(@PathVariable String id, @Valid @RequestBody ModelUpdateRequest request) {
         modelService.update(id, request);
@@ -58,7 +58,7 @@ public class ModelController {
     }
 
     @Operation(summary = "删除型号")
-    @SaCheckPermission("equipment:model:delete")
+    @RequirePermission("equipment:model:delete")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable String id) {
         modelService.delete(id);
