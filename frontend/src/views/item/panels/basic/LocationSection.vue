@@ -63,6 +63,15 @@
         show-overflow-tooltip
       />
       <el-table-column
+        label="保管人"
+        width="120"
+        align="center"
+      >
+        <template #default="{ row }">
+          {{ row.custodianName || row.custodianId || '—' }}
+        </template>
+      </el-table-column>
+      <el-table-column
         prop="labId"
         label="实验室 ID"
         width="170"
@@ -173,9 +182,17 @@
             placeholder="如 A 区 3 层左柜"
           />
         </el-form-item>
+        <el-form-item label="保管人">
+          <UserSelect
+            v-model="form.custodianId"
+            class="w240"
+            :preset-name="form.custodianName"
+            placeholder="输入姓名/账号搜索，每库位一名"
+          />
+        </el-form-item>
       </el-form>
       <div class="muted small">
-        库位码在同实验室内唯一；被库存余额 / 单据明细 / 进行中盘点引用时禁止删除。
+        库位码在同实验室内唯一；被库存余额 / 单据明细引用时禁止删除。保管人按姓名/账号/学工号前缀搜索。
       </div>
       <template #footer>
         <el-button @click="dialogVisible = false">
@@ -207,6 +224,7 @@ import { usePagedList } from '@/utils/usePagedList'
 import { confirmAction } from '@/utils/confirm'
 import { fmtShanghai } from '@/utils/format'
 import PagerBar from '@/components/PagerBar.vue'
+import UserSelect from '@/components/UserSelect.vue'
 
 const keyword = ref('')
 const enabled = ref(null)
@@ -225,7 +243,7 @@ const editing = ref(null)
 const form = reactive(emptyForm())
 
 function emptyForm() {
-  return { id: '', labId: '', locationCode: '', locationName: '', locationDetail: '' }
+  return { id: '', labId: '', locationCode: '', locationName: '', locationDetail: '', custodianId: '', custodianName: '' }
 }
 
 function openCreate() {
@@ -241,7 +259,9 @@ function openEdit(row) {
     labId: row.labId || '',
     locationCode: row.locationCode,
     locationName: row.locationName,
-    locationDetail: row.locationDetail || ''
+    locationDetail: row.locationDetail || '',
+    custodianId: row.custodianId || '',
+    custodianName: row.custodianName || ''
   })
   dialogVisible.value = true
 }
@@ -265,7 +285,8 @@ async function submitForm() {
       labId: form.labId || undefined,
       locationCode: form.locationCode,
       locationName: form.locationName,
-      locationDetail: form.locationDetail || undefined
+      locationDetail: form.locationDetail || undefined,
+      custodianId: form.custodianId || undefined
     }
     if (editing.value) {
       await updateStockLocation({ id: form.id, ...payload })
@@ -300,7 +321,7 @@ async function doToggle(row) {
 
 async function doDelete(row) {
   const ok = await confirmAction(
-    `确认删除库位「${row.locationName}」？逻辑删除后库位码不可复用；被余额 / 单据明细 / 进行中盘点引用时将被拒绝。`,
+    `确认删除库位「${row.locationName}」？逻辑删除后库位码不可复用；被余额 / 单据明细引用时将被拒绝。`,
     '删除确认'
   )
   if (!ok) return

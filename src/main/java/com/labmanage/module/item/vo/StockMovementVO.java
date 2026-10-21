@@ -59,6 +59,18 @@ public record StockMovementVO(
         BigDecimal afterAvgPrice,
 
         @Schema(description = "发生时间（UTC）", example = "2026-10-13T01:00:00.000Z")
-        Instant occurredAt
+        Instant occurredAt,
+
+        @Schema(description = "经手人 ID（→ sys_user.id；IN 为入库人、OUT 为出库人，取单据实际经办人）", example = "1234567890123456789")
+        String operatorId,
+
+        @Schema(description = "经手人姓名（入库人/出库人；缺失用户时为空，前端回退显示 ID）", example = "张老师")
+        String operatorName,
+
+        @Schema(description = "保管人 ID（→ sys_user.id，流水发生库位的保管人）", example = "1234567890123456789")
+        String custodianId,
+
+        @Schema(description = "保管人姓名（缺失用户时为空，前端回退显示 ID）", example = "李老师")
+        String custodianName
 ) {
 }

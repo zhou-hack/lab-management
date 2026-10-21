@@ -34,13 +34,13 @@ public interface StockDocumentLineMapper extends BaseMapper<StockDocumentLine> {
     @Insert("""
             <script>
             INSERT INTO stock_document_line
-                (id, stock_document_id, line_no, sku_id, from_location_id, to_location_id, qty,
-                 unit_price_snapshot, amount_snapshot, request_line_id, original_issue_line_id, adjust_direction)
+                (id, stock_document_id, line_no, sku_id, from_location_id, to_location_id, quantity,
+                 unit_price_snapshot, amount_snapshot, request_line_id, original_issue_line_id)
             VALUES
             <foreach collection='lines' item='l' separator=','>
                 (#{l.id}, #{l.stockDocumentId}, #{l.lineNo}, #{l.skuId}, #{l.fromLocationId}, #{l.toLocationId},
                  #{l.quantity}, #{l.unitPriceSnapshot}, #{l.amountSnapshot}, #{l.requestLineId},
-                 #{l.originalIssueLineId}, #{l.adjustDirection})
+                 #{l.originalIssueLineId})
             </foreach>
             </script>
             """)

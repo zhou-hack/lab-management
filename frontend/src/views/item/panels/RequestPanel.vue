@@ -503,6 +503,16 @@
       </el-form>
 
       <!-- 代领行：源单行剩余可代领量 -->
+      <el-alert
+        v-if="form.requestType === 'PROXY' && form.proxyLines.length"
+        :type="proxyAllTaken ? 'warning' : 'info'"
+        :closable="false"
+        show-icon
+        :title="proxyAllTaken
+          ? '该源单的可代领额度已被其他代领单占满，领取量不可填写；请更换源单或联系管理员调整'
+          : '剩余可代领 = 批准量 − 已实发 − 已被其他代领单占用；领取量默认取剩余量，可按需调小'"
+        class="proxy-lines-hint"
+      />
       <el-table
         v-if="form.requestType === 'PROXY'"
         v-loading="proxyLinesLoading"
@@ -866,6 +876,12 @@ const filteredProxySources = computed(() => {
   )
 })
 
+/** 所选源单可代领额度是否已被其他代领单全部占满（满额时领取量不可填，需换源单） */
+const proxyAllTaken = computed(() =>
+  form.proxyLines.length > 0
+  && form.proxyLines.every((l) => Number(l.availableQty) <= 0)
+)
+
 const approveVisible = ref(false)
 const approveLoading = ref(false)
 const approveMode = ref('teacher')
@@ -1187,6 +1203,10 @@ defineExpose({ refresh: pager.load })
 
 .proxy-source-select {
   width: 560px;
+}
+
+.proxy-lines-hint {
+  margin-bottom: 8px;
 }
 
 .mb8 {

@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 库存单据详情 VO（含明细行）
@@ -48,10 +49,18 @@ public record StockDocumentDetailVO(
         List<StockDocumentLineVO> lines,
 
         @Schema(description = "合计金额（两位小数）", example = "255.00")
-        BigDecimal totalAmount
+        BigDecimal totalAmount,
+
+        @Schema(description = "经办人 ID（→ sys_user.id，单据实际操作人）", example = "1234567890123456789")
+        String operatorId,
+
+        @Schema(description = "经办人姓名（缺失用户时为空，前端回退显示 ID）", example = "张老师")
+        String operatorName
 ) {
 
-    public static StockDocumentDetailVO from(StockDocument e, List<StockDocumentLineVO> lines, BigDecimal totalAmount) {
+    public static StockDocumentDetailVO from(StockDocument e, List<StockDocumentLineVO> lines,
+                                            BigDecimal totalAmount, Map<Long, String> userNames) {
+        String operatorId = e.getOperatorId() == null ? null : String.valueOf(e.getOperatorId());
         return new StockDocumentDetailVO(
                 String.valueOf(e.getId()),
                 String.valueOf(e.getDocumentId()),
@@ -64,7 +73,9 @@ public record StockDocumentDetailVO(
                 e.getPostedAt(),
                 e.getCreateTime(),
                 lines,
-                totalAmount
+                totalAmount,
+                operatorId,
+                operatorId == null ? null : userNames.get(e.getOperatorId())
         );
     }
 }

@@ -176,20 +176,12 @@
           />
         </el-form-item>
         <el-form-item label="父分类">
-          <el-select
+          <CategorySelect
             v-model="form.parentId"
-            clearable
-            filterable
             class="w240"
-            placeholder="不选为根节点"
-          >
-            <el-option
-              v-for="c in parentOptions"
-              :key="c.id"
-              :label="`${c.categoryCode} · ${c.categoryName}`"
-              :value="c.id"
-            />
-          </el-select>
+            placeholder="输入编码/名称搜索，不选为根节点"
+            :exclude-id="editing ? editing.id : ''"
+          />
         </el-form-item>
       </el-form>
       <div class="muted small">
@@ -243,6 +235,7 @@ import { fmtShanghai } from '@/utils/format'
 import { saveBlobFile } from '@/utils/download'
 import PagerBar from '@/components/PagerBar.vue'
 import ImportDialog from '@/components/ImportDialog.vue'
+import CategorySelect from '@/components/CategorySelect.vue'
 
 const keyword = ref('')
 const enabled = ref(null)
@@ -276,11 +269,6 @@ const dialogVisible = ref(false)
 const submitting = ref(false)
 const editing = ref(null)
 const form = reactive({ id: '', categoryCode: '', categoryName: '', parentId: null })
-
-/** 父分类可选项：编辑时排除自身，避免把自己设为父分类形成环 */
-const parentOptions = computed(() =>
-  editing.value ? allCategories.value.filter((c) => c.id !== editing.value.id) : allCategories.value
-)
 
 function openCreate() {
   editing.value = null

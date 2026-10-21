@@ -35,6 +35,9 @@
         <el-descriptions-item label="过账时间">
           {{ fmtShanghai(detail.postedAt) || '-' }}
         </el-descriptions-item>
+        <el-descriptions-item label="经办人">
+          {{ displayName(detail.operatorName, detail.operatorId) }}
+        </el-descriptions-item>
         <el-descriptions-item label="金额合计">
           {{ formatQty(detail.totalAmount) || '-' }}
         </el-descriptions-item>
@@ -163,4 +166,10 @@ watch(
     if (open) load()
   }
 )
+
+/** 姓名/ID 均缺失（经办人未登记）时显示占位 */
+function displayName(name, id) {
+  if (name) return name
+  return id || '-'
+}
 </script>

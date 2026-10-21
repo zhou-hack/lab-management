@@ -104,6 +104,15 @@
         show-overflow-tooltip
       />
       <el-table-column
+        label="经办人"
+        width="120"
+        show-overflow-tooltip
+      >
+        <template #default="{ row }">
+          {{ displayName(row.operatorName, row.operatorId) }}
+        </template>
+      </el-table-column>
+      <el-table-column
         label="业务时间"
         width="170"
       >
@@ -268,6 +277,12 @@ async function doCancel(row) {
 onMounted(pager.load)
 
 defineExpose({ refresh: pager.load })
+
+/** 姓名/ID 均缺失（经办人未登记）时显示占位 */
+function displayName(name, id) {
+  if (name) return name
+  return id || '—'
+}
 </script>
 
 <style scoped>

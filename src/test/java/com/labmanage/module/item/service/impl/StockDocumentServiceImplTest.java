@@ -85,23 +85,10 @@ class StockDocumentServiceImplTest {
     private com.labmanage.module.item.mapper.MaterialSettlementMapper settlementMapper;
 
     @Mock
-    private com.labmanage.module.item.mapper.StocktakeMapper stocktakeMapper;
+    private com.labmanage.module.item.mapper.SysUserRefMapper sysUserRefMapper;
 
     @InjectMocks
     private StockDocumentServiceImpl service;
-
-    /**
-     * 追加（第二阶段）：初始化 Stocktake 实体的 MyBatis-Plus lambda 元数据缓存，
-     * 否则纯 Mockito 环境下 LambdaQueryWrapper 构建时会抛 can not find lambda cache。
-     */
-    @org.junit.jupiter.api.BeforeAll
-    static void initStocktakeMeta() {
-        org.apache.ibatis.builder.MapperBuilderAssistant assistant =
-                new org.apache.ibatis.builder.MapperBuilderAssistant(
-                        new com.baomidou.mybatisplus.core.MybatisConfiguration(), "");
-        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
-                assistant, com.labmanage.module.item.entity.Stocktake.class);
-    }
 
     // ---------------------------------------------------------------- helpers
 

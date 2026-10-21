@@ -21,6 +21,9 @@ public class StockLocation extends BaseEntity {
     /** 位置详述 */
     private String locationDetail;
 
+    /** 保管人 ID（→ sys_user.id，每库位一名；2026-10-19 需求定稿新增） */
+    private Long custodianId;
+
     /** 启用：1启用 0停用 */
     private Integer enabled;
 
@@ -54,6 +57,14 @@ public class StockLocation extends BaseEntity {
 
     public void setLocationDetail(String locationDetail) {
         this.locationDetail = locationDetail;
+    }
+
+    public Long getCustodianId() {
+        return custodianId;
+    }
+
+    public void setCustodianId(Long custodianId) {
+        this.custodianId = custodianId;
     }
 
     public Integer getEnabled() {

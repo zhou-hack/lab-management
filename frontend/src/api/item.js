@@ -22,6 +22,11 @@ export function getStockLocation(id) {
   return request.get(`/stock-locations/${id}`)
 }
 
+// 保管人候选搜索（跨模块只读用户，库位维护用）
+export function custodianOptions(keyword) {
+  return request.get('/stock-locations/custodian-options', { params: { keyword: keyword || undefined } })
+}
+
 // ---------- 基础数据 CRUD ----------
 // 物料分类
 export function pageCategories(params) {
@@ -227,41 +232,53 @@ export function createSettlement(data) {
   return request.post('/material-settlements', data)
 }
 
-// ---------- 盘点 ----------
-export function pageStocktakes(params) {
-  return request.get('/stocktakes/page', { params })
+// ---------- 物料批量导入/导出（xlsx / csv） ----------
+// 物料档案
+export function importSkus(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post('/material-skus/import', formData)
 }
 
-export function getStocktake(id) {
-  return request.get(`/stocktakes/${id}`)
+export function exportSkus(params) {
+  return request.get('/material-skus/export', { params, responseType: 'blob' })
 }
 
-export function createStocktake(data) {
-  return request.post('/stocktakes', data)
+export function downloadSkuImportTemplate(format) {
+  return request.get('/material-skus/import-template', { params: { format }, responseType: 'blob' })
 }
 
-export function startStocktake(id) {
-  return request.post(`/stocktakes/${id}/start`)
+// 物料分类
+export function importCategories(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post('/material-categories/import', formData)
 }
 
-export function countStocktake(id, data) {
-  return request.post(`/stocktakes/${id}/count`, data)
+export function exportCategories(params) {
+  return request.get('/material-categories/export', { params, responseType: 'blob' })
 }
 
-export function submitReviewStocktake(id) {
-  return request.post(`/stocktakes/${id}/submit-review`)
+export function downloadCategoryImportTemplate(format) {
+  return request.get('/material-categories/import-template', { params: { format }, responseType: 'blob' })
 }
 
-export function completeStocktake(id) {
-  return request.post(`/stocktakes/${id}/complete`)
+// ---------- 库存余额批量导入/导出（xlsx / csv） ----------
+// 库存余额导出
+export function exportBalances(params) {
+  return request.get('/stock-balances/export', { params, responseType: 'blob' })
 }
 
-export function approveAdjustStocktake(id) {
-  return request.post(`/stocktakes/${id}/approve-adjust`)
+// 期初余额批量导入（有效行组装为一张 OPENING 期初入库草稿单）
+export function importOpeningBalances(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post('/stock-balances/import', formData)
 }
 
-export function cancelStocktake(id) {
-  return request.post(`/stocktakes/${id}/cancel`)
+// 期初余额导入模板
+export function downloadOpeningImportTemplate(format) {
+  return request.get('/stock-balances/import-template', { params: { format }, responseType: 'blob' })
 }
 
 // ---------- 物料批量导入/导出（xlsx / csv） ----------
