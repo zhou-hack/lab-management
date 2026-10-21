@@ -177,7 +177,6 @@
         :data="assignTree"
         node-key="key"
         show-checkbox
-        default-expand-all
         :props="{ label: 'label', children: 'children' }"
         class="role_page__assign_tree"
       />
@@ -241,17 +240,38 @@ const assignTreeRef = ref(null)
 const assignRow = ref(null)
 const allPermissions = ref([])
 
+// 模块/资源中文名映射；未登记的新模块或资源原样显示编码段，不阻塞展示
+const MODULE_LABELS = { system: '系统管理', auth: '认证', grant: '助理授权' }
+const RESOURCE_LABELS = {
+  user: '用户管理',
+  roster: '名单管理',
+  department: '组织管理',
+  role: '角色权限',
+  scope: '数据范围',
+  restriction: '预约限制',
+  policy: '参数配置',
+  log: '操作日志',
+  grant: '助理授权'
+}
+
+// 三层树：模块 → 资源（从 permissionCode 第二段解析）→ 操作；叶子只显示权限名
 const assignTree = computed(() => {
-  const groups = {}
+  const modules = {}
   for (const p of allPermissions.value) {
-    const key = p.moduleCode || '其他'
-    if (!groups[key]) groups[key] = []
-    groups[key].push({ key: `p:${p.id}`, label: `${p.permissionCode}（${p.permissionName}）` })
+    const moduleKey = p.moduleCode || 'other'
+    const resourceKey = p.permissionCode?.split(':')[1] || 'other'
+    if (!modules[moduleKey]) modules[moduleKey] = {}
+    if (!modules[moduleKey][resourceKey]) modules[moduleKey][resourceKey] = []
+    modules[moduleKey][resourceKey].push({ key: `p:${p.id}`, label: p.permissionName })
   }
-  return Object.entries(groups).map(([module, children]) => ({
-    key: `m:${module}`,
-    label: module,
-    children
+  return Object.entries(modules).map(([moduleKey, resources]) => ({
+    key: `m:${moduleKey}`,
+    label: MODULE_LABELS[moduleKey] || moduleKey,
+    children: Object.entries(resources).map(([resourceKey, perms]) => ({
+      key: `r:${moduleKey}:${resourceKey}`,
+      label: RESOURCE_LABELS[resourceKey] || resourceKey,
+      children: perms
+    }))
   }))
 })
 

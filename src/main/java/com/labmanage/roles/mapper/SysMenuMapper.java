@@ -28,15 +28,14 @@ public interface SysMenuMapper extends BaseMapper<SysMenu> {
     List<SysMenu> selectMenusByUserId(@Param("userId") Long userId);
 
     /**
-     * 指定角色集合的可见菜单（身份一键切换按当前身份过滤）。
-     * ASSISTANT 身份含学生基础角色（调用方传入合并后的角色 ID 列表）。
+     * 按角色集合查询可见菜单（活动角色装配用，按 sort_order 排序）。
      */
     @Select("""
             <script>
             SELECT DISTINCT m.*
-            FROM sys_menu m
-            JOIN sys_role_menu rm ON rm.menu_id = m.id AND rm.deleted = 0 AND rm.enabled = 1
-            WHERE m.deleted = 0 AND m.enabled = 1 AND rm.role_id IN
+            FROM sys_role_menu rm
+            JOIN sys_menu m ON m.id = rm.menu_id AND m.deleted = 0 AND m.enabled = 1
+            WHERE rm.deleted = 0 AND rm.enabled = 1 AND rm.role_id IN
             <foreach collection="roleIds" item="roleId" open="(" separator="," close=")">#{roleId}</foreach>
             ORDER BY m.sort_order
             </script>

@@ -16,6 +16,7 @@ import com.labmanage.roles.service.SysScopeService;
 import com.labmanage.roles.vo.DepartmentTreeVO;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -71,17 +72,34 @@ public class SysDepartmentServiceImpl implements SysDepartmentService {
         // 根部门（parentId=NULL）要求全校写范围；下级部门要求父部门写范围
         scopeService.requireDepartmentWrite(dto.parentId());
         requireEnabledParent(dto.parentId());
-        SysDepartment dept = new SysDepartment();
-        dept.setDepartmentCode(dto.departmentCode());
-        dept.setDepartmentName(dto.departmentName());
-        dept.setParentId(dto.parentId());
-        dept.setDepartmentType(dto.departmentType());
-        dept.setEnabled(1);
-        try {
-            departmentMapper.insert(dept);
-        } catch (DuplicateKeyException e) {
-            throw new BusinessException(40900, "部门编码已存在");
+        // 编码留空时自动生成 DEPT_ + 4 位序号；并发取到同一序号由唯一索引兜底，重试重新取号
+        boolean autoCode = !StringUtils.hasText(dto.departmentCode());
+        for (int attempt = 0; ; attempt++) {
+            SysDepartment dept = new SysDepartment();
+            dept.setDepartmentCode(autoCode ? nextGeneratedCode() : dto.departmentCode().trim());
+            dept.setDepartmentName(dto.departmentName());
+            dept.setParentId(dto.parentId());
+            dept.setDepartmentType(dto.departmentType());
+            dept.setEnabled(1);
+            try {
+                departmentMapper.insert(dept);
+                return;
+            } catch (DuplicateKeyException e) {
+                if (!autoCode) {
+                    throw new BusinessException(40900, "部门编码已存在");
+                }
+                if (attempt >= 2) {
+                    throw new BusinessException(40900, "部门编码生成冲突，请重试");
+                }
+            }
         }
+    }
+
+    /** 取下一个自动生成编码：历史最大 DEPT_ 序号 +1（含已删除行，编码不复用） */
+    private String nextGeneratedCode() {
+        String max = departmentMapper.selectMaxGeneratedCode();
+        int next = max == null ? 1 : Integer.parseInt(max.substring("DEPT_".length())) + 1;
+        return String.format("DEPT_%04d", next);
     }
 
     @Override

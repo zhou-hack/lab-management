@@ -7,13 +7,11 @@ import router from '@/router'
  * 全部账号共用同一套管理端布局（AdminLayout），业务页面落地时在此登记真实组件。
  */
 const viewModules = {
-  // system 模块
-  SystemUser: () => import('@/views/admin/system/SystemUser.vue'),
-  SystemRoster: () => import('@/views/admin/system/SystemRoster.vue'),
+  // system 模块（用户/名单合并为人员管理统一视图；预约限制已下线）
+  SystemUserRoster: () => import('@/views/admin/system/SystemUserRoster.vue'),
   SystemDepartment: () => import('@/views/admin/system/SystemDepartment.vue'),
   SystemRole: () => import('@/views/admin/system/SystemRole.vue'),
   SystemScope: () => import('@/views/admin/system/SystemScope.vue'),
-  SystemRestriction: () => import('@/views/admin/system/SystemRestriction.vue'),
   SystemLog: () => import('@/views/admin/system/SystemLog.vue'),
   SystemPolicy: () => import('@/views/admin/system/SystemPolicy.vue'),
   SystemGrantAudit: () => import('@/views/admin/system/SystemGrantAudit.vue'),

@@ -27,9 +27,8 @@ public class StpInterfaceImpl implements StpInterface {
         if (cached instanceof List<?>) {
             return (List<String>) cached;
         }
-        List<String> permissions = authService.loadPermissionCodes(Long.valueOf(loginId.toString()));
-        StpUtil.getSession().set(AuthService.SESSION_PERMS, permissions);
-        return permissions;
+        // 兜底实时装配（按会话活动角色），refresh 内部已回写会话缓存
+        return authService.refreshSessionPermissions(Long.valueOf(loginId.toString()));
     }
 
     @Override
@@ -39,8 +38,7 @@ public class StpInterfaceImpl implements StpInterface {
         if (cached instanceof List<?>) {
             return (List<String>) cached;
         }
-        List<String> roles = authService.loadRoleCodes(Long.valueOf(loginId.toString()));
-        StpUtil.getSession().set(AuthService.SESSION_ROLES, roles);
-        return roles;
+        // 兜底实时装配（按会话活动角色），refresh 内部已回写会话缓存
+        return authService.refreshSessionRoles(Long.valueOf(loginId.toString()));
     }
 }

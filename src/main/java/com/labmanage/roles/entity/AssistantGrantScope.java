@@ -5,7 +5,8 @@ import com.labmanage.common.core.BaseEntity;
 
 /**
  * 助理授权范围表（assistant_grant_scope）
- * OFFERING/LAB 目标恰一非空由数据库 CHECK 保证；生成列 scope_target_id 不映射。
+ * MATERIAL 类型表示「物料领取」（无目标，action 固定 ISSUE_RETURN）；
+ * OFFERING/LAB 为预留类型（恰一目标非空），由数据库 CHECK 保证；生成列 scope_target_id 不映射。
  */
 @TableName("assistant_grant_scope")
 public class AssistantGrantScope extends BaseEntity {

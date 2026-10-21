@@ -58,7 +58,8 @@ public interface AssistantGrantMapper extends BaseMapper<AssistantGrant> {
                    g.revoked_at AS revokedAt,
                    r.real_name AS revokedByName,
                    g.reason AS reason,
-                   g.create_time AS createTime
+                   g.create_time AS createTime,
+                   NULL AS capabilities
             FROM assistant_grant g
             JOIN sys_user t ON t.id = g.teacher_id AND t.deleted = 0
             JOIN sys_user s ON s.id = g.student_id AND s.deleted = 0

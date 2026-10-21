@@ -14,11 +14,6 @@ export function createRoster(data) {
   return request.post('/system/rosters', data)
 }
 
-/** 批量导入（同事务，任一冲突整体回滚）→ 导入条数 */
-export function createRosterBatch(data) {
-  return request.post('/system/rosters/batch', data)
-}
-
 /** 编辑名单（已建档禁止编辑） */
 export function updateRoster(id, data) {
   return request.put(`/system/rosters/${id}`, data)

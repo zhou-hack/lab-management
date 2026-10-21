@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.labmanage.common.exception.BusinessException;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.utils.PageUtils;
+import com.labmanage.roles.dto.UserAdminRoleDTO;
 import com.labmanage.roles.dto.UserCreateDTO;
 import com.labmanage.roles.dto.UserEnabledDTO;
 import com.labmanage.roles.dto.UserPageQueryDTO;
@@ -16,7 +17,6 @@ import com.labmanage.roles.entity.SysUser;
 import com.labmanage.roles.entity.SysUserRole;
 import com.labmanage.roles.enums.RoleCode;
 import com.labmanage.roles.enums.UserType;
-import com.labmanage.roles.support.PasswordCryptoService;
 import com.labmanage.roles.mapper.SysDepartmentMapper;
 import com.labmanage.roles.mapper.SysUserMapper;
 import com.labmanage.roles.mapper.SysUserRoleMapper;
@@ -52,23 +52,15 @@ public class SysUserServiceImpl implements SysUserService {
 
     private final BCryptPasswordEncoder passwordEncoder;
 
-    private final PasswordCryptoService passwordCryptoService;
-
-    /** 密码强度：8-64 位且同时包含字母和数字（解密后的明文校验，与 AuthServiceImpl 一致） */
-    private static final java.util.regex.Pattern PASSWORD_RULE =
-            java.util.regex.Pattern.compile("^(?=.*[A-Za-z])(?=.*\\d).{8,64}$");
-
     public SysUserServiceImpl(SysUserMapper userMapper, SysUserRoleMapper userRoleMapper,
                               SysDepartmentMapper departmentMapper, AuthService authService,
-                              SysScopeService scopeService, BCryptPasswordEncoder passwordEncoder,
-                              PasswordCryptoService passwordCryptoService) {
+                              SysScopeService scopeService, BCryptPasswordEncoder passwordEncoder) {
         this.userMapper = userMapper;
         this.userRoleMapper = userRoleMapper;
         this.departmentMapper = departmentMapper;
         this.authService = authService;
         this.scopeService = scopeService;
         this.passwordEncoder = passwordEncoder;
-        this.passwordCryptoService = passwordCryptoService;
     }
 
     @Override
@@ -162,15 +154,46 @@ public class SysUserServiceImpl implements SysUserService {
             throw new BusinessException(40900, "不能重置当前登录账号密码，请使用修改密码");
         }
         scopeService.requireDepartmentWrite(user.getDepartmentId());
-        String newPassword = passwordCryptoService.decrypt(dto.newPassword());
-        if (!PASSWORD_RULE.matcher(newPassword).matches()) {
-            throw new BusinessException(40000, "新密码需 8-64 位且同时包含字母和数字");
-        }
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordHash(passwordEncoder.encode(dto.newPassword()));
         // password_changed_at 置 NULL：复用密码到期机制，目标用户下次登录强制改密
         user.setPasswordChangedAt(null);
         userMapper.updateById(user);
         // 重置立即生效：踢出该用户全部会话
+        authService.evictSession(id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateAdminRole(Long id, UserAdminRoleDTO dto) {
+        SysUser user = requireUser(id);
+        requireOpsAdminOperator(user);
+        // 绑定管理员角色赋予后台全集权限，须全校写范围防部门管理员提权（同 createAdmin）
+        scopeService.requireAllWrite();
+        if (!UserType.TEACHER.name().equals(user.getUserType())) {
+            throw new BusinessException(40000, "仅老师账号可绑定或解绑管理员角色");
+        }
+        // uk(user_id, role_id) 下逻辑删除行仍占位，重复绑定走恢复路径
+        SysUserRole existing = userRoleMapper.selectAnyByUserAndRole(id, RoleCode.ADMIN.getId());
+        if (Boolean.TRUE.equals(dto.bind())) {
+            if (existing != null && Integer.valueOf(0).equals(existing.getDeleted())) {
+                throw new BusinessException(40900, "已绑定管理员角色");
+            }
+            if (existing != null) {
+                userRoleMapper.restoreById(existing.getId());
+            } else {
+                SysUserRole userRole = new SysUserRole();
+                userRole.setUserId(id);
+                userRole.setRoleId(RoleCode.ADMIN.getId());
+                userRole.setEnabled(1);
+                userRoleMapper.insert(userRole);
+            }
+        } else {
+            if (existing == null || !Integer.valueOf(0).equals(existing.getDeleted())) {
+                throw new BusinessException(40900, "未绑定管理员角色");
+            }
+            userRoleMapper.deleteById(existing.getId());
+        }
+        // 角色变更立即生效：踢出该用户全部会话，重登按新持有角色装配
         authService.evictSession(id);
     }
 
@@ -180,8 +203,7 @@ public class SysUserServiceImpl implements SysUserService {
                         .eq(SysDepartment::getEnabled, 1)
                         .orderByAsc(SysDepartment::getId))
                 .stream()
-                .map(d -> new DepartmentOptionVO(String.valueOf(d.getId()), d.getDepartmentName(),
-                        d.getParentId() == null ? null : String.valueOf(d.getParentId())))
+                .map(d -> new DepartmentOptionVO(String.valueOf(d.getId()), d.getDepartmentName()))
                 .toList();
     }
 

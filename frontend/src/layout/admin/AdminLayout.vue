@@ -62,6 +62,12 @@
           </span>
           <template #dropdown>
             <el-dropdown-menu>
+              <el-dropdown-item
+                v-if="store.switchableRoles.length"
+                command="switchRole"
+              >
+                切换身份（{{ roleLabel(store.switchableRoles[0]) }}）
+              </el-dropdown-item>
               <el-dropdown-item command="setPassword">
                 修改密码
               </el-dropdown-item>
@@ -107,9 +113,28 @@ const menuTree = computed(() => {
   return filterTree(store.menus)
 })
 
+// 一期可切换角色至多一个（如老师被绑定管理员角色，在后台可切回前台老师视图）
+const roleLabels = { ADMIN: '管理员', TEACHER: '老师', STUDENT: '学生', OPS_ADMIN: '运维管理员' }
+const roleLabel = (code) => roleLabels[code] || code
+
 async function onUserCommand(command) {
   if (command === 'setPassword') {
     router.push('/set_password')
+    return
+  }
+  if (command === 'switchRole') {
+    const target = store.switchableRoles[0]
+    try {
+      await ElMessageBox.confirm(
+        `切换到「${roleLabel(target)}」身份？页面与数据权限将按新身份重新加载。`,
+        '切换身份',
+        { type: 'warning', confirmButtonText: '切换' }
+      )
+    } catch {
+      return
+    }
+    const homePath = await store.switchRole(target)
+    router.push(homePath)
     return
   }
   if (command !== 'logout') return

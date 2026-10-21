@@ -10,7 +10,7 @@
 
 | 顺序 | 文件 | 是什么 / 有什么用 |
 | --- | --- | --- |
-| 1 | `sys_rbac.sql` | **RBAC 基准**。11 张表：部门、预录名单、用户、角色、权限、菜单、用户-角色、角色-权限、角色-菜单、数据范围、预约限制。含种子：设备处(id=1)、角色 ADMIN(实验室管理员)/TEACHER/STUDENT/ASSISTANT(1-4)、管理员 admin(id=1，密码哈希为占位值，部署前必须替换)、system 模块 31 项权限 + 12 个菜单（system 操作不绑 ADMIN，由 OPS_ADMIN 动态接管；TEACHER 仅绑助理授权三项） |
+| 1 | `sys_rbac.sql` | **RBAC 基准**。11 张表：部门、预录名单、用户、角色、权限、菜单、用户-角色、角色-权限、角色-菜单、数据范围、预约限制。含种子：设备处(id=1)、角色 ADMIN(实验室管理员)/TEACHER/STUDENT/ASSISTANT(1-4)、管理员 admin(id=1，密码哈希为占位值，部署前必须替换)、system 模块 28 项权限 + 10 个菜单（用户/名单合并为人员管理统一视图，预约限制已下线；system 操作不绑 ADMIN，由 OPS_ADMIN 动态接管；TEACHER 仅绑助理授权三项） |
 | 2 | `sys_policy.sql` | **业务策略参数表** `business_policy`。码+版本唯一、生效区间不重叠、发布后不可改；运行期按策略码读"当前生效的最新启用版本"（如预约时限等可调参数） |
 | 3 | `assistant_grant.sql` | **助理授权** `assistant_grant` + `assistant_grant_scope`。老师授权学生代办（学生代理），有效授权动态计算出 ASSISTANT 附加角色，不持久化到用户-角色表 |
 | 4 | `lab_management_all.sql` | **业务整合基线**（最大的一份）。分模块：① 场地 `lab` ② 统一单据与审批 `biz_document/approval_task/document_event` ③ 设备（分类/型号/台账/位置历史/借用/使用） ④ 物料一阶段（分类/SKU/库位/余额/单据/流水；只记数量不记金额） ⑤ 物料二阶段（申领/定额/结算；盘点功能已按 2026-10-19 需求砍除） ⑥ 场地预约（`class_period` 节次 / `lab_booking_series` 周期规则 / `lab_booking` 预约单 / `lab_slot` 占用槽）。含全部业务权限、菜单、角色绑定种子；头部注释有建表规则与编号段登记，新加表前先读 |

@@ -1,5 +1,11 @@
 import { defineStore } from 'pinia'
-import { loginByPassword, loginByPhone, logout as apiLogout, getProfile } from '@/api/user'
+import {
+  loginByPassword,
+  loginByPhone,
+  logout as apiLogout,
+  getProfile,
+  switchRole as apiSwitchRole
+} from '@/api/user'
 import { getToken, setToken, removeToken } from '@/utils/token'
 import { registerDynamicRoutes, removeDynamicRoutes } from '@/router/dynamic'
 
@@ -10,6 +16,8 @@ export const useUserStore = defineStore('user', {
     roles: [],
     permissions: [],
     menus: [],
+    activeRole: '', // 活动角色（当前生效的身份视图，多角色用户可切换）
+    switchableRoles: [], // 可切换的其他持有角色（不含动态 ASSISTANT）
     routesLoaded: false,
     needSetPassword: false,
     passwordChangeRequired: false
@@ -37,12 +45,30 @@ export const useUserStore = defineStore('user', {
     },
     async fetchProfile() {
       const data = await getProfile()
+      this.applyProfile(data)
+    },
+    /** 身份响应落库（profile 与 switchRole 共用） */
+    applyProfile(data) {
       this.user = { userId: data.userId, realName: data.realName, userType: data.userType }
       this.roles = data.roles || []
       this.permissions = data.permissions || []
       this.menus = data.menus || []
+      this.activeRole = data.activeRole || ''
+      this.switchableRoles = data.switchableRoles || []
       this.needSetPassword = !!data.needSetPassword
       this.passwordChangeRequired = !!data.passwordChangeRequired
+    },
+    /**
+     * 切换活动角色：后端按新身份重新装配权限/菜单，前端重建动态路由。
+     * 返回新身份落地点，由调用方跳转。
+     */
+    async switchRole(roleCode) {
+      const data = await apiSwitchRole(roleCode)
+      removeDynamicRoutes()
+      this.applyProfile(data)
+      registerDynamicRoutes(this.menus)
+      this.routesLoaded = true
+      return this.homePath
     },
     async buildRoutes() {
       registerDynamicRoutes(this.menus)
@@ -72,6 +98,8 @@ export const useUserStore = defineStore('user', {
       this.roles = []
       this.permissions = []
       this.menus = []
+      this.activeRole = ''
+      this.switchableRoles = []
       this.routesLoaded = false
       this.needSetPassword = false
       this.passwordChangeRequired = false

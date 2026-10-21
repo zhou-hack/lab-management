@@ -59,12 +59,10 @@ const hasChildren = computed(() => visibleChildren.value.length > 0)
 
 // 按 componentKey / menuName 关键字映射图标；未命中用通用菜单图标
 const ICON_MAP = {
-  SystemUser: User,
-  SystemRoster: UserFilled,
+  SystemUserRoster: UserFilled,
   SystemDepartment: OfficeBuilding,
   SystemRole: Avatar,
   SystemScope: Key,
-  SystemRestriction: Calendar,
   SystemLog: Histogram,
   SystemPolicy: Setting,
   SystemGrantAudit: Document,

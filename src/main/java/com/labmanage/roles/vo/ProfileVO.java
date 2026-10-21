@@ -4,9 +4,11 @@ import java.util.List;
 
 /**
  * 当前身份响应（登录后 / 刷新时加载动态路由与权限）
- * <p>
- * identities：当前账号可切换的全部身份（一键切换下拉数据源），首项为主身份；
- * currentIdentity：当前会话生效身份码（未切换时等于 userType）。
+ *
+ * @param activeRole             活动角色（当前生效的身份视图，多角色用户可切换）
+ * @param switchableRoles        可切换角色集合（持有的其他角色，不含动态 ASSISTANT）
+ * @param passwordChangeRequired 从未设置/被重置密码（管理员），须强制改密
+ * @param needSetPassword        尚未设置密码（老师首登须设置敏感操作密码）
  */
 public record ProfileVO(
         String userId,
@@ -15,7 +17,9 @@ public record ProfileVO(
         List<String> roles,
         List<String> permissions,
         List<MenuVO> menus,
-        List<IdentityOptionVO> identities,
-        String currentIdentity
+        String activeRole,
+        List<String> switchableRoles,
+        Boolean passwordChangeRequired,
+        Boolean needSetPassword
 ) {
 }

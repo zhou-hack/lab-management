@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.labmanage.common.exception.BusinessException;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.utils.PageUtils;
-import com.labmanage.roles.dto.RosterBatchCreateDTO;
 import com.labmanage.roles.dto.RosterCreateDTO;
 import com.labmanage.roles.dto.RosterEnabledDTO;
 import com.labmanage.roles.dto.RosterPageQueryDTO;
@@ -25,7 +24,6 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -104,32 +102,8 @@ public class SysRosterServiceImpl implements SysRosterService {
         try {
             rosterMapper.insert(roster);
         } catch (DuplicateKeyException e) {
-            throw duplicateConflict(e, null);
+            throw duplicateConflict(e);
         }
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public int createBatch(RosterBatchCreateDTO dto) {
-        requireEnabledDepartment(dto.departmentId());
-        scopeService.requireDepartmentWrite(dto.departmentId());
-        int row = 0;
-        for (RosterBatchCreateDTO.Item item : dto.items()) {
-            row++;
-            SysPersonRoster roster = new SysPersonRoster();
-            roster.setPersonNo(item.personNo());
-            roster.setPersonType(dto.personType());
-            roster.setRealName(item.realName());
-            roster.setPhone(item.phone());
-            roster.setDepartmentId(dto.departmentId());
-            roster.setEnabled(1);
-            try {
-                rosterMapper.insert(roster);
-            } catch (DuplicateKeyException e) {
-                throw duplicateConflict(e, row);
-            }
-        }
-        return dto.items().size();
     }
 
     @Override
@@ -146,7 +120,7 @@ public class SysRosterServiceImpl implements SysRosterService {
         try {
             rosterMapper.updateById(roster);
         } catch (DuplicateKeyException e) {
-            throw duplicateConflict(e, null);
+            throw duplicateConflict(e);
         }
     }
 
@@ -212,8 +186,10 @@ public class SysRosterServiceImpl implements SysRosterService {
             content = content.substring(1);
         }
         String[] lines = content.split("\r\n|\r|\n", -1);
-        if (lines.length == 0 || !IMPORT_HEADER.equals(lines[0].trim())) {
-            throw new BusinessException(40000, "表头不正确，请使用下载的导入模板");
+        // 兼容导入模板表头与导出文件表头（导出含多余展示列，再导入时忽略）
+        String header = lines.length == 0 ? "" : lines[0].trim();
+        if (!IMPORT_HEADER.equals(header) && !EXPORT_HEADER.equals(header)) {
+            throw new BusinessException(40000, "表头不正确，请使用下载的导入模板或系统导出的名单文件");
         }
         int total = 0;
         for (int i = 1; i < lines.length; i++) {
@@ -250,8 +226,9 @@ public class SysRosterServiceImpl implements SysRosterService {
 
     /** 逐行导入：复用单条录入的部门校验、数据范围与冲突处理，失败抛 BusinessException 由调用方收集 */
     private void importRow(String[] columns, Map<String, SysDepartment> departmentCache) {
-        if (columns.length != 5) {
-            throw new BusinessException(40000, "列数不正确（需 5 列：学工号,身份类型,姓名,手机号,部门编码）");
+        // 超过 5 列时忽略尾部多余列（导出文件含部门名称/状态/创建时间展示列，可直接再导入）
+        if (columns.length < 5) {
+            throw new BusinessException(40000, "列数不正确（至少 5 列：学工号,身份类型,姓名,手机号,部门编码）");
         }
         String departmentCode = columns[4].trim();
         SysDepartment department = departmentCache.computeIfAbsent(departmentCode, this::findDepartmentByCode);
@@ -259,7 +236,7 @@ public class SysRosterServiceImpl implements SysRosterService {
             throw new BusinessException(40000, "部门编码不存在：" + departmentCode);
         }
         RosterCreateDTO dto = new RosterCreateDTO(
-                columns[0].trim(), columns[1].trim(), columns[2].trim(), columns[3].trim(), department.getId());
+                columns[0].trim(), parsePersonType(columns[1]), columns[2].trim(), columns[3].trim(), department.getId());
         Set<ConstraintViolation<RosterCreateDTO>> violations = validator.validate(dto);
         if (!violations.isEmpty()) {
             throw new BusinessException(40000, violations.iterator().next().getMessage());
@@ -270,6 +247,16 @@ public class SysRosterServiceImpl implements SysRosterService {
     private SysDepartment findDepartmentByCode(String departmentCode) {
         return departmentMapper.selectOne(Wrappers.<SysDepartment>lambdaQuery()
                 .eq(SysDepartment::getDepartmentCode, departmentCode));
+    }
+
+    /** CSV 身份列归一：兼容中文别名与英文码，其他值原样交给 DTO 校验报错 */
+    private String parsePersonType(String cell) {
+        String value = cell.trim();
+        return switch (value) {
+            case "学生" -> "STUDENT";
+            case "老师" -> "TEACHER";
+            default -> value;
+        };
     }
 
     private String personTypeName(String personType) {
@@ -318,15 +305,14 @@ public class SysRosterServiceImpl implements SysRosterService {
         }
     }
 
-    private BusinessException duplicateConflict(DuplicateKeyException e, Integer row) {
-        String prefix = row == null ? "" : "第 " + row + " 行：";
+    private BusinessException duplicateConflict(DuplicateKeyException e) {
         String message = String.valueOf(e.getMessage());
         if (message.contains("uk_sys_person_roster_no")) {
-            return new BusinessException(40900, prefix + "学工号已存在");
+            return new BusinessException(40900, "学工号已存在");
         }
         if (message.contains("uk_sys_person_roster_phone")) {
-            return new BusinessException(40900, prefix + "手机号已存在");
+            return new BusinessException(40900, "手机号已存在");
         }
-        return new BusinessException(40900, prefix + "名单记录已存在");
+        return new BusinessException(40900, "名单记录已存在");
     }
 }

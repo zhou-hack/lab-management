@@ -339,8 +339,9 @@ INSERT INTO sys_user_role (id, user_id, role_id, enabled) VALUES (1, 1, 1, 1);
 -- ID 段约定：system 模块 1-999，业务模块按 RBAC实施清单 第一节分段登记。
 -- ============================================================================
 
--- system 模块权限（31 项；28-31 于 2026-10-20 收编自 dev/basic_model 与 dev/auth，
--- 绑定按需求定稿不授 ADMIN，由 OPS_ADMIN 动态覆盖）
+-- system 模块权限（28 项；28-31 于 2026-10-20 收编自 dev/basic_model 与 dev/auth，
+-- 绑定按需求定稿不授 ADMIN，由 OPS_ADMIN 动态覆盖；
+-- 17-19 system:restriction:* 于 2026-10-21 随预约限制页面下线移除，编号弃用不复用）
 INSERT INTO sys_permission (id, permission_code, permission_name, module_code, enabled) VALUES
 (1,  'system:user:list',        '用户列表',       'system', 1),
 (2,  'system:user:get',         '用户详情',       'system', 1),
@@ -363,9 +364,6 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code, e
 (28, 'system:role:assign',       '调整角色权限',   'system', 1),
 (15, 'system:scope:list',        '数据范围查看',   'system', 1),
 (16, 'system:scope:grant',       '数据范围授权',   'system', 1),
-(17, 'system:restriction:list',   '预约限制查看',   'system', 1),
-(18, 'system:restriction:create', '预约限制新增',   'system', 1),
-(19, 'system:restriction:revoke', '预约限制撤销',   'system', 1),
 (20, 'system:log:list',          '操作日志查询',   'system', 1),
 (21, 'system:policy:list',       '策略参数查看',   'system', 1),
 (22, 'system:policy:publish',    '策略参数发布',   'system', 1),
@@ -374,17 +372,16 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code, e
 (25, 'system:grant:revoke',      '助理授权撤销',   'system', 1),
 (26, 'system:grant:audit',       '助理授权审计',   'system', 1);
 
--- system 模块菜单（目录 1 + 用户组目录 12 + 页面 10；
---   2026-10-19 需求定稿：用户管理/名单管理整合到侧边栏"用户组"目录）
+-- system 模块菜单（目录 1 + 用户组目录 12 + 页面 8；
+--   2026-10-20 起用户管理与名单管理合并为"人员管理"统一视图（component SystemUserRoster，菜单 id 复用 2）；
+--   2026-10-21 预约限制页面与接口下线（菜单 7、权限 17-19 移除，编号弃用不复用；user_booking_restriction 表与 Mapper 保留供预约模块逾期冻结））
 INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
 (1,  NULL, 'system',              '系统管理',     '/system',            NULL,              NULL, 'DIRECTORY', 90, 1),
 (12, NULL, 'system_user_group',   '用户组',       '/system/user_group', NULL,              NULL, 'DIRECTORY', 40, 1),
-(2,  12,   'system_user',         '用户管理',     '/system/user',       'SystemUser',       1,    'PAGE',      1,  1),
-(3,  12,   'system_roster',       '名单管理',     '/system/roster',     'SystemRoster',     6,    'PAGE',      2,  1),
+(2,  12,   'system_user',         '人员管理',     '/system/user',       'SystemUserRoster', 1,    'PAGE',      1,  1),
 (4,  1,    'system_department',   '组织管理',     '/system/department', 'SystemDepartment', 10,   'PAGE',      3,  1),
 (5,  1,    'system_role',         '角色权限',     '/system/role',       'SystemRole',       14,   'PAGE',      4,  1),
 (6,  1,    'system_scope',        '数据范围',     '/system/scope',      'SystemScope',      15,   'PAGE',      5,  1),
-(7,  1,    'system_restriction',  '预约限制',     '/system/restriction','SystemRestriction',17,   'PAGE',      6,  1),
 (8,  1,    'system_log',          '操作日志',     '/system/log',        'SystemLog',        20,   'PAGE',      7,  1),
 (9,  1,    'system_policy',       '参数配置',     '/system/policy',     'SystemPolicy',     21,   'PAGE',      8,  1),
 (10, 1,    'system_grant_audit',  '授权审计',     '/system/grant',      'SystemGrantAudit', 26,   'PAGE',      9,  1),

@@ -17,6 +17,7 @@ public interface SysOperationLogMapper extends BaseMapper<SysOperationLog> {
 
     /**
      * 日志分页列表（left join 操作者姓名；追加表 deleted 固定 0）。
+     * bizOnly=true 时排除系统管理类模块（system/auth），供非运维管理员仅查看其业务相关日志。
      */
     @Select("""
             <script>
@@ -35,6 +36,9 @@ public interface SysOperationLogMapper extends BaseMapper<SysOperationLog> {
             FROM sys_operation_log l
             LEFT JOIN sys_user u ON u.id = l.actor_id AND u.deleted = 0
             WHERE l.deleted = 0
+            <if test="bizOnly">
+                AND l.module_code NOT IN ('system', 'auth')
+            </if>
             <if test="query.keyword != null and query.keyword != ''">
                 AND (u.real_name LIKE CONCAT('%', #{query.keyword}, '%')
                      OR l.module_code LIKE CONCAT('%', #{query.keyword}, '%')
@@ -55,5 +59,6 @@ public interface SysOperationLogMapper extends BaseMapper<SysOperationLog> {
             ORDER BY l.occurred_at DESC, l.id DESC
             </script>
             """)
-    Page<LogPageItemVO> selectLogPage(Page<LogPageItemVO> page, @Param("query") LogPageQueryDTO query);
+    Page<LogPageItemVO> selectLogPage(Page<LogPageItemVO> page, @Param("query") LogPageQueryDTO query,
+                                      @Param("bizOnly") boolean bizOnly);
 }
