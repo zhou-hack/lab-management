@@ -117,8 +117,8 @@
           prop="departmentCode"
         >
           <el-input
-            v-model="createForm.departmentCode"
-            placeholder="如 assets_lab"
+            v-model.trim="createForm.departmentCode"
+            placeholder="留空自动生成（DEPT_0001 起），或手填如 assets_lab"
           />
         </el-form-item>
         <el-form-item
@@ -282,8 +282,7 @@ const createForm = reactive({ departmentCode: '', departmentName: '', department
 
 const createRules = {
   departmentCode: [
-    { required: true, message: '请输入部门编码', trigger: 'blur' },
-    { pattern: /^[A-Za-z0-9_]{2,64}$/, message: '2-64 位字母、数字或下划线', trigger: 'blur' }
+    { pattern: /^[A-Za-z0-9_]{2,64}$/, message: '2-64 位字母、数字或下划线，留空自动生成', trigger: 'blur' }
   ],
   departmentName: [{ required: true, message: '请输入部门名称', trigger: 'blur' }],
   departmentType: [{ required: true, message: '请选择类型', trigger: 'change' }]

@@ -61,14 +61,17 @@ const staticRoutes = [
     component: () => import('@/views/error/ForbiddenView.vue'),
     meta: { title: '没有访问权限' }
   },
+  // 旧名单管理地址 2026-10-21 并入「用户与名单」统一人员视图，静态重定向保持旧书签可用
+  { path: '/system/roster', redirect: { path: '/system/user' } },
   { path: '/:pathMatch(.*)*', redirect: '/404' }
 ]
 
 // 已知页面路径全集（sys_menu.route_path，与 router/dynamic.js 白名单同步维护）：
-// 已登录用户直接访问其中未获授权的页面时落 403；其余未注册路径仍按 404/首页兜底
+// 已登录用户直接访问其中未获授权的页面时落 403；其余未注册路径仍按 404/首页兜底。
+// /system/roster 已改为静态重定向（见上方路由表），不经本集合判定
 const KNOWN_PAGE_PATHS = new Set([
-  '/system/user', '/system/roster', '/system/department', '/system/role', '/system/scope',
-  '/system/restriction', '/system/log', '/system/policy', '/system/grant',
+  '/system/user', '/system/department', '/system/role', '/system/scope',
+  '/system/log', '/system/policy', '/system/grant',
   '/grant'
 ])
 
@@ -103,10 +106,11 @@ router.beforeEach(async (to) => {
       return { path: '/set_password' }
     }
     // 目标对当前身份不可达（如沿用旧身份的 redirect 但无权限）时回首页，避免误落 404；
-    // 直接输入的地址若属于已知页面但当前身份无菜单权限，落 403
-    const resolved = router.resolve(to.fullPath)
-    if (resolved.matched.some((r) => r.path === '/:pathMatch(.*)*')) {
-      if (!to.redirectedFrom && KNOWN_PAGE_PATHS.has(to.path)) {
+    // 直接输入的地址若属于已知页面但当前身份无菜单权限，落 403。
+    // 注意：catch-all 是 redirect 写法，重定向先于守卫执行，未注册路径到达守卫时
+    // to 已是 /404 记录，原始目标需从 to.redirectedFrom 取回。
+    if (to.path === '/404' && to.redirectedFrom) {
+      if (KNOWN_PAGE_PATHS.has(to.redirectedFrom.path)) {
         return { path: '/403' }
       }
       return store.homePath
@@ -133,8 +137,9 @@ router.beforeEach(async (to) => {
     return { path: '/403' }
   }
 
-  // 已知页面但未为当前身份注册（无菜单权限）：落 403；其余未注册路径交由兜底规则进 404
-  if (to.matched.some((r) => r.path === '/:pathMatch(.*)*') && KNOWN_PAGE_PATHS.has(to.path)) {
+  // 已知页面但未为当前身份注册（无菜单权限）：落 403；其余未注册路径交由兜底规则进 404。
+  // 同上：catch-all redirect 先于守卫，落 /404 且存在 redirectedFrom 即未注册路径
+  if (to.path === '/404' && to.redirectedFrom && KNOWN_PAGE_PATHS.has(to.redirectedFrom.path)) {
     return { path: '/403' }
   }
 

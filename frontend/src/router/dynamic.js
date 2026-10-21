@@ -11,12 +11,10 @@ import router from '@/router'
  * （用于已登录但无菜单权限的直接访问落 403）。
  */
 const viewModules = {
-  SystemUser: { layout: 'admin', load: () => import('@/views/admin/system/SystemUser.vue') },
-  SystemRoster: { layout: 'admin', load: () => import('@/views/admin/system/SystemRoster.vue') },
+  SystemUserRoster: { layout: 'admin', load: () => import('@/views/admin/system/SystemUserRoster.vue') },
   SystemDepartment: { layout: 'admin', load: () => import('@/views/admin/system/SystemDepartment.vue') },
   SystemRole: { layout: 'admin', load: () => import('@/views/admin/system/SystemRole.vue') },
   SystemScope: { layout: 'admin', load: () => import('@/views/admin/system/SystemScope.vue') },
-  SystemRestriction: { layout: 'admin', load: () => import('@/views/admin/system/SystemRestriction.vue') },
   SystemLog: { layout: 'admin', load: () => import('@/views/admin/system/SystemLog.vue') },
   SystemPolicy: { layout: 'admin', load: () => import('@/views/admin/system/SystemPolicy.vue') },
   SystemGrantAudit: { layout: 'admin', load: () => import('@/views/admin/system/SystemGrantAudit.vue') },

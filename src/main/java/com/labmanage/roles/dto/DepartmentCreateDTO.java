@@ -9,8 +9,8 @@ import jakarta.validation.constraints.Size;
  */
 public record DepartmentCreateDTO(
 
-        @NotBlank(message = "部门编码不能为空")
-        @Pattern(regexp = "^[A-Za-z0-9_]{2,64}$", message = "部门编码需为 2-64 位字母、数字或下划线")
+        /** 部门编码；留空时服务端自动生成 DEPT_ + 4 位序号（如 DEPT_0001） */
+        @Pattern(regexp = "^$|^[A-Za-z0-9_]{2,64}$", message = "部门编码需为 2-64 位字母、数字或下划线，留空自动生成")
         String departmentCode,
 
         @NotBlank(message = "部门名称不能为空")

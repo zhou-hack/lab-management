@@ -1,7 +1,6 @@
 package com.labmanage.roles.service;
 
 import com.labmanage.common.result.PageResult;
-import com.labmanage.roles.dto.RosterBatchCreateDTO;
 import com.labmanage.roles.dto.RosterCreateDTO;
 import com.labmanage.roles.dto.RosterEnabledDTO;
 import com.labmanage.roles.dto.RosterPageQueryDTO;
@@ -20,9 +19,6 @@ public interface SysRosterService {
 
     /** 单条录入；学工号/手机号冲突抛 40900 */
     void create(RosterCreateDTO dto);
-
-    /** 批量导入（同事务，任一条冲突整体回滚并报行号） */
-    int createBatch(RosterBatchCreateDTO dto);
 
     /** 编辑名单（学工号、身份类型不可改）；已建档名单禁止编辑 */
     void update(Long id, RosterUpdateDTO dto);

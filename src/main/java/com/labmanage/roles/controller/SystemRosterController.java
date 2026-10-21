@@ -5,7 +5,6 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.labmanage.common.log.OperationLog;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
-import com.labmanage.roles.dto.RosterBatchCreateDTO;
 import com.labmanage.roles.dto.RosterCreateDTO;
 import com.labmanage.roles.dto.RosterEnabledDTO;
 import com.labmanage.roles.dto.RosterPageQueryDTO;
@@ -63,14 +62,6 @@ public class SystemRosterController {
     public Result<Void> create(@Valid @RequestBody RosterCreateDTO dto) {
         rosterService.create(dto);
         return Result.success();
-    }
-
-    @Operation(summary = "批量导入（同事务，任一冲突整体回滚）")
-    @SaCheckPermission("system:roster:create")
-    @OperationLog(moduleCode = "system", actionCode = "system:roster:batch_create", targetTable = "sys_person_roster")
-    @PostMapping("/batch")
-    public Result<Integer> createBatch(@Valid @RequestBody RosterBatchCreateDTO dto) {
-        return Result.success(rosterService.createBatch(dto));
     }
 
     @Operation(summary = "编辑名单（已建档禁止编辑）")
