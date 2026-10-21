@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.labmanage.roles.dto.UserPageQueryDTO;
 import com.labmanage.roles.entity.SysUser;
 import com.labmanage.roles.vo.AdminOptionVO;
-import com.labmanage.roles.vo.UserOptionVO;
 import com.labmanage.roles.vo.UserPageItemVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -75,25 +74,4 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
             </script>
             """)
     List<AdminOptionVO> selectAdminOptions(@Param("keyword") String keyword);
-
-    /** 用户下拉（启用中全部类型，关键字模糊姓名/账号/学工号，上限 50；预约限制等场景用） */
-    @Select("""
-            <script>
-            SELECT CAST(u.id AS CHAR) AS userId,
-                   u.real_name AS realName,
-                   u.account_name AS accountName,
-                   u.person_no AS personNo,
-                   u.user_type AS userType
-            FROM sys_user u
-            WHERE u.deleted = 0 AND u.enabled = 1
-            <if test="keyword != null and keyword != ''">
-                AND (u.real_name LIKE CONCAT('%', #{keyword}, '%')
-                     OR u.account_name LIKE CONCAT('%', #{keyword}, '%')
-                     OR u.person_no LIKE CONCAT('%', #{keyword}, '%'))
-            </if>
-            ORDER BY u.id ASC
-            LIMIT 50
-            </script>
-            """)
-    List<UserOptionVO> selectUserOptions(@Param("keyword") String keyword);
 }

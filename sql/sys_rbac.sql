@@ -360,9 +360,6 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code, e
 (28, 'system:role:assign',       '调整角色权限',   'system', 1),
 (15, 'system:scope:list',        '数据范围查看',   'system', 1),
 (16, 'system:scope:grant',       '数据范围授权',   'system', 1),
-(17, 'system:restriction:list',   '预约限制查看',   'system', 1),
-(18, 'system:restriction:create', '预约限制新增',   'system', 1),
-(19, 'system:restriction:revoke', '预约限制撤销',   'system', 1),
 (20, 'system:log:list',          '操作日志查询',   'system', 1),
 (21, 'system:policy:list',       '策略参数查看',   'system', 1),
 (22, 'system:policy:publish',    '策略参数发布',   'system', 1),
@@ -371,32 +368,26 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code, e
 (25, 'system:grant:revoke',      '助理授权撤销',   'system', 1),
 (26, 'system:grant:audit',       '助理授权审计',   'system', 1);
 
--- system 模块菜单（目录 1 + 页面 10）
+-- system 模块菜单（目录 1 + 页面 8；名单管理 2026-10-21 并入「人员管理」统一人员视图；
+-- 预约限制页面与接口 2026-10-21 下线，user_booking_restriction 表保留供预约模块逾期冻结使用）
 INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
 (1,  NULL, 'system',              '系统管理',     '/system',            NULL,              NULL, 'DIRECTORY', 90, 1),
-(2,  1,    'system_user',         '用户管理',     '/system/user',       'SystemUser',       1,    'PAGE',      1,  1),
-(3,  1,    'system_roster',       '名单管理',     '/system/roster',     'SystemRoster',     6,    'PAGE',      2,  1),
-(4,  1,    'system_department',   '组织管理',     '/system/department', 'SystemDepartment', 10,   'PAGE',      3,  1),
-(5,  1,    'system_role',         '角色权限',     '/system/role',       'SystemRole',       14,   'PAGE',      4,  1),
-(6,  1,    'system_scope',        '数据范围',     '/system/scope',      'SystemScope',      15,   'PAGE',      5,  1),
-(7,  1,    'system_restriction',  '预约限制',     '/system/restriction','SystemRestriction',17,   'PAGE',      6,  1),
-(8,  1,    'system_log',          '操作日志',     '/system/log',        'SystemLog',        20,   'PAGE',      7,  1),
-(9,  1,    'system_policy',       '参数配置',     '/system/policy',     'SystemPolicy',     21,   'PAGE',      8,  1),
-(10, 1,    'system_grant_audit',  '授权审计',     '/system/grant',      'SystemGrantAudit', 26,   'PAGE',      9,  1),
+(2,  1,    'system_user',         '人员管理',     '/system/user',       'SystemUserRoster', 1,    'PAGE',      1,  1),
+(4,  1,    'system_department',   '组织管理',     '/system/department', 'SystemDepartment', 10,   'PAGE',      2,  1),
+(5,  1,    'system_role',         '角色权限',     '/system/role',       'SystemRole',       14,   'PAGE',      3,  1),
+(6,  1,    'system_scope',        '数据范围',     '/system/scope',      'SystemScope',      15,   'PAGE',      4,  1),
+(8,  1,    'system_log',          '操作日志',     '/system/log',        'SystemLog',        20,   'PAGE',      6,  1),
+(9,  1,    'system_policy',       '参数配置',     '/system/policy',     'SystemPolicy',     21,   'PAGE',      7,  1),
+(10, 1,    'system_grant_audit',  '授权审计',     '/system/grant',      'SystemGrantAudit', 26,   'PAGE',      8,  1),
 (11, NULL, 'grant_manage',        '助理管理',     '/grant',             'GrantManage',      23,   'PAGE',      50, 1);
 
--- 角色权限绑定：ADMIN 全部系统权限（1-22、26-27、29-31），TEACHER 助理授权三项（23-25）
+-- 角色权限绑定：ADMIN 仅操作日志（20），系统管理其余权限归 OPS_ADMIN 独占（2026-10-20 起，
+-- 系统管理整体划归运维管理员，ADMIN 保留其所管业务的操作日志只读）；TEACHER 助理授权三项（23-25）
 INSERT INTO sys_role_permission (id, role_id, permission_id, enabled) VALUES
-(1,  1, 1,  1), (2,  1, 2,  1), (3,  1, 3,  1), (4,  1, 4,  1), (5,  1, 5,  1),
-(6,  1, 6,  1), (7,  1, 7,  1), (8,  1, 8,  1), (9,  1, 9,  1), (10, 1, 10, 1),
-(11, 1, 11, 1), (12, 1, 12, 1), (13, 1, 13, 1), (14, 1, 14, 1), (15, 1, 15, 1),
-(16, 1, 16, 1), (17, 1, 17, 1), (18, 1, 18, 1), (19, 1, 19, 1), (20, 1, 20, 1),
-(21, 1, 21, 1), (22, 1, 22, 1), (23, 1, 26, 1), (51, 1, 27, 1),
-(84, 1, 29, 1), (85, 1, 30, 1), (86, 1, 31, 1),
+(84, 1, 20, 1),
 (24, 2, 23, 1), (25, 2, 24, 1), (26, 2, 25, 1);
 
--- 角色菜单绑定：ADMIN 系统管理目录及 9 个页面，TEACHER 助理管理页
+-- 角色菜单绑定：ADMIN 系统管理目录及操作日志页（其余 6 页归 OPS_ADMIN 专属），TEACHER 助理管理页
 INSERT INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
-(1,  1, 1,  1), (2,  1, 2,  1), (3,  1, 3,  1), (4,  1, 4,  1), (5,  1, 5,  1),
-(6,  1, 6,  1), (7,  1, 7,  1), (8,  1, 8,  1), (9,  1, 9,  1), (10, 1, 10, 1),
+(1,  1, 1,  1), (8,  1, 8,  1),
 (11, 2, 11, 1);
