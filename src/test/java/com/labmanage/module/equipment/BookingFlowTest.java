@@ -78,6 +78,9 @@ class BookingFlowTest {
 
     private RestClient restClient;
 
+    /** MySQL 可用标志：@BeforeAll 经 Assumptions 跳过后 @AfterAll 仍会执行，cleanup 须由此守卫 */
+    private static boolean databaseAvailable = false;
+
     private String adminToken;
     private String teacherToken;
     private String studentToken;
@@ -95,6 +98,9 @@ class BookingFlowTest {
 
     @AfterAll
     void cleanup() {
+        if (!databaseAvailable) {
+            return;
+        }
         cleanupTestDocuments();
         jdbcTemplate.update("DELETE FROM equipment_asset WHERE id BETWEEN 910000000000000101 AND 910000000000000199");
         jdbcTemplate.update("DELETE FROM equipment_model WHERE id BETWEEN 910000000000000201 AND 910000000000000299");
@@ -462,6 +468,7 @@ class BookingFlowTest {
         String password = envOrDefault("DB_PASSWORD", "root");
         try (Connection conn = DriverManager.getConnection(url, user, password)) {
             Assumptions.assumeTrue(conn.isValid(5), "MySQL 测试库连接不可用，跳过集成测试");
+            databaseAvailable = true;
         } catch (Exception e) {
             Assumptions.abort("MySQL 3306 不可达或凭据无效，跳过集成测试：" + e.getMessage());
         }

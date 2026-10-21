@@ -281,55 +281,6 @@ export function downloadOpeningImportTemplate(format) {
   return request.get('/stock-balances/import-template', { params: { format }, responseType: 'blob' })
 }
 
-// ---------- 物料批量导入/导出（xlsx / csv） ----------
-// 物料档案
-export function importSkus(file) {
-  const formData = new FormData()
-  formData.append('file', file)
-  return request.post('/material-skus/import', formData)
-}
-
-export function exportSkus(params) {
-  return request.get('/material-skus/export', { params, responseType: 'blob' })
-}
-
-export function downloadSkuImportTemplate(format) {
-  return request.get('/material-skus/import-template', { params: { format }, responseType: 'blob' })
-}
-
-// 物料分类
-export function importCategories(file) {
-  const formData = new FormData()
-  formData.append('file', file)
-  return request.post('/material-categories/import', formData)
-}
-
-export function exportCategories(params) {
-  return request.get('/material-categories/export', { params, responseType: 'blob' })
-}
-
-export function downloadCategoryImportTemplate(format) {
-  return request.get('/material-categories/import-template', { params: { format }, responseType: 'blob' })
-}
-
-// ---------- 库存余额与盘点批量导入/导出（xlsx / csv） ----------
-// 库存余额导出
-export function exportBalances(params) {
-  return request.get('/stock-balances/export', { params, responseType: 'blob' })
-}
-
-// 期初余额批量导入（有效行组装为一张 OPENING 期初入库草稿单）
-export function importOpeningBalances(file) {
-  const formData = new FormData()
-  formData.append('file', file)
-  return request.post('/stock-balances/import', formData)
-}
-
-// 期初余额导入模板
-export function downloadOpeningImportTemplate(format) {
-  return request.get('/stock-balances/import-template', { params: { format }, responseType: 'blob' })
-}
-
 // 盘点快照导出（任意状态可导，已录入行带值支持中断续盘）
 export function exportStocktakeSnapshot(id, format) {
   return request.get(`/stocktakes/${id}/snapshot-export`, { params: { format }, responseType: 'blob' })

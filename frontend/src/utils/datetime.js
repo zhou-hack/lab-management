@@ -133,8 +133,8 @@ export function todayShanghai() {
  * （当前时间只做展示层计算，不落库、不提交后端）。
  */
 export function nowShanghaiClock() {
-  const d = new Date(Date.now() + SHANGHAI_OFFSET_MIN * 60_000)
-  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
+  const p = shanghaiParts(new Date())
+  return `${p.hour}:${p.minute}`
 }
 
 /**
@@ -153,10 +153,10 @@ export function shanghaiMinutesOf(date, time) {
  * UTC 时间点 → 上海本地当日 HH:mm（节次占用段与当前时刻比较用）。
  */
 export function shanghaiClockOf(instantValue) {
-  const ms = toShanghaiMs(instantValue)
-  if (ms === null) return null
-  const t = new Date(ms)
-  return `${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}`
+  const date = parseInstant(instantValue)
+  if (!date) return null
+  const p = shanghaiParts(date)
+  return `${p.hour}:${p.minute}`
 }
 
 /** 上海本地日期加减天数（YYYY-MM-DD），n 可为负 */
@@ -177,13 +177,21 @@ export function minutesBetween(timeA, timeB) {
 }
 
 /**
- * Date → 按上海墙钟解释的 RFC 3339 入参（+08:00 偏移），后端 OffsetDateTime → Instant。
- * 与 formatSh 成对：出参按上海展示、入参按上海解释，均不依赖浏览器本地时区。
- * 例：UTC 2026-10-13T01:00:00.000Z → '2026-10-13T09:00:00+08:00'。
+ * 带偏移量的 ISO 字符串（后端出参，如 2026-10-13T01:00:00.000Z）→ 上海墙钟显示
+ * 例：'2026-10-13T01:00:00.000Z' → '2026-10-13 09:00'
+ * 与 toShOffsetIso 成对：出参按上海展示、入参按上海解释，均不依赖浏览器本地时区。
  */
-export function toShOffsetIso(date) {
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
-    return null
+export function formatSh(isoText, withSeconds = false) {
+  if (!isoText) {
+    return '—'
+  }
+  // 仅接受带 Z 或数字偏移量的 ISO 字符串，禁止无偏移量字符串
+  if (!/^\d{4}-\d{2}-\d{2}T.*(Z|[+-]\d{2}:\d{2})$/.test(isoText)) {
+    return isoText
+  }
+  const date = new Date(isoText)
+  if (Number.isNaN(date.getTime())) {
+    return isoText
   }
   const options = {
     timeZone: SHANGHAI,
@@ -192,15 +200,21 @@ export function toShOffsetIso(date) {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
+    minute: '2-digit'
+  }
+  if (withSeconds) {
+    options.second = '2-digit'
   }
   const parts = {}
   for (const part of new Intl.DateTimeFormat('en-CA', options).formatToParts(date)) {
     parts[part.type] = part.value
   }
   const hour = parts.hour === '24' ? '00' : parts.hour
-  return `${parts.year}-${parts.month}-${parts.day}T${hour}:${parts.minute}:${parts.second}+08:00`
+  let text = `${parts.year}-${parts.month}-${parts.day} ${hour}:${parts.minute}`
+  if (withSeconds) {
+    text += `:${parts.second}`
+  }
+  return text
 }
 
 /**
@@ -213,7 +227,7 @@ export function toShOffsetIso(date) {
     return null
   }
   const options = {
-    timeZone: SH_TZ,
+    timeZone: SHANGHAI,
     hour12: false,
     year: 'numeric',
     month: '2-digit',

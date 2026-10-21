@@ -20,6 +20,7 @@ DROP TABLE IF EXISTS sys_user;
 CREATE TABLE sys_user (
     id                  BIGINT       NOT NULL,
     user_type           VARCHAR(32)  NOT NULL,
+    roster_id           BIGINT       NULL,
     account_name        VARCHAR(64)  NOT NULL,
     phone               VARCHAR(32)  NULL,
     password_hash       VARCHAR(128) NOT NULL,

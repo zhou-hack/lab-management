@@ -203,7 +203,9 @@ public class SysUserServiceImpl implements SysUserService {
                         .eq(SysDepartment::getEnabled, 1)
                         .orderByAsc(SysDepartment::getId))
                 .stream()
-                .map(d -> new DepartmentOptionVO(String.valueOf(d.getId()), d.getDepartmentName()))
+                .map(d -> new DepartmentOptionVO(String.valueOf(d.getId()),
+                        d.getParentId() == null ? null : String.valueOf(d.getParentId()),
+                        d.getDepartmentName()))
                 .toList();
     }
 
