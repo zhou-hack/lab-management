@@ -71,6 +71,20 @@
           >
             {{ formatRange(booking.startAt, booking.endAt) }}（上海本地时间）
           </el-descriptions-item>
+          <el-descriptions-item
+            v-if="booking.startPeriodName || booking.bookingDate"
+            label="节次"
+            :span="2"
+          >
+            {{ booking.bookingDate || '' }}
+            {{ booking.startPeriodName ? `${booking.startPeriodName} ~ ${booking.endPeriodName || booking.startPeriodName}` : '' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="课堂信息">
+            {{ [booking.courseName, booking.className].filter(Boolean).join(' · ') || '—' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="上课老师">
+            {{ booking.teacherName || '—' }}
+          </el-descriptions-item>
           <el-descriptions-item label="申请人">
             {{ booking.applicantName || booking.applicantId }}
           </el-descriptions-item>

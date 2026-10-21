@@ -57,6 +57,9 @@ public interface BookingService {
     /** 场地某日可用时段（上海本地日期，返回未释放占用） */
     AvailabilityVO availability(Long spaceId, LocalDate date);
 
+    /** 场地近期预约（重叠 [now, now+24h) 窗口的待审批/已批准单，时间轴「24h 近期」卡片） */
+    java.util.List<com.labmanage.module.booking.vo.BookingVO> recent(Long spaceId);
+
     /** 预约状态统计（预约管理页卡片） */
     BookingStatsVO stats();
 

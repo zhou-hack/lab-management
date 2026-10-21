@@ -201,13 +201,7 @@
           min-width="170"
         >
           <template #default="{ row }">
-            <el-button
-              link
-              type="primary"
-              @click="onDetail(row)"
-            >
-              {{ row.labName }}
-            </el-button>
+            <span class="space_list__name">{{ row.labName }}</span>
           </template>
         </el-table-column>
         <el-table-column
@@ -262,7 +256,7 @@
         </el-table-column>
         <el-table-column
           label="操作"
-          width="262"
+          width="210"
           fixed="right"
           class-name="space_list__op_cell"
         >
@@ -707,13 +701,18 @@ onMounted(() => {
   margin-left: 0;
 }
 
-/* link 按钮左右内边距收紧，保证五个按钮在 262px 列宽内单行排布 */
+/* link 按钮左右内边距收紧，保证操作按钮在 210px 列宽内单行排布 */
 .space_list__actions .el-button.is-link {
   padding: 2px 3px;
 }
 
 :deep(.space_list__op_cell .cell) {
   white-space: nowrap;
+}
+
+/* 场地名称：仅作文本展示，不绑定点击交互 */
+.space_list__name {
+  color: var(--g1);
 }
 
 @media (max-width: 768px) {

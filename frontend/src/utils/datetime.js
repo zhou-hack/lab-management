@@ -128,6 +128,37 @@ export function todayShanghai() {
   return `${p.year}-${p.month}-${p.day}`
 }
 
+/**
+ * 上海本地「现在时刻」（HH:mm）。供节次三色小卡片前端派生使用
+ * （当前时间只做展示层计算，不落库、不提交后端）。
+ */
+export function nowShanghaiClock() {
+  const d = new Date(Date.now() + SHANGHAI_OFFSET_MIN * 60_000)
+  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
+}
+
+/**
+ * 上海本地时刻（YYYY-MM-DD HH:mm）→ 从当日 00:00 起的分钟数（0-1439）。
+ * 非法输入返回 null；用于节次卡片的「已过去/进行中」判定。
+ */
+export function shanghaiMinutesOf(date, time) {
+  if (!date || !time) return null
+  const [y, mo, d] = String(date).split('-').map(Number)
+  const [h, mi] = String(time).split(':').map(Number)
+  if ([y, mo, d, h, mi].some((n) => Number.isNaN(n))) return null
+  return h * 60 + mi
+}
+
+/**
+ * UTC 时间点 → 上海本地当日 HH:mm（节次占用段与当前时刻比较用）。
+ */
+export function shanghaiClockOf(instantValue) {
+  const ms = toShanghaiMs(instantValue)
+  if (ms === null) return null
+  const t = new Date(ms)
+  return `${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}`
+}
+
 /** 上海本地日期加减天数（YYYY-MM-DD），n 可为负 */
 export function addDaysShanghai(dateStr, n) {
   const [y, mo, d] = String(dateStr).split('-').map(Number)
