@@ -3,14 +3,14 @@ package com.labmanage.module.booking.flow.service;
 import com.labmanage.module.booking.entity.LabBooking;
 import com.labmanage.module.booking.entity.LabBookingSeries;
 import com.labmanage.module.booking.flow.entity.ApprovalTask;
-import com.labmanage.module.booking.flow.entity.BizDocument;
+import com.labmanage.module.document.entity.BizDocument;
 import com.labmanage.module.booking.flow.entity.DocumentEvent;
 import com.labmanage.module.booking.flow.enums.ActorType;
 import com.labmanage.module.booking.flow.enums.ApprovalTaskStatus;
 import com.labmanage.module.booking.flow.enums.DocumentEventType;
 import com.labmanage.module.booking.flow.mapper.ApprovalTaskMapper;
-import com.labmanage.module.booking.flow.mapper.BizDocumentMapper;
-import com.labmanage.module.booking.flow.mapper.DocumentEventMapper;
+import com.labmanage.module.document.mapper.BizDocumentMapper;
+import com.labmanage.module.booking.flow.mapper.FlowDocumentEventMapper;
 import com.labmanage.module.booking.flow.vo.BookingTimelineEventVO;
 import com.labmanage.roles.entity.SysUser;
 import com.labmanage.roles.mapper.SysUserMapper;
@@ -53,12 +53,12 @@ public class BookingFlowService {
 
     private final BizDocumentMapper documentMapper;
     private final ApprovalTaskMapper taskMapper;
-    private final DocumentEventMapper eventMapper;
+    private final FlowDocumentEventMapper eventMapper;
     private final SysUserMapper userMapper;
 
     public BookingFlowService(BizDocumentMapper documentMapper,
                               ApprovalTaskMapper taskMapper,
-                              DocumentEventMapper eventMapper,
+                              FlowDocumentEventMapper eventMapper,
                               SysUserMapper userMapper) {
         this.documentMapper = documentMapper;
         this.taskMapper = taskMapper;

@@ -20,7 +20,7 @@ import com.labmanage.module.booking.entity.LabSlot;
 import com.labmanage.module.booking.enums.BookingStatus;
 import com.labmanage.module.booking.enums.CancelType;
 import com.labmanage.module.booking.enums.SeriesStatus;
-import com.labmanage.module.booking.flow.entity.BizDocument;
+import com.labmanage.module.document.entity.BizDocument;
 import com.labmanage.module.booking.flow.service.BookingFlowService;
 import com.labmanage.module.booking.mapper.ClassPeriodMapper;
 import com.labmanage.module.booking.mapper.LabBookingMapper;
