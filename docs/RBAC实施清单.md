@@ -29,22 +29,22 @@
 
 「归属角色」为初始绑定；ASSISTANT 为附加角色，由有效 assistant_grant 动态计算；授权权力落 assistant_grant_scope（当前开放 MATERIAL_ISSUE 物料领取，OFFERING/LAB 预留）。
 OPS_ADMIN（运维管理员）为最高级预置运维角色，仅 SQL 预置不开放页面创建，绑定全部已登记权限（后续模块新增权限随各自脚本同步绑定 OPS_ADMIN），不受数据范围约束。
+2026-10-20 起系统管理（用户/名单/组织/角色/数据范围/预约限制/参数配置/授权审计）整体划归 OPS_ADMIN 专属，ADMIN 仅保留 system:log:list 且仅可见业务模块日志（module_code 不含 system/auth）。2026-10-21 预约限制页面与接口下线（system:restriction:* 权限与菜单移除），user_booking_restriction 表与 UserBookingRestrictionMapper.countActive 保留供预约模块逾期冻结使用。
 
 ### 2.1 system 模块（已出初始 SQL）
 
 | permission_code | 名称 | 归属角色 |
 | --- | --- | --- |
-| system:user:list / get / create / update / enable / reset_password / bind_role | 用户管理 | ADMIN / OPS_ADMIN（createAdmin 固定绑 ADMIN 角色且调用方须全校写；bind_role 仅老师账号可绑定/解绑 ADMIN 角色、调用方须全校写，变更踢目标用户会话；OPS_ADMIN 账号仅 OPS_ADMIN 本人可编辑/启停/重置/绑定操作） |
-| system:roster:list / create / update / enable / export / import | 预录名单管理（export 导出 CSV 复用列表筛选；import 批量导入 CSV 部分成功、需二级认证） | ADMIN / OPS_ADMIN |
-| system:department:list / create / update / enable | 组织管理 | ADMIN / OPS_ADMIN |
-| system:role:list | 角色与权限查看（角色仍 SQL 预置不可增删） | ADMIN / OPS_ADMIN |
+| system:user:list / get / create / update / enable / reset_password / bind_role | 用户管理 | 仅 OPS_ADMIN（createAdmin 固定绑 ADMIN 角色且调用方须全校写；bind_role 仅老师账号可绑定/解绑 ADMIN 角色、调用方须全校写，变更踢目标用户会话；OPS_ADMIN 账号仅 OPS_ADMIN 本人可编辑/启停/重置/绑定操作） |
+| system:roster:list / create / update / enable / export / import | 预录名单管理（export 导出 CSV 复用列表筛选；import 批量导入 CSV 部分成功、需二级认证） | 仅 OPS_ADMIN |
+| system:department:list / create / update / enable | 组织管理 | 仅 OPS_ADMIN |
+| system:role:list | 角色与权限查看（角色仍 SQL 预置不可增删） | 仅 OPS_ADMIN |
 | system:role:assign | 调整角色权限（整集替换 + 踢持有者会话；锁 OPS_ADMIN 角色） | 仅 OPS_ADMIN |
-| system:scope:list / grant | 数据范围查看 / 授权 | ADMIN / OPS_ADMIN |
-| system:restriction:list / create / revoke | 预约限制（手动冻结/撤销） | ADMIN / OPS_ADMIN |
-| system:log:list | 操作日志查询 | ADMIN / OPS_ADMIN |
-| system:policy:list / publish | 策略参数查看 / 发布 | ADMIN / OPS_ADMIN |
+| system:scope:list / grant | 数据范围查看 / 授权 | 仅 OPS_ADMIN |
+| system:log:list | 操作日志查询 | OPS_ADMIN（全量）/ ADMIN（仅业务模块日志，module_code 不含 system/auth） |
+| system:policy:list / publish | 策略参数查看 / 发布 | 仅 OPS_ADMIN |
 | system:grant:list / create / revoke | 助理授权（老师本人） | TEACHER / OPS_ADMIN |
-| system:grant:audit | 助理授权全局审计 | ADMIN / OPS_ADMIN |
+| system:grant:audit | 助理授权全局审计 | 仅 OPS_ADMIN |
 
 ### 2.2 space 模块（已于 2026-10-20 整体下线）
 
@@ -117,16 +117,14 @@ space:campus/building/lab 共 12 项权限（ID 1000–1011）及其角色绑定
 
 | menu_code | 名称 | route_path | component_key | 绑定权限 | 归属角色 |
 | --- | --- | --- | --- | --- | --- |
-| system（目录） | 系统管理 | /system | — | — | ADMIN / OPS_ADMIN |
-| system_user | 用户管理 | /system/user | SystemUser | system:user:list | ADMIN / OPS_ADMIN |
-| system_roster | 名单管理 | /system/roster | SystemRoster | system:roster:list | ADMIN / OPS_ADMIN |
-| system_department | 组织管理 | /system/department | SystemDepartment | system:department:list | ADMIN / OPS_ADMIN |
-| system_role | 角色权限 | /system/role | SystemRole | system:role:list | ADMIN / OPS_ADMIN |
-| system_scope | 数据范围 | /system/scope | SystemScope | system:scope:list | ADMIN / OPS_ADMIN |
-| system_restriction | 预约限制 | /system/restriction | SystemRestriction | system:restriction:list | ADMIN / OPS_ADMIN |
-| system_log | 操作日志 | /system/log | SystemLog | system:log:list | ADMIN / OPS_ADMIN |
-| system_policy | 参数配置 | /system/policy | SystemPolicy | system:policy:list | ADMIN / OPS_ADMIN |
-| system_grant_audit | 助理授权审计 | /system/grant | SystemGrantAudit | system:grant:audit | ADMIN / OPS_ADMIN |
+| system（目录） | 系统管理 | /system | — | — | ADMIN / OPS_ADMIN（ADMIN 仅见其下操作日志页） |
+| system_user | 人员管理 | /system/user | SystemUserRoster | system:user:list | 仅 OPS_ADMIN（名单管理 2026-10-21 并入为统一人员视图：名单与账号一行一人，列表数据走 GET /system/persons（需 system:user:list + system:roster:list 双权限）；名单操作接口仍由 system:roster:* 保护，旧地址 /system/roster 静态重定向至本页） |
+| system_department | 组织管理 | /system/department | SystemDepartment | system:department:list | 仅 OPS_ADMIN |
+| system_role | 角色权限 | /system/role | SystemRole | system:role:list | 仅 OPS_ADMIN |
+| system_scope | 数据范围 | /system/scope | SystemScope | system:scope:list | 仅 OPS_ADMIN |
+| system_log | 操作日志 | /system/log | SystemLog | system:log:list | ADMIN / OPS_ADMIN（ADMIN 仅业务模块日志） |
+| system_policy | 参数配置 | /system/policy | SystemPolicy | system:policy:list | 仅 OPS_ADMIN |
+| system_grant_audit | 助理授权审计 | /system/grant | SystemGrantAudit | system:grant:audit | 仅 OPS_ADMIN |
 | grant_manage | 助理管理（老师端） | /grant | GrantManage | system:grant:list | TEACHER |
 
 ### 3.1 space 模块（已于 2026-10-20 整体下线）
