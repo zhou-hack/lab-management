@@ -70,7 +70,11 @@
           min-width="170"
         >
           <template #default="{ row }">
-            <code class="policy_page__config">{{ row.config }}</code>
+            <span
+              v-for="(text, i) in formatConfig(row)"
+              :key="i"
+              class="policy_page__config_item"
+            >{{ text }}</span>
           </template>
         </el-table-column>
         <el-table-column
@@ -177,16 +181,29 @@
             style="width: 100%"
           />
         </el-form-item>
-        <el-form-item
-          label="策略参数"
-          prop="config"
-        >
-          <el-input
-            v-model="publishForm.config"
-            type="textarea"
-            :rows="5"
-            placeholder="JSON 对象，如 {&quot;maxFailCount&quot;:5}"
-          />
+        <template v-if="currentFields.length > 0">
+          <el-form-item
+            v-for="field in currentFields"
+            :key="field.key"
+            :label="field.label"
+            required
+          >
+            <el-input-number
+              v-model="publishForm.configFields[field.key]"
+              :min="field.min"
+              :max="field.max"
+              :step="1"
+              step-strictly
+              controls-position="right"
+              style="width: 180px"
+            />
+            <span class="policy_page__unit">{{ field.unit }}（{{ field.min }}-{{ field.max }}）</span>
+          </el-form-item>
+        </template>
+        <el-form-item v-else-if="publishForm.policyCode">
+          <el-text type="info">
+            该编码未登记参数元数据
+          </el-text>
         </el-form-item>
       </el-form>
       <p class="policy_page__tip t-hint">
@@ -209,9 +226,9 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { pagePolicies, publishPolicy } from '@/api/system/policy'
+import { listPolicySchemas, pagePolicies, publishPolicy } from '@/api/system/policy'
 import { withSafeAuth } from '@/utils/safe_auth'
 import { formatInstant, toUtcIso } from '@/utils/datetime'
 
@@ -220,6 +237,9 @@ const rows = ref([])
 const total = ref(0)
 const loading = ref(false)
 const submitting = ref(false)
+
+// 参数字段元数据：{ [policyCode]: [{ key, label, type, min, max, unit }] }
+const schemas = ref({})
 
 async function load() {
   loading.value = true
@@ -254,39 +274,55 @@ function statusOf(row) {
   return { label: '生效中', type: 'success' }
 }
 
+/** 参数列格式化：按元数据展示「中文名：值 单位」，无元数据回退原始 JSON */
+function formatConfig(row) {
+  const fields = schemas.value[row.policyCode]
+  let parsed = null
+  try {
+    parsed = JSON.parse(row.config)
+  } catch {
+    parsed = null
+  }
+  if (!fields || !parsed || typeof parsed !== 'object') {
+    return [row.config]
+  }
+  return fields.map((f) => `${f.label}：${parsed[f.key] ?? '-'} ${f.unit}`)
+}
+
 // ---------- 发布 ----------
 const publishVisible = ref(false)
 const publishFormRef = ref()
-const publishForm = reactive({ policyCode: '', policyName: '', effectiveFrom: '', effectiveTo: '', config: '' })
+const publishForm = reactive({ policyCode: '', policyName: '', effectiveFrom: '', effectiveTo: '', configFields: {} })
 const codeOptions = ref([])
+
+const currentFields = computed(() => schemas.value[publishForm.policyCode] || [])
 
 const publishRules = {
   policyCode: [{ required: true, message: '请选择策略编码', trigger: 'change' }],
   policyName: [{ required: true, message: '请输入策略名称', trigger: 'blur' }],
-  effectiveFrom: [{ required: true, message: '请选择生效开始', trigger: 'change' }],
-  config: [
-    { required: true, message: '请输入策略参数', trigger: 'blur' },
-    {
-      validator: (_rule, value, callback) => {
-        try {
-          const parsed = JSON.parse(value)
-          if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            callback(new Error('必须为 JSON 对象'))
-          } else {
-            callback()
-          }
-        } catch {
-          callback(new Error('不是合法 JSON'))
-        }
-      },
-      trigger: 'blur'
-    }
-  ]
+  effectiveFrom: [{ required: true, message: '请选择生效开始', trigger: 'change' }]
 }
 
 function onCodeChange(code) {
   const hit = codeOptions.value.find((c) => c.policyCode === code)
   if (hit) publishForm.policyName = hit.policyName
+  // 预填该编码当前最新版本的参数值；无则给元数据最小值
+  const fields = schemas.value[code] || []
+  const latest = rows.value.find((r) => r.policyCode === code) || hit
+  let latestConfig = null
+  if (latest && latest.config) {
+    try {
+      latestConfig = JSON.parse(latest.config)
+    } catch {
+      latestConfig = null
+    }
+  }
+  const configFields = {}
+  for (const f of fields) {
+    const v = latestConfig ? latestConfig[f.key] : null
+    configFields[f.key] = Number.isInteger(v) ? v : f.min
+  }
+  publishForm.configFields = configFields
 }
 
 async function openPublish() {
@@ -294,14 +330,14 @@ async function openPublish() {
   publishForm.policyName = ''
   publishForm.effectiveFrom = ''
   publishForm.effectiveTo = ''
-  publishForm.config = ''
+  publishForm.configFields = {}
   publishVisible.value = true
-  // 编码选项取全部编码的最新版本名称
+  // 编码选项取全部编码的最新版本（列表按编码升序、版本倒序，取每码首行）
   const data = await pagePolicies({ pageNum: 1, pageSize: 100 })
   const seen = new Map()
   for (const item of data.records) {
     if (!seen.has(item.policyCode)) {
-      seen.set(item.policyCode, { policyCode: item.policyCode, policyName: item.policyName })
+      seen.set(item.policyCode, { policyCode: item.policyCode, policyName: item.policyName, config: item.config })
     }
   }
   codeOptions.value = [...seen.values()]
@@ -313,6 +349,12 @@ async function submitPublish() {
   } catch {
     return
   }
+  for (const f of currentFields.value) {
+    if (!Number.isInteger(publishForm.configFields[f.key])) {
+      ElMessage.error(`请填写${f.label}`)
+      return
+    }
+  }
   let payload
   try {
     payload = {
@@ -320,7 +362,7 @@ async function submitPublish() {
       policyName: publishForm.policyName,
       effectiveFrom: toUtcIso(publishForm.effectiveFrom),
       effectiveTo: publishForm.effectiveTo ? toUtcIso(publishForm.effectiveTo) : null,
-      config: publishForm.config
+      config: JSON.stringify(publishForm.configFields)
     }
   } catch (e) {
     ElMessage.error(e.message)
@@ -338,7 +380,10 @@ async function submitPublish() {
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  load()
+  schemas.value = await listPolicySchemas()
+})
 </script>
 
 <style scoped>
@@ -365,9 +410,17 @@ onMounted(load)
   margin-top: 14px;
 }
 
-.policy_page__config {
+.policy_page__config_item {
+  display: block;
   font-size: 12px;
+  line-height: 1.7;
   color: var(--el-text-color-regular);
+}
+
+.policy_page__unit {
+  margin-left: 10px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 .policy_page__tip {
