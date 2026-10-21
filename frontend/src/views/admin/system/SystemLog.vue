@@ -25,13 +25,19 @@
               style="width: 130px"
               @change="search"
             >
+              <template v-if="isOpsAdmin">
+                <el-option
+                  label="认证"
+                  value="auth"
+                />
+                <el-option
+                  label="系统管理"
+                  value="system"
+                />
+              </template>
               <el-option
-                label="认证"
-                value="auth"
-              />
-              <el-option
-                label="系统管理"
-                value="system"
+                label="助理授权"
+                value="grant"
               />
             </el-select>
           </el-form-item>
@@ -169,10 +175,15 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { pageLogs } from '@/api/system/log'
 import { formatInstant, toUtcIso } from '@/utils/datetime'
+import { useUserStore } from '@/store/user'
+
+const store = useUserStore()
+// 系统管理类日志（auth/system 模块）归运维管理员专属审计，普通管理员仅见业务模块日志
+const isOpsAdmin = computed(() => store.roles.includes('OPS_ADMIN'))
 
 const query = reactive({ pageNum: 1, pageSize: 20, keyword: '', moduleCode: '', success: null })
 const timeRange = ref(null)
