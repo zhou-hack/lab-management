@@ -1,7 +1,6 @@
 package com.labmanage.module.equipment.service;
 
 import com.labmanage.common.result.PageResult;
-import com.labmanage.module.equipment.dto.AssetClassifyRequest;
 import com.labmanage.module.equipment.dto.AssetCreateRequest;
 import com.labmanage.module.equipment.dto.AssetPageQuery;
 import com.labmanage.module.equipment.dto.AssetTransferRequest;
@@ -25,7 +24,7 @@ public interface AssetService {
     PageResult<AssetVO> page(AssetPageQuery query);
 
     /**
-     * 新增台账（初始状态 IDLE，价值分级待定级）
+     * 新增台账（初始状态 IDLE；价值分级由台账导入登记）
      */
     void create(AssetCreateRequest request);
 
@@ -44,11 +43,6 @@ public interface AssetService {
      * 当前台账与位置历史同事务更新）
      */
     void transfer(String id, AssetTransferRequest request);
-
-    /**
-     * 价值定级（登记分级、理由、定级人与时间）
-     */
-    void classify(String id, AssetClassifyRequest request);
 
     /**
      * 保管人下拉选项（全部启用用户）

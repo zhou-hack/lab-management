@@ -8,7 +8,6 @@ import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.ResultCode;
 import com.labmanage.common.utils.Ids;
 import com.labmanage.common.utils.PageUtils;
-import com.labmanage.module.equipment.dto.AssetClassifyRequest;
 import com.labmanage.module.equipment.dto.AssetCreateRequest;
 import com.labmanage.module.equipment.dto.AssetPageQuery;
 import com.labmanage.module.equipment.dto.AssetTransferRequest;
@@ -173,16 +172,6 @@ public class AssetServiceImpl implements AssetService {
         locationHistoryMapper.insert(history);
 
         asset.setLocationDetail(request.toLocation());
-        assetMapper.updateById(asset);
-    }
-
-    @Override
-    public void classify(String id, AssetClassifyRequest request) {
-        EquipmentAsset asset = requireAsset(Ids.parse(id));
-        asset.setValueLevel(request.valueLevel());
-        asset.setClassificationReason(request.classificationReason());
-        asset.setClassifiedBy(StpUtil.getLoginIdAsLong());
-        asset.setClassifiedAt(Instant.now());
         assetMapper.updateById(asset);
     }
 

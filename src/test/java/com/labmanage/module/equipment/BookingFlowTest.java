@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 设备使用申请链路集成测试（test profile，连接 lab_management_test）
  * <p>
  * 覆盖三权级流程：学生/教师申请、时段双校验（提交只看 APPROVED/CHECKED_OUT
- * 占用、待审单不占时段；同槽并存单最后批准者冲突被拒）、未定级禁止申请、
+ * 占用、待审单不占时段；同槽并存单最后批准者冲突被拒）、
  * 教师初审（普通通过即生效、贵重转终审、驳回意见必填）、管理员终审与
  * 超 24h 代批、借出发放（设备置 IN_USE、重复借出拒绝、借出中禁删）、
  * 归还（完好恢复空闲、损坏必填备注转维护中）、越权 403、撤销本人申请。
@@ -58,11 +58,10 @@ class BookingFlowTest {
     private static final long MODEL_ID = 910000000000000201L;
     private static final long ASSET_NORMAL = 910000000000000101L;
     private static final long ASSET_VALUABLE = 910000000000000102L;
-    private static final long ASSET_UNCLASSIFIED = 910000000000000103L;
 
-    /** 演示账号（sql/add_equipment_booking_permission.sql 预置） */
-    private static final long TEACHER_ID = 2L;
-    private static final long STUDENT_ID = 3L;
+    /** 演示账号（sql/add_equipment_booking_permission.sql 预置，id=10/11） */
+    private static final long TEACHER_ID = 10L;
+    private static final long STUDENT_ID = 11L;
 
     /** admin123 的 BCrypt 哈希（与种子一致） */
     private static final String PASSWORD_HASH =
@@ -160,8 +159,6 @@ class BookingFlowTest {
     @Order(5)
     void shouldRejectInvalidApply() throws Exception {
         // 注：同设备同时段的待审单允许并存（文档定稿：待审批不占时段，仅 APPROVED/CHECKED_OUT 占用）
-        // 未定级设备禁止申请
-        assertError(post(studentToken, BOOKINGS, applyBody(ASSET_UNCLASSIFIED)), 409, 40900);
         // 学生申请必须指定审批教师
         Map<String, Object> body = applyBody(ASSET_NORMAL);
         body.remove("approvalTeacherId");
@@ -394,7 +391,6 @@ class BookingFlowTest {
                 """, MODEL_ID, CATEGORY_ID);
         insertTestAsset(ASSET_NORMAL, "IT-BK-001", "NORMAL");
         insertTestAsset(ASSET_VALUABLE, "IT-BK-002", "VALUABLE");
-        insertTestAsset(ASSET_UNCLASSIFIED, "IT-BK-003", null);
 
         // 演示账号兜底：test 库未执行过账号脚本时自建（role 2=TEACHER / 3=STUDENT）
         jdbcTemplate.update("INSERT INTO sys_person_roster (id, person_no, person_type, real_name, phone, department_id)"
@@ -418,11 +414,11 @@ class BookingFlowTest {
         jdbcTemplate.update("UPDATE sys_user SET password_hash = ?, enabled = 1, failed_login_count = 0,"
                 + " locked_until = NULL WHERE id IN (?, ?)", PASSWORD_HASH, TEACHER_ID, STUDENT_ID);
         jdbcTemplate.update("INSERT INTO sys_user_role (id, user_id, role_id)"
-                        + " SELECT 2, ?, 2 WHERE NOT EXISTS (SELECT 1 FROM sys_user_role WHERE user_id = ? AND role_id = 2)",
-                TEACHER_ID, TEACHER_ID);
+                        + " SELECT ?, ?, 2 WHERE NOT EXISTS (SELECT 1 FROM sys_user_role WHERE user_id = ? AND role_id = 2)",
+                TEACHER_ID, TEACHER_ID, TEACHER_ID);
         jdbcTemplate.update("INSERT INTO sys_user_role (id, user_id, role_id)"
-                        + " SELECT 3, ?, 3 WHERE NOT EXISTS (SELECT 1 FROM sys_user_role WHERE user_id = ? AND role_id = 3)",
-                STUDENT_ID, STUDENT_ID);
+                        + " SELECT ?, ?, 3 WHERE NOT EXISTS (SELECT 1 FROM sys_user_role WHERE user_id = ? AND role_id = 3)",
+                STUDENT_ID, STUDENT_ID, STUDENT_ID);
     }
 
     private void insertTestAsset(long assetId, String assetCode, String valueLevel) {

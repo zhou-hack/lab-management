@@ -3,7 +3,6 @@ package com.labmanage.module.equipment.controller;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
-import com.labmanage.module.equipment.dto.AssetClassifyRequest;
 import com.labmanage.module.equipment.dto.AssetCreateRequest;
 import com.labmanage.module.equipment.dto.AssetPageQuery;
 import com.labmanage.module.equipment.dto.AssetTransferRequest;
@@ -93,14 +92,6 @@ public class AssetController {
     @PutMapping("/{id}/transfer")
     public Result<Void> transfer(@PathVariable String id, @Valid @RequestBody AssetTransferRequest request) {
         assetService.transfer(id, request);
-        return Result.success();
-    }
-
-    @Operation(summary = "价值定级")
-    @SaCheckPermission("equipment:asset:classify")
-    @PutMapping("/{id}/classification")
-    public Result<Void> classify(String id, @Valid @RequestBody AssetClassifyRequest request) {
-        assetService.classify(id, request);
         return Result.success();
     }
 

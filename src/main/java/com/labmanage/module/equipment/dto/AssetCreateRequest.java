@@ -8,7 +8,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * 设备台账新增请求（新建设备初始状态 IDLE；价值分级由定级接口登记）
+ * 设备台账新增请求（新建设备初始状态 IDLE；价值分级由台账导入登记）
  */
 public record AssetCreateRequest(
         @NotNull(message = "设备型号不能为空")

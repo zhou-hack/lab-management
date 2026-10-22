@@ -123,9 +123,6 @@ public class BookingServiceImpl implements BookingService {
         if (asset.getStatus() != EquipmentStatus.IDLE) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "设备当前不在架，不可申请");
         }
-        if (asset.getValueLevel() == null) {
-            throw new BusinessException(ResultCode.CONFLICT.getCode(), "设备待价值定级，禁止申请使用");
-        }
         if (bookingMapper.countOverlap(asset.getId(), startAt, endAt, -1L) > 0) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "该时段设备已被其他申请占用");
         }
