@@ -228,14 +228,6 @@
                       迁移
                     </el-button>
                     <el-button
-                      v-permission="'equipment:asset:classify'"
-                      link
-                      type="primary"
-                      @click="openClassify(row)"
-                    >
-                      定级
-                    </el-button>
-                    <el-button
                       v-permission="'equipment:asset:delete'"
                       link
                       type="danger"
@@ -517,63 +509,6 @@
       </template>
     </el-dialog>
 
-    <!-- 价值定级 -->
-    <el-dialog
-      v-model="classifyDialog.visible"
-      :title="`价值定级${classifyForm.assetCode ? `（${classifyForm.assetCode}）` : ''}`"
-      width="520px"
-      destroy-on-close
-    >
-      <el-alert
-        title="定级后记录定级人与时间"
-        type="info"
-        :closable="false"
-        class="asset_manage__alert"
-      />
-      <el-form
-        ref="classifyFormRef"
-        :model="classifyForm"
-        :rules="classifyRules"
-        label-width="100px"
-      >
-        <el-form-item
-          label="价值分级"
-          prop="valueLevel"
-        >
-          <el-radio-group v-model="classifyForm.valueLevel">
-            <el-radio value="NORMAL">
-              普通
-            </el-radio>
-            <el-radio value="VALUABLE">
-              贵重
-            </el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="定级理由">
-          <el-input
-            v-model="classifyForm.classificationReason"
-            type="textarea"
-            :rows="3"
-            maxlength="500"
-            show-word-limit
-            placeholder="选填"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="classifyDialog.visible = false">
-          取消
-        </el-button>
-        <el-button
-          type="primary"
-          :loading="classifyDialog.saving"
-          @click="saveClassify"
-        >
-          确定
-        </el-button>
-      </template>
-    </el-dialog>
-
     <!-- 一键导入：隐藏文件选择框，点按钮唤起、选中后立即上传 -->
     <input
       ref="importInputRef"
@@ -590,7 +525,6 @@ import { computed, h, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Files, Monitor } from '@element-plus/icons-vue'
 import {
-  classifyAsset,
   createAsset,
   custodianOptions,
   deleteAsset,
@@ -1002,47 +936,6 @@ async function saveTransfer() {
     // 失败提示由请求拦截器统一处理
   } finally {
     transferDialog.saving = false
-  }
-}
-
-/* ---------------- 定级 ---------------- */
-
-const classifyDialog = reactive({ visible: false, saving: false })
-const classifyFormRef = ref()
-const classifyForm = reactive({ assetId: '', assetCode: '', valueLevel: 'NORMAL', classificationReason: '' })
-const classifyRules = {
-  valueLevel: [{ required: true, message: '请选择价值分级', trigger: 'change' }]
-}
-
-function openClassify(row) {
-  Object.assign(classifyForm, {
-    assetId: row.id,
-    assetCode: row.assetCode,
-    valueLevel: row.valueLevel || 'NORMAL',
-    classificationReason: ''
-  })
-  classifyDialog.visible = true
-}
-
-async function saveClassify() {
-  try {
-    await classifyFormRef.value.validate()
-  } catch {
-    return
-  }
-  classifyDialog.saving = true
-  try {
-    await classifyAsset(classifyForm.assetId, {
-      valueLevel: classifyForm.valueLevel,
-      classificationReason: classifyForm.classificationReason.trim() || null
-    })
-    ElMessage.success('定级成功')
-    classifyDialog.visible = false
-    load()
-  } catch {
-    // 失败提示由请求拦截器统一处理
-  } finally {
-    classifyDialog.saving = false
   }
 }
 

@@ -76,11 +76,6 @@ export function transferAsset(id, data) {
   return request.put(`/equipment/assets/${id}/transfer`, data)
 }
 
-/** 价值定级 */
-export function classifyAsset(id, data) {
-  return request.put(`/equipment/assets/${id}/classification`, data)
-}
-
 /** 台账导出（xlsx，按当前筛选全量导出，返回 Blob） */
 export function exportAssets(params) {
   return request.get('/equipment/assets/export', { params, responseType: 'blob' })

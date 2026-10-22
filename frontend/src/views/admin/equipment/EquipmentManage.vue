@@ -90,7 +90,7 @@ const panels = [
   {
     key: 'asset',
     title: '设备台账',
-    sub: '按设备型号分组 · 资产登记 · 迁移 · 价值定级',
+    sub: '按设备型号分组 · 资产登记 · 迁移',
     unit: ' 台资产',
     icon: Notebook,
     tone: 'warn'
