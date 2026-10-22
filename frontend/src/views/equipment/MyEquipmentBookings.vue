@@ -89,19 +89,6 @@
             </template>
           </el-table-column>
           <el-table-column
-            label="价值分级"
-            width="90"
-          >
-            <template #default="{ row }">
-              <span
-                class="pill"
-                :class="enumMeta(row.valueLevelSnapshot, VALUE_LEVEL).pill"
-              >
-                {{ enumMeta(row.valueLevelSnapshot, VALUE_LEVEL).label }}
-              </span>
-            </template>
-          </el-table-column>
-          <el-table-column
             label="借用用途"
             min-width="160"
             show-overflow-tooltip
@@ -211,7 +198,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Tickets } from '@element-plus/icons-vue'
 import { cancelBooking, pageMyBookings } from '@/api/equipment'
-import { BOOKING_STATUS, BOOKING_STATUS_OPTIONS, VALUE_LEVEL, enumMeta } from '@/utils/enums'
+import { BOOKING_STATUS, BOOKING_STATUS_OPTIONS, enumMeta } from '@/utils/enums'
 import { formatSh } from '@/utils/datetime'
 import BookingApplyDialog from '@/components/BookingApplyDialog.vue'
 

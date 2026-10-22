@@ -7,7 +7,7 @@
   >
     <el-alert
       class="booking_apply__alert"
-      title="普通设备审批通过即生效；贵重设备初审通过后转管理员终审；提交与审批均校验时段占用"
+      title="申请提交后由指定教师初审，通过即生效；超 24 小时未处理管理员可代批；提交与审批均校验时段占用"
       type="info"
       :closable="false"
     />

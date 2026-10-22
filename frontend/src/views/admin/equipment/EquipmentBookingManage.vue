@@ -6,7 +6,7 @@
           设备使用审批
         </h2>
         <p class="t-sub">
-          贵重设备终审 · 学生单超 24h 代批 · 借出发放与归还登记 · 超期未还人工跟进
+          学生单超 24h 代批 · 借出发放与归还登记 · 超期未还人工跟进
         </p>
       </div>
     </div>
@@ -81,19 +81,6 @@
             label="资产编号"
             min-width="110"
           />
-          <el-table-column
-            label="价值分级"
-            width="90"
-          >
-            <template #default="{ row }">
-              <span
-                class="pill"
-                :class="enumMeta(row.valueLevelSnapshot, VALUE_LEVEL).pill"
-              >
-                {{ enumMeta(row.valueLevelSnapshot, VALUE_LEVEL).label }}
-              </span>
-            </template>
-          </el-table-column>
           <el-table-column
             label="使用时段"
             min-width="150"
@@ -357,13 +344,14 @@ import {
   pageAllBookings,
   returnBooking
 } from '@/api/equipment'
-import { BOOKING_STATUS, BOOKING_STATUS_OPTIONS, VALUE_LEVEL, enumMeta } from '@/utils/enums'
+import { BOOKING_STATUS, BOOKING_STATUS_OPTIONS, enumMeta } from '@/utils/enums'
 import { formatSh } from '@/utils/datetime'
 
 /**
  * 设备使用审批（管理端）：全部申请分页 + 状态筛选。
- * 操作按状态收敛——PENDING_ADMIN 终审；PENDING_TEACHER 超 24h 代批；
+ * 操作按状态收敛——PENDING_TEACHER 超 24h 代批；
  * APPROVED 借出登记；CHECKED_OUT 归还登记（损坏转维护中）。
+ * （历史遗留 PENDING_ADMIN 单仍可终审/驳回，新单不再产生该状态）
  */
 const REVIEW_TIMEOUT_MS = 24 * 60 * 60 * 1000
 

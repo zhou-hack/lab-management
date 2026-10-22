@@ -18,13 +18,7 @@ export const EQUIPMENT_STATUS_OPTIONS = Object.entries(EQUIPMENT_STATUS).map(([v
   label: meta.label
 }))
 
-/** 设备价值分级（NULL = 待分类，由调用方自行处理空值） */
-export const VALUE_LEVEL = {
-  NORMAL: { label: '普通', pill: 'pill--muted' },
-  VALUABLE: { label: '贵重', pill: 'pill--warn' }
-}
-
-/** 设备使用申请单状态（三权级两级审批七态机） */
+/** 设备使用申请单状态（学生单教师初审，超时管理员代批） */
 export const BOOKING_STATUS = {
   PENDING_TEACHER: { label: '待教师初审', pill: 'pill--warn' },
   PENDING_ADMIN: { label: '待管理员终审', pill: 'pill--warn' },

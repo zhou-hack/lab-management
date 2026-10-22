@@ -6,7 +6,7 @@
           设备目录
         </h2>
         <p class="t-sub">
-          在架可申请设备一览 · 学生单由指定教师初审，贵重设备初审后转管理员终审
+          在架可申请设备一览（按设备分类分组）· 学生单由指定教师初审，通过即生效
         </p>
       </div>
     </div>
@@ -15,11 +15,21 @@
       <div class="equipment_directory__toolbar">
         <el-input
           v-model="query.keyword"
-          class="equipment_directory__filter"
+          class="equipment_directory__filter equipment_directory__filter--keyword"
           placeholder="资产编号 / 序列号 / 名称"
           clearable
           @keyup.enter="search"
           @clear="search"
+        />
+        <el-tree-select
+          v-model="query.categoryId"
+          class="equipment_directory__filter"
+          :data="categoryFilterOptions"
+          node-key="id"
+          check-strictly
+          clearable
+          placeholder="全部分类"
+          @change="search"
         />
         <el-button @click="search">
           查询
@@ -33,88 +43,102 @@
         class="equipment_directory__skeleton"
       >
         <span class="skeleton equipment_directory__sk_row" />
+        <span class="skeleton equipment_directory__sk_row equipment_directory__sk_row--indent" />
         <span class="skeleton equipment_directory__sk_row" />
-        <span class="skeleton equipment_directory__sk_row" />
-        <span class="skeleton equipment_directory__sk_row" />
-        <span class="skeleton equipment_directory__sk_row" />
+        <span class="skeleton equipment_directory__sk_row equipment_directory__sk_row--indent" />
       </div>
-      <div
-        v-else-if="records.length"
-        class="table-scroll-x"
-      >
-        <el-table
-          v-loading="loading"
-          :data="records"
+      <template v-else-if="groups.length">
+        <!-- 按设备分类分组折叠（借鉴管理员端设备管理分类方法） -->
+        <div
+          v-for="group in groups"
+          :key="group.categoryId"
+          class="equip_group"
+          :class="{ 'equip_group--collapsed': !expanded[group.categoryId] }"
         >
-          <el-table-column
-            prop="assetCode"
-            label="资产编号"
-            min-width="110"
-          />
-          <el-table-column
-            prop="equipmentName"
-            label="设备名称"
-            min-width="150"
-            show-overflow-tooltip
-          />
-          <el-table-column
-            prop="modelCode"
-            label="型号码"
-            min-width="110"
-          />
-          <el-table-column
-            prop="departmentName"
-            label="归口部门"
-            min-width="110"
-          />
-          <el-table-column
-            label="存放位置"
-            min-width="140"
-            show-overflow-tooltip
+          <div
+            class="equip_group__head"
+            role="button"
+            tabindex="0"
+            @click="toggleGroup(group.categoryId)"
+            @keydown.enter.prevent="toggleGroup(group.categoryId)"
+            @keydown.space.prevent="toggleGroup(group.categoryId)"
           >
-            <template #default="{ row }">
-              {{ row.locationDetail || '—' }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            label="保管人"
-            width="90"
+            <el-icon class="equip_group__chevron">
+              <ArrowDown />
+            </el-icon>
+            <span class="equip_group__icon">
+              <el-icon :size="14">
+                <Collection />
+              </el-icon>
+            </span>
+            <span class="equip_group__name">{{ group.categoryName }}</span>
+            <span class="equip_group__count">{{ group.assets.length }} 台设备</span>
+          </div>
+          <div
+            v-show="expanded[group.categoryId]"
+            class="equip_group__body"
           >
-            <template #default="{ row }">
-              {{ row.custodianName || '—' }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            label="价值分级"
-            width="90"
-          >
-            <template #default="{ row }">
-              <span
-                class="pill"
-                :class="valueLevelMeta(row).pill"
-              >
-                {{ valueLevelMeta(row).label }}
-              </span>
-            </template>
-          </el-table-column>
-          <el-table-column
-            label="操作"
-            width="110"
-            fixed="right"
-          >
-            <template #default="{ row }">
-              <el-button
-                v-permission="'equipment:booking:apply'"
-                link
-                type="primary"
-                @click="openApply(row)"
-              >
-                申请使用
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
+            <div class="table-scroll-x">
+              <el-table :data="group.assets">
+                <el-table-column
+                  prop="assetCode"
+                  label="资产编号"
+                  min-width="110"
+                />
+                <el-table-column
+                  prop="equipmentName"
+                  label="设备名称"
+                  min-width="150"
+                  show-overflow-tooltip
+                />
+                <el-table-column
+                  prop="modelCode"
+                  label="型号码"
+                  min-width="110"
+                />
+                <el-table-column
+                  prop="departmentName"
+                  label="归口部门"
+                  min-width="110"
+                />
+                <el-table-column
+                  label="存放位置"
+                  min-width="140"
+                  show-overflow-tooltip
+                >
+                  <template #default="{ row }">
+                    {{ row.locationDetail || '—' }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="保管人"
+                  width="90"
+                >
+                  <template #default="{ row }">
+                    {{ row.custodianName || '—' }}
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="操作"
+                  width="110"
+                  fixed="right"
+                >
+                  <template #default="{ row }">
+                    <el-button
+                      v-permission="'equipment:booking:apply'"
+                      link
+                      type="primary"
+                      @click="openApply(row)"
+                    >
+                      申请使用
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </div>
+        </div>
+      </template>
       <div
         v-else
         class="empty"
@@ -127,15 +151,6 @@
         </el-icon>
         暂无在架设备
       </div>
-      <el-pagination
-        v-model:current-page="query.pageNum"
-        v-model:page-size="query.pageSize"
-        class="equipment_directory__pager"
-        :total="total"
-        :page-sizes="[10, 20, 50, 100]"
-        layout="total, sizes, prev, pager, next"
-        @change="load"
-      />
     </div>
 
     <!-- 申请使用（共享弹窗：目录行入口预选资产） -->
@@ -147,41 +162,115 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
-import { Monitor } from '@element-plus/icons-vue'
-import { pageAssets } from '@/api/equipment'
-import { VALUE_LEVEL, enumMeta } from '@/utils/enums'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { ArrowDown, Collection, Monitor } from '@element-plus/icons-vue'
+import { categoryTree, pageAssets } from '@/api/equipment'
 import BookingApplyDialog from '@/components/BookingApplyDialog.vue'
 
 /**
  * 设备目录（学生/教师用户端）：只读在架目录（服务端收敛为 IDLE 且启用视图），
+ * 全量加载不分页，按设备分类分组折叠（借鉴管理员端设备管理：分类树筛选 + 分组展示）；
  * 「申请使用」打开共享申请弹窗（预选当前行设备）。
  */
 const query = reactive({
-  pageNum: 1,
-  pageSize: 10,
-  keyword: ''
+  keyword: '',
+  categoryId: null
 })
 const records = ref([])
-const total = ref(0)
 const loading = ref(false)
 
-function valueLevelMeta(row) {
-  return row.valueLevel
-    ? enumMeta(row.valueLevel, VALUE_LEVEL)
-    : { label: '待分类', pill: 'pill--danger' }
+/* ---------------- 分类筛选（分类树下拉） ---------------- */
+
+const categoryTreeData = ref([])
+
+async function loadCategoryTree() {
+  try {
+    categoryTreeData.value = (await categoryTree()) || []
+  } catch {
+    // 失败提示由请求拦截器统一处理
+  }
 }
 
+/** 克隆为 el-tree-select 数据：分类名（编码）标签 */
+function cloneLabeled(nodes) {
+  const result = []
+  for (const node of nodes || []) {
+    result.push({
+      id: node.id,
+      label: `${node.categoryName}（${node.categoryCode}）`,
+      children: cloneLabeled(node.children)
+    })
+  }
+  return result
+}
+
+const categoryFilterOptions = computed(() => cloneLabeled(categoryTreeData.value))
+
+/* ---------------- 列表（按分类分组） ---------------- */
+
+/** 当前页记录按所属分类分组（组名取行内一致的分类名） */
+const groups = computed(() => {
+  const order = []
+  const map = new Map()
+  for (const row of records.value) {
+    const key = String(row.categoryId ?? 'none')
+    if (!map.has(key)) {
+      map.set(key, {
+        categoryId: key,
+        categoryName: row.categoryName || '未分类',
+        assets: []
+      })
+      order.push(key)
+    }
+    map.get(key).assets.push(row)
+  }
+  return order.map((key) => map.get(key))
+})
+
+/* 分组折叠状态：新分组默认展开 */
+const expanded = reactive({})
+
+watch(
+  groups,
+  (list) => {
+    for (const group of list) {
+      if (!(group.categoryId in expanded)) {
+        expanded[group.categoryId] = true
+      }
+    }
+  },
+  { immediate: true }
+)
+
+function toggleGroup(key) {
+  expanded[key] = !expanded[key]
+}
+
+/** 全量加载：后端 pageSize 上限 100，循环翻页直至收齐 total 条（目录不分页） */
 async function load() {
   loading.value = true
   try {
-    const params = { pageNum: query.pageNum, pageSize: query.pageSize }
+    const base = { pageSize: 100 }
     if (query.keyword.trim()) {
-      params.keyword = query.keyword.trim()
+      base.keyword = query.keyword.trim()
     }
-    const data = await pageAssets(params)
-    records.value = data.records || []
-    total.value = data.total || 0
+    if (query.categoryId) {
+      base.categoryId = query.categoryId
+    }
+    const all = []
+    let total = Infinity
+    let pageNum = 1
+    while (all.length < total) {
+      const data = await pageAssets({ ...base, pageNum })
+      const batch = data.records || []
+      all.push(...batch)
+      total = data.total || 0
+      pageNum += 1
+      if (!batch.length) {
+        break
+      }
+    }
+    records.value = all
   } catch {
     // 失败提示由请求拦截器统一处理
   } finally {
@@ -190,7 +279,6 @@ async function load() {
 }
 
 function search() {
-  query.pageNum = 1
   load()
 }
 
@@ -208,7 +296,10 @@ function openApply(row) {
   applyDialogRef.value?.open()
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadCategoryTree()
+})
 </script>
 
 <style scoped>
@@ -220,10 +311,10 @@ onMounted(load)
 }
 
 .equipment_directory__filter {
-  width: 240px;
+  width: 200px;
 }
 
-/* 加载骨架：模拟表格行位（规范 7.8） */
+/* 加载骨架：模拟分组行位（规范 7.8） */
 .equipment_directory__skeleton {
   display: flex;
   flex-direction: column;
@@ -236,8 +327,8 @@ onMounted(load)
   border-radius: var(--r-sm);
 }
 
-.equipment_directory__pager {
-  margin-top: 14px;
-  justify-content: flex-end;
+.equipment_directory__sk_row--indent {
+  width: 86%;
+  margin-left: 38px;
 }
 </style>

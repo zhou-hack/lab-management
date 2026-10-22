@@ -110,7 +110,7 @@ export function pageTeacherPending(params) {
   return request.get('/equipment/bookings/teacher_pending', { params })
 }
 
-/** 教师初审（approve：普通即生效、贵重转终审；reject 意见必填） */
+/** 教师初审（approve 通过即生效；reject 意见必填） */
 export function teacherReview(id, data) {
   return request.put(`/equipment/bookings/${id}/teacher_review`, data)
 }

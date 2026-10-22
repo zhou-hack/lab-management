@@ -6,7 +6,7 @@
           设备申请初审
         </h2>
         <p class="t-sub">
-          指定给您初审的学生申请 · 普通设备通过即生效，贵重设备通过后转管理员终审；超 24 小时未处理管理员可代批
+          指定给您初审的学生申请 · 通过即生效；超 24 小时未处理管理员可代批
         </p>
       </div>
     </div>
@@ -59,19 +59,6 @@
             label="资产编号"
             min-width="110"
           />
-          <el-table-column
-            label="价值分级"
-            width="90"
-          >
-            <template #default="{ row }">
-              <span
-                class="pill"
-                :class="enumMeta(row.valueLevelSnapshot, VALUE_LEVEL).pill"
-              >
-                {{ enumMeta(row.valueLevelSnapshot, VALUE_LEVEL).label }}
-              </span>
-            </template>
-          </el-table-column>
           <el-table-column
             label="使用时段"
             min-width="150"
@@ -217,12 +204,11 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Tickets } from '@element-plus/icons-vue'
 import { pageTeacherPending, teacherReview } from '@/api/equipment'
-import { VALUE_LEVEL, enumMeta } from '@/utils/enums'
 import { formatSh } from '@/utils/datetime'
 
 /**
  * 设备申请初审（教师端）：指定审批教师为本人、状态固定 PENDING_TEACHER 的待办分页。
- * 通过 → 普通即生效、贵重转管理员终审；驳回意见必填。
+ * 通过 → 申请即生效；驳回意见必填。
  */
 const REVIEW_TIMEOUT_MS = 24 * 60 * 60 * 1000
 
@@ -257,12 +243,9 @@ async function load() {
 }
 
 async function approve(row) {
-  const toAdmin = row.valueLevelSnapshot === 'VALUABLE'
   try {
     await ElMessageBox.confirm(
-      toAdmin
-        ? '该申请为贵重设备，初审通过后将转管理员终审。确认通过？'
-        : '初审通过后普通设备申请即生效。确认通过？',
+      '初审通过后申请即生效。确认通过？',
       '初审通过',
       { type: 'info', confirmButtonText: '通过', cancelButtonText: '取消' }
     )
@@ -271,7 +254,7 @@ async function approve(row) {
   }
   try {
     await teacherReview(row.id, { action: 'approve' })
-    ElMessage.success(toAdmin ? '已通过，转管理员终审' : '已通过')
+    ElMessage.success('已通过')
     load()
   } catch {
     // 失败提示由请求拦截器统一处理

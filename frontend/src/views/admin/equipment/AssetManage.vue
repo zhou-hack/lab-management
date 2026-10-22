@@ -43,7 +43,7 @@
             type="primary"
             @click="openCreate"
           >
-            新增台账
+            新增设备台账
           </el-button>
           <el-dropdown
             v-permission="['equipment:asset:import', 'equipment:asset:export']"
@@ -166,19 +166,6 @@
                   </template>
                 </el-table-column>
                 <el-table-column
-                  label="价值分级"
-                  width="90"
-                >
-                  <template #default="{ row }">
-                    <span
-                      class="pill"
-                      :class="valueLevelMeta(row).pill"
-                    >
-                      {{ valueLevelMeta(row).label }}
-                    </span>
-                  </template>
-                </el-table-column>
-                <el-table-column
                   label="状态"
                   width="90"
                 >
@@ -252,14 +239,14 @@
         >
           <Files />
         </el-icon>
-        暂无台账记录，请从「新增台账」开始登记
+        暂无设备台账记录，请从「新增设备台账」开始登记
       </div>
     </div>
 
-    <!-- 新增台账 -->
+    <!-- 新增设备台账 -->
     <el-dialog
       v-model="createDialog.visible"
-      title="新增台账"
+      title="新增设备台账"
       width="600px"
       destroy-on-close
     >
@@ -375,10 +362,10 @@
       </template>
     </el-dialog>
 
-    <!-- 编辑台账 -->
+    <!-- 编辑设备台账 -->
     <el-dialog
       v-model="editDialog.visible"
-      title="编辑台账"
+      title="编辑设备台账"
       width="560px"
       destroy-on-close
     >
@@ -536,13 +523,13 @@ import {
   updateAsset
 } from '@/api/equipment'
 import { departmentTreeOptions } from '@/api/department'
-import { EQUIPMENT_STATUS, EQUIPMENT_STATUS_OPTIONS, VALUE_LEVEL, enumMeta } from '@/utils/enums'
+import { EQUIPMENT_STATUS, EQUIPMENT_STATUS_OPTIONS, enumMeta } from '@/utils/enums'
 
 /**
- * 设备台账段（EquipmentManage 折叠面板子组件）。
+ * 设备台账区（AssetPage 独立页「设备台账」区块，2026-10-22 拆页后由 AssetPage 承载）。
  * - 全量加载后按设备型号（modelId）分组折叠展示，组名显示去掉尾部型号段的设备名称 + 型号码徽章，
  *   归口部门改为表格列展示；无分页，循环拉取直至收齐全部记录
- * - active 由父级面板展开状态驱动：首次展开才加载数据；收起时 DOM 保留、状态不丢失
+ * - active=true 时挂载即加载数据；侧栏「设备管理」子项「设备台账」直达本区块所在页
  */
 const props = defineProps({
   active: { type: Boolean, default: false }
@@ -590,12 +577,6 @@ const query = reactive({
 })
 const records = ref([])
 const loading = ref(false)
-
-function valueLevelMeta(row) {
-  return row.valueLevel
-    ? enumMeta(row.valueLevel, VALUE_LEVEL)
-    : { label: '待分类', pill: 'pill--danger' }
-}
 
 /**
  * 去掉设备名称尾部的 ASCII 型号段，如「企业级路由器 AR6120」→「企业级路由器」、
@@ -944,7 +925,7 @@ async function saveTransfer() {
 async function removeAsset(row) {
   try {
     await ElMessageBox.confirm(
-      `确定删除台账「${row.equipmentName}（${row.assetCode}）」吗？删除后资产编号不可复用。`,
+      `确定删除设备台账「${row.equipmentName}（${row.assetCode}）」吗？删除后资产编号不可复用。`,
       '提示',
       { type: 'warning' }
     )

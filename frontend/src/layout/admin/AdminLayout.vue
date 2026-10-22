@@ -204,6 +204,11 @@ async function onUserCommand(command) {
   border-right: none;
 }
 
+/* 侧栏子菜单展开/收起过渡压到 200ms 以内（需求：避免布局突兀跳动） */
+.admin_layout :deep(.el-collapse-transition) {
+  transition: height 0.2s ease, padding-top 0.2s ease, padding-bottom 0.2s ease !important;
+}
+
 .admin_layout__menu_empty {
   padding: 24px 16px;
   text-align: center;

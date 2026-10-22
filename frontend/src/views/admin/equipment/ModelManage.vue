@@ -390,9 +390,9 @@ import { categoryTree, createModel, deleteModel, pageModels, updateModel } from 
 import CategoryDirectory from '@/views/admin/equipment/CategoryManage.vue'
 
 /**
- * 设备型号段（EquipmentManage 折叠面板子组件）。
+ * 设备型号区（ModelPage 独立页「设备库存」区块，2026-10-22 拆页后由 ModelPage 承载）。
  * - 当前页记录按所属分类分组折叠展示；「管理分类」抽屉内嵌分类目录 CRUD（原分类页并入）
- * - active 由父级面板展开状态驱动：首次展开才加载数据；收起时 DOM 保留、状态不丢失
+ * - active=true 时挂载即加载数据；侧栏「设备管理」子项「设备库存」直达本区块所在页
  */
 const props = defineProps({
   active: { type: Boolean, default: false }

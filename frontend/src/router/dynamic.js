@@ -8,15 +8,37 @@ import AdminLayout from '@/layout/admin/AdminLayout.vue'
  */
 const viewModules = {
   '/home': () => import('@/views/admin/home/AdminHome.vue'),
-  // 设备管理单页（产品定稿不设子菜单）：型号 + 设备台账双折叠面板，
-  // 分类目录在型号面板的「管理分类」抽屉内
-  '/admin/equipment': () => import('@/views/admin/equipment/EquipmentManage.vue'),
-  // 三权级设备使用申请（2026-10-19）：用户端三页 + 管理端审批页
+  // 设备管理菜单（DB 单页 C 型，不设子菜单）：前端拆为「设备库存」「设备台账」两个独立页面。
+  // 白名单占位保证菜单命中；实际注册时改写为重定向 /admin/equipment/model，
+  // 两个区块页面由下方 EQUIPMENT_SECTION_ROUTES 显式追加。
+  '/admin/equipment': () => import('@/views/admin/equipment/ModelPage.vue'),
+  // 三权级设备使用申请（2026-10-19）：用户端三页 + 管理端审批页；
+  // 2026-10-22 新增学生端「查看驳回申请」独立页
   '/equipment/directory': () => import('@/views/equipment/EquipmentDirectory.vue'),
   '/equipment/bookings/my': () => import('@/views/equipment/MyEquipmentBookings.vue'),
+  '/equipment/bookings/rejected': () => import('@/views/equipment/RejectedBookings.vue'),
   '/equipment/bookings/teacher': () => import('@/views/equipment/EquipmentTeacherApprove.vue'),
   '/admin/equipment/bookings': () => import('@/views/admin/equipment/EquipmentBookingManage.vue')
 }
+
+/**
+ * 设备管理拆分页（2026-10-22）：「设备库存」「设备台账」为两个独立页面，
+ * 不在菜单树中，作为设备管理子路由显式注册；meta.perms 与页面清单权限一致。
+ */
+const EQUIPMENT_SECTION_ROUTES = [
+  {
+    path: '/admin/equipment/model',
+    name: 'dyn_equipment_model',
+    component: () => import('@/views/admin/equipment/ModelPage.vue'),
+    meta: { title: '设备库存', icon: null, perms: 'equipment:model:list', menuId: 'equipment_model' }
+  },
+  {
+    path: '/admin/equipment/asset',
+    name: 'dyn_equipment_asset',
+    component: () => import('@/views/admin/equipment/AssetPage.vue'),
+    meta: { title: '设备台账', icon: null, perms: 'equipment:asset:list', menuId: 'equipment_asset' }
+  }
+]
 
 const addedRouteNames = []
 
@@ -62,6 +84,20 @@ export function registerDynamicRoutes(menus) {
       component: viewModules['/home'],
       meta: { title: '首页', icon: null, perms: null, menuId: 'fixed_home' }
     })
+  }
+
+  // 设备管理拆页（2026-10-22）：DB 菜单项 /admin/equipment 改写为重定向到「设备库存」页，
+  // 「设备库存」「设备台账」两个区块页面作为设备管理子路由显式追加
+  const equipIdx = children.findIndex((r) => r.path === '/admin/equipment')
+  if (equipIdx >= 0) {
+    const parent = children[equipIdx]
+    children[equipIdx] = {
+      path: parent.path,
+      name: parent.name,
+      redirect: '/admin/equipment/model',
+      meta: parent.meta
+    }
+    children.push(...EQUIPMENT_SECTION_ROUTES)
   }
 
   if (children.length) {
