@@ -1,103 +1,191 @@
 <template>
-  <div class="dept_page">
-    <!-- 操作栏 -->
-    <el-card class="dept_page__card">
-      <div class="dept_page__bar">
-        <p class="dept_page__hint t-hint">
-          部门树支撑用户与名单归属；停用中的部门不可挂载新部门、新用户或新名单。
-        </p>
+  <div class="dept_page page">
+    <!-- 左：部门树 -->
+    <aside class="dept_page__side">
+      <div class="dept_side__header">
+        <span>部门树</span>
         <el-button
           v-permission="'system:department:create'"
           type="primary"
+          size="small"
           @click="openCreate(null)"
         >
           新增根部门
         </el-button>
       </div>
-    </el-card>
-
-    <!-- 部门树 -->
-    <el-card class="dept_page__card">
-      <el-table
+      <el-tree
         v-loading="loading"
         :data="tree"
-        row-key="id"
+        node-key="id"
+        :props="{ label: 'departmentName', children: 'children' }"
+        highlight-current
         default-expand-all
+        :expand-on-click-node="false"
+        class="dept_side__tree"
+        @node-click="selectNode"
       >
-        <el-table-column
-          prop="departmentName"
-          label="部门名称"
-          min-width="220"
-        />
-        <el-table-column
-          prop="departmentCode"
-          label="编码"
-          min-width="140"
-        />
-        <el-table-column
-          label="类型"
-          width="130"
-        >
-          <template #default="{ row }">
+        <template #default="{ data }">
+          <span class="dept_side__node">
+            <span class="dept_side__node_name">{{ data.departmentName }}</span>
             <el-tag
-              :type="typeTag(row.departmentType)"
+              v-if="!data.enabled"
+              type="warning"
               size="small"
+              effect="plain"
             >
-              {{ typeLabel(row.departmentType) }}
+              停用
             </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column
-          label="状态"
-          width="90"
-        >
-          <template #default="{ row }">
-            <el-tag
-              :type="row.enabled ? 'success' : 'warning'"
-              size="small"
-            >
-              {{ row.enabled ? '启用' : '停用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column
-          label="操作"
-          width="220"
-          fixed="right"
-        >
-          <template #default="{ row }">
-            <el-button
-              v-permission="'system:department:create'"
-              link
-              type="primary"
-              :disabled="!row.enabled"
-              @click="openCreate(row)"
-            >
-              新增下级
-            </el-button>
-            <el-button
-              v-permission="'system:department:update'"
-              link
-              type="primary"
-              @click="openEdit(row)"
-            >
-              编辑
-            </el-button>
-            <el-button
-              v-permission="'system:department:enable'"
-              link
-              :type="row.enabled ? 'danger' : 'success'"
-              @click="toggleEnabled(row)"
-            >
-              {{ row.enabled ? '停用' : '启用' }}
-            </el-button>
-          </template>
-        </el-table-column>
-        <template #empty>
-          <el-empty description="暂无部门" />
+          </span>
         </template>
-      </el-table>
-    </el-card>
+      </el-tree>
+      <p class="dept_side__hint">
+        停用中的部门不可挂载新部门、新用户或新名单
+      </p>
+    </aside>
+
+    <!-- 右：部门详情与成员 -->
+    <section
+      v-if="current"
+      class="dept_page__main"
+    >
+      <header class="dept_main__header">
+        <div>
+          <div class="dept_main__title">
+            {{ current.departmentName }}
+            <el-tag
+              :type="typeTag(current.departmentType)"
+              size="small"
+              effect="plain"
+            >
+              {{ typeLabel(current.departmentType) }}
+            </el-tag>
+            <el-tag
+              :type="current.enabled ? 'success' : 'warning'"
+              size="small"
+              effect="plain"
+            >
+              {{ current.enabled ? '启用' : '停用' }}
+            </el-tag>
+          </div>
+          <div class="dept_main__meta">
+            编码 {{ current.departmentCode }} · 直属成员 {{ memberTotal }} 人
+          </div>
+        </div>
+        <div class="dept_main__actions">
+          <el-button
+            v-permission="'system:department:create'"
+            type="primary"
+            :disabled="!current.enabled"
+            @click="openCreate(current)"
+          >
+            新增下级
+          </el-button>
+          <el-button
+            v-permission="'system:department:update'"
+            @click="openEdit(current)"
+          >
+            编辑
+          </el-button>
+          <el-button
+            v-permission="'system:department:enable'"
+            :type="current.enabled ? 'danger' : 'success'"
+            @click="toggleEnabled(current)"
+          >
+            {{ current.enabled ? '停用' : '启用' }}
+          </el-button>
+        </div>
+      </header>
+
+      <div class="dept_main__members">
+        <div class="dept_members__title">
+          直属成员
+          <span class="dept_members__tip">成员的新增与维护请前往「人员管理」，按部门筛选即可查看同一批人</span>
+        </div>
+        <el-table
+          v-loading="memberLoading"
+          :data="members"
+        >
+          <el-table-column
+            label="学工号"
+            min-width="110"
+          >
+            <template #default="{ row }">
+              {{ row.personNo || '—' }}
+            </template>
+          </el-table-column>
+          <el-table-column
+            prop="realName"
+            label="姓名"
+            min-width="110"
+            show-overflow-tooltip
+          />
+          <el-table-column
+            label="身份"
+            width="90"
+          >
+            <template #default="{ row }">
+              <el-tag
+                :type="PERSON_TYPE_TAG[row.personType] || 'info'"
+                size="small"
+                effect="plain"
+              >
+                {{ PERSON_TYPE_LABELS[row.personType] || row.personType }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column
+            label="手机号"
+            min-width="120"
+          >
+            <template #default="{ row }">
+              {{ row.phone || '—' }}
+            </template>
+          </el-table-column>
+          <el-table-column
+            label="登录账号"
+            min-width="120"
+          >
+            <template #default="{ row }">
+              {{ row.accountName || '—' }}
+            </template>
+          </el-table-column>
+          <el-table-column
+            label="状态"
+            width="90"
+          >
+            <template #default="{ row }">
+              <el-tag
+                :type="STATUS_META[row.status]?.type || 'info'"
+                size="small"
+              >
+                {{ STATUS_META[row.status]?.label || row.status }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <template #empty>
+            <el-empty description="该部门暂无直属成员" />
+          </template>
+        </el-table>
+        <div
+          v-if="memberTotal > memberQuery.pageSize"
+          class="dept_members__pager"
+        >
+          <el-pagination
+            v-model:current-page="memberQuery.pageNum"
+            v-model:page-size="memberQuery.pageSize"
+            :total="memberTotal"
+            layout="total, prev, pager, next"
+            @current-change="loadMembers"
+          />
+        </div>
+      </div>
+    </section>
+    <section
+      v-else
+      class="dept_page__main dept_page__main--empty"
+    >
+      <el-empty description="请选择左侧部门" />
+    </section>
 
     <!-- 新增 -->
     <el-dialog
@@ -252,18 +340,54 @@ import {
   updateDepartment,
   updateDepartmentEnabled
 } from '@/api/system/department'
+import { pagePersons } from '@/api/system/person'
+
+const PERSON_TYPE_LABELS = { STUDENT: '学生', TEACHER: '老师', ADMIN: '管理员' }
+const PERSON_TYPE_TAG = { STUDENT: 'success', TEACHER: 'primary', ADMIN: 'warning' }
+const STATUS_META = {
+  UNFILED: { label: '未建档', type: 'info' },
+  NORMAL: { label: '正常', type: 'success' },
+  ROSTER_DISABLED: { label: '名单停用', type: 'warning' },
+  USER_DISABLED: { label: '已停用', type: 'danger' }
+}
 
 const tree = ref([])
 const loading = ref(false)
 const submitting = ref(false)
+const current = ref(null)
 
-async function load() {
+async function load(selectId) {
   loading.value = true
   try {
     tree.value = await getDepartmentTree()
+    // 默认选中指定部门或第一个根节点
+    const targetId = selectId || current.value?.id
+    const found = targetId ? findNode(tree.value, targetId) : null
+    const target = found || tree.value[0] || null
+    current.value = target
+    if (target) {
+      memberQuery.pageNum = 1
+      await loadMembers()
+    }
   } finally {
     loading.value = false
   }
+}
+
+function findNode(nodes, id) {
+  for (const n of nodes) {
+    if (n.id === id) return n
+    const hit = findNode(n.children || [], id)
+    if (hit) return hit
+  }
+  return null
+}
+
+function selectNode(data) {
+  if (current.value?.id === data.id) return
+  current.value = data
+  memberQuery.pageNum = 1
+  loadMembers()
 }
 
 function typeLabel(type) {
@@ -272,6 +396,24 @@ function typeLabel(type) {
 
 function typeTag(type) {
   return { SCHOOL: 'primary', COLLEGE: 'success', ASSET_OFFICE: 'warning' }[type] || 'info'
+}
+
+// ---------- 直属成员 ----------
+const members = ref([])
+const memberTotal = ref(0)
+const memberLoading = ref(false)
+const memberQuery = reactive({ pageNum: 1, pageSize: 20 })
+
+async function loadMembers() {
+  if (!current.value) return
+  memberLoading.value = true
+  try {
+    const data = await pagePersons({ ...memberQuery, departmentId: current.value.id })
+    members.value = data.records
+    memberTotal.value = data.total
+  } finally {
+    memberLoading.value = false
+  }
 }
 
 // ---------- 新增 ----------
@@ -379,26 +521,143 @@ async function toggleEnabled(row) {
   load()
 }
 
-onMounted(load)
+onMounted(() => load())
 </script>
 
 <style scoped>
-.dept_page__card + .dept_page__card {
-  margin-top: 14px;
+.dept_page {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
 }
 
-.dept_page__bar {
+/* 左侧部门树：sticky 跟随滚动保持可见，树内容超高时内部独立滚动 */
+.dept_page__side {
+  display: flex;
+  flex-direction: column;
+  width: 280px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 104px);
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.dept_side__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
-.dept_page__hint {
+.dept_side__tree {
+  flex: 1;
+  padding: 12px 10px;
+  min-height: 200px;
+  overflow: auto;
+}
+
+/* 树节点放宽行高与间距，避免密集 */
+.dept_side__tree :deep(.el-tree-node__content) {
+  height: 34px;
+  border-radius: 6px;
+}
+
+.dept_side__tree :deep(.el-tree-node) {
+  margin-bottom: 2px;
+}
+
+.dept_side__node {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dept_side__hint {
   margin: 0;
+  padding: 10px 16px;
   font-size: 12px;
-  line-height: 1.7;
+  line-height: 1.6;
+  color: var(--el-text-color-secondary);
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+/* 右侧详情 */
+.dept_page__main {
+  flex: 1;
+  min-width: 0;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+
+.dept_page__main--empty {
+  display: flex;
+  justify-content: center;
+  padding: 60px 0;
+}
+
+.dept_main__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.dept_main__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.dept_main__meta {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.dept_main__actions {
+  display: flex;
+  gap: 10px;
+}
+
+.dept_main__actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+/* 成员列表 */
+.dept_members__title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 14px 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dept_members__tip {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--el-text-color-secondary);
+}
+
+.dept_members__pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 
 .dept_page__tip {
