@@ -233,15 +233,14 @@ function isCancellable(row) {
   return ['PENDING_TEACHER', 'PENDING_ADMIN', 'APPROVED'].includes(row.status)
 }
 
-/** 申请结果展示映射：审批通过→已同意，驳回→已驳回申请，待审批→审批中，已撤销→已撤销 */
+/** 申请结果展示映射：审批通过→已同意，驳回→已驳回申请，待审批→审批中；已撤销由状态列展示 */
 const BOOKING_RESULT = {
   PENDING_TEACHER: { label: '审批中', pill: 'pill--warn' },
   PENDING_ADMIN: { label: '审批中', pill: 'pill--warn' },
   APPROVED: { label: '已同意', pill: 'pill--ok' },
   CHECKED_OUT: { label: '已同意', pill: 'pill--ok' },
   RETURNED: { label: '已同意', pill: 'pill--ok' },
-  REJECTED: { label: '已驳回申请', pill: 'pill--danger' },
-  CANCELLED: { label: '已撤销', pill: 'pill--muted' }
+  REJECTED: { label: '已驳回申请', pill: 'pill--danger' }
 }
 
 function bookingResultMeta(status) {
