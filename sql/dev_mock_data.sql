@@ -18,9 +18,9 @@ INSERT INTO sys_department (id, parent_id, department_code, department_name, dep
 (9004, NULL, 'MECH_COLLEGE',    '机械与能源工程学院', 'COLLEGE', 1),
 (9005, 9004, 'ME_DEPT',         '机械工程系',         'COLLEGE', 1),
 (9006, NULL, 'MAT_COLLEGE',     '材料与化工学院',     'COLLEGE', 1),
-(9007, NULL, 'ACADEMIC_AFFAIRS','教务处',             'SCHOOL',  1),
-(9008, NULL, 'STUDENT_AFFAIRS', '学生工作处',         'SCHOOL',  1),
-(9009, NULL, 'LAB_CENTER',      '实验实训中心',       'SCHOOL',  1);
+(9007, NULL, 'ACADEMIC_AFFAIRS','教务处',             'ASSET_OFFICE', 1),
+(9008, NULL, 'STUDENT_AFFAIRS', '学生工作处',         'ASSET_OFFICE', 1),
+(9009, NULL, 'LAB_CENTER',      '实验实训中心',       'ASSET_OFFICE', 1);
 
 -- ---------------------------------------------------------------------------
 -- 2. 预录名单（32 条：24 名学生 + 8 名老师，手机号/学工号均为虚拟）
