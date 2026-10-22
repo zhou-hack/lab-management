@@ -1,8 +1,10 @@
 package com.labmanage.module.space.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.exception.BusinessException;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
+import com.labmanage.common.result.ResultCode;
 import com.labmanage.module.space.dto.SpaceBatchStatusDTO;
 import com.labmanage.module.space.dto.SpaceCreateDTO;
 import com.labmanage.module.space.dto.SpacePageQuery;
@@ -100,8 +102,13 @@ public class SpaceController {
     public Result<List<SpaceOptionVO>> options(@RequestParam(required = false) SpaceType labType,
                                                 @RequestParam(required = false) Integer minCapacity,
                                                 @RequestParam(required = false) Boolean availableOnly,
-                                                @RequestParam(required = false) String keyword) {
-        return Result.success(spaceService.options(labType, minCapacity, availableOnly, keyword));
+                                                @RequestParam(required = false) String keyword,
+                                                @RequestParam(defaultValue = "15") int limit) {
+        // Typeahead 默认返回 15 条，搜索时可调大 limit 索引更多数据
+        if (limit < 1 || limit > 100) {
+            throw new BusinessException(ResultCode.BAD_REQUEST);
+        }
+        return Result.success(spaceService.options(labType, minCapacity, availableOnly, keyword, limit));
     }
 
     @GetMapping("/stats")

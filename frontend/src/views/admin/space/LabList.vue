@@ -156,10 +156,6 @@
           <h2 class="t-title space_list__title">
             场地档案
           </h2>
-          <p class="t-sub">
-            教室/实训室建档与状态维护 · 开放时段为上海本地时间（不做时区转换） · 当前筛选结果
-            <strong class="space_list__result_count">{{ total }}</strong> 个场地
-          </p>
         </div>
         <div class="space_list__toolbar_actions">
           <el-button
@@ -636,7 +632,7 @@ async function fetchKeywordSuggestions(queryString, cb) {
   const seq = ++keywordSuggestSeq
   console.info('[关键字联想] 开始请求', { keyword, seq })
   try {
-    const options = await listSpaceOptions({ keyword })
+    const options = await listSpaceOptions({ keyword, limit: 50 })
     if (seq !== keywordSuggestSeq) {
       console.info('[关键字联想] 丢弃过期响应', { keyword, seq, latestSeq: keywordSuggestSeq })
       return
@@ -1002,13 +998,6 @@ onMounted(() => {
   font-size: 12px;
   color: var(--g3);
   text-align: center;
-}
-
-/* 当前筛选结果计数 */
-.space_list__result_count {
-  color: var(--brand);
-  font-weight: var(--fw-semibold);
-  font-variant-numeric: tabular-nums;
 }
 
 /* 页面左侧弹出式场地信息面板（层级高于弹窗；容器不拦截点击，由全局监听实现点击外部收起） */

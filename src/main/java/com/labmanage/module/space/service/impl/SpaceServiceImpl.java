@@ -135,7 +135,9 @@ public class SpaceServiceImpl implements SpaceService {
     }
 
     @Override
-    public List<SpaceOptionVO> options(SpaceType labType, Integer minCapacity, Boolean availableOnly, String keyword) {
+    public List<SpaceOptionVO> options(SpaceType labType, Integer minCapacity, Boolean availableOnly, String keyword, int limit) {
+        log.info("[场地选项] 开始：操作人={}, 类型={}, 最小容量={}, 仅可用={}, 关键字={}, 上限={}",
+                SecurityUtils.currentUserId(), labType, minCapacity, availableOnly, keyword, limit);
         LambdaQueryWrapper<BizSpace> wrapper = new LambdaQueryWrapper<>();
         if (labType != null) {
             wrapper.eq(BizSpace::getLabType, labType);
@@ -151,14 +153,15 @@ public class SpaceServiceImpl implements SpaceService {
             wrapper.like(BizSpace::getLabName, keyword.trim());
         }
         wrapper.orderByAsc(BizSpace::getLabName);
+        wrapper.last("LIMIT " + limit);
 
         List<SpaceOptionVO> result = spaceMapper.selectList(wrapper).stream()
                 .map(s -> new SpaceOptionVO(
                         String.valueOf(s.getId()), s.getLabName(), s.getLabType(),
                         s.getCapacity(), s.getStatus()))
                 .toList();
-        log.info("[场地选项] 完成：操作人={}, 类型={}, 最小容量={}, 仅可用={}, 关键字={}, 返回条数={}",
-                SecurityUtils.currentUserId(), labType, minCapacity, availableOnly, keyword, result.size());
+        log.info("[场地选项] 完成：操作人={}, 类型={}, 最小容量={}, 仅可用={}, 关键字={}, 上限={}, 返回条数={}",
+                SecurityUtils.currentUserId(), labType, minCapacity, availableOnly, keyword, limit, result.size());
         return result;
     }
 

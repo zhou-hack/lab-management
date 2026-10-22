@@ -443,7 +443,7 @@ function periodLabel(p) {
 async function querySpaces(keyword, cb) {
   const kw = typeof keyword === 'string' ? keyword.trim() : ''
   try {
-    const list = await listSpaceOptions({ availableOnly: true, keyword: kw || undefined })
+    const list = await listSpaceOptions({ availableOnly: true, keyword: kw || undefined, limit: 50 })
     spaces.value = list || []
     cb(structuredClone(list || []))
   } catch {

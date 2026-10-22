@@ -263,7 +263,7 @@ const emptyForm = () => ({
 
 const form = reactive(emptyForm())
 
-/** 输入名称与其他已有场地重名时提示（编辑时排除自身） */
+/** 输入名称与其他已有场地重名时提示（基于已加载选项，编辑时排除自身；后端唯一约束兜底） */
 const duplicateName = computed(() => {
   const value = String(form.labName || '').trim()
   if (!value) return false
@@ -289,25 +289,46 @@ function elapsedMs(begin) {
   return Math.round(performance.now() - begin)
 }
 
-/** 一次性加载全部可选场地名称（本地过滤，保证输入联想即时响应） */
-async function loadAllOptions() {
+// 按需请求场地选项：默认取数据库前 15 条；输入关键字搜索时调大 limit 索引更多数据
+let optionsSeq = 0
+let searchTimer = null
+
+async function loadOptions(keyword = '') {
   const begin = performance.now()
+  const seq = ++optionsSeq
   optionsLoading.value = true
   optionsError.value = ''
-  console.info('[场地名称选择] 开始加载全部场地', { mode: isEdit.value ? 'edit' : 'create' })
+  console.info('[场地名称选择] 请求场地选项', {
+    keyword: keyword || '(默认)',
+    limit: keyword ? 50 : 15,
+    mode: isEdit.value ? 'edit' : 'create'
+  })
   try {
-    const list = await listSpaceOptions({})
+    const list = await listSpaceOptions(keyword ? { keyword, limit: 50 } : { limit: 15 })
+    if (seq !== optionsSeq) {
+      console.info('[场地名称选择] 丢弃过期响应', { keyword, seq, latestSeq: optionsSeq })
+      return
+    }
     allOptions.value = list || []
-    console.info('[场地名称选择] 全部场地加载完成', {
+    console.info('[场地名称选择] 场地选项加载完成', {
+      keyword: keyword || '(默认)',
       count: allOptions.value.length,
       costMs: elapsedMs(begin)
     })
   } catch (e) {
+    if (seq !== optionsSeq) return
     optionsError.value = '可选场地名称加载失败，请重试'
-    console.warn('[场地名称选择] 全部场地加载失败', { error: e?.message, costMs: elapsedMs(begin) })
+    console.warn('[场地名称选择] 场地选项加载失败', { keyword, error: e?.message, costMs: elapsedMs(begin) })
   } finally {
-    optionsLoading.value = false
+    if (seq === optionsSeq) optionsLoading.value = false
   }
+}
+
+/** 输入防抖 200ms 后按关键字请求数据库 */
+function scheduleSearch(keyword) {
+  if (searchTimer) clearTimeout(searchTimer)
+  console.debug('[场地名称选择] 防抖排队，200ms 后请求数据库', { keyword: keyword || '(默认)' })
+  searchTimer = setTimeout(() => loadOptions(keyword), 200)
 }
 
 function onPickerShow() {
@@ -318,16 +339,14 @@ function onPickerHide() {
   console.info('[场地名称选择] 下拉已收起')
 }
 
-/** 输入变化：命中已有完整名称时通知父级弹出左侧信息面板 */
+/** 输入变化：防抖请求数据库搜索更多选项；命中已有完整名称时通知父级弹出左侧信息面板 */
 function onNameInput(value) {
-  // 输入时确保下拉展开（数据未就绪则先加载）
-  if (!allOptions.value.length && !optionsLoading.value) {
-    loadAllOptions()
-  }
+  // 输入时确保下拉展开
   pickerVisible.value = true
   const keyword = String(value || '').trim()
   if (!keyword) {
     selectedSpaceId.value = null
+    scheduleSearch('')
     return
   }
   const match = allOptions.value.find((item) => item.labName === keyword)
@@ -340,9 +359,11 @@ function onNameInput(value) {
       selectedSpaceId.value = String(match.id)
       emit('preview', match)
     }
-    return
+  } else {
+    selectedSpaceId.value = null
   }
-  selectedSpaceId.value = null
+  console.debug('[场地名称选择] 输入变更，触发搜索', { keyword, loadedCount: allOptions.value.length })
+  scheduleSearch(keyword)
 }
 
 /** 选择下拉项：回填名称、收起下拉，并通知父级弹出左侧信息面板 */
@@ -419,7 +440,7 @@ watch(
         status: props.space.status
       })
     }
-    loadAllOptions()
+    loadOptions()
   }
 )
 
@@ -464,6 +485,11 @@ async function onSubmit() {
 function onClosed() {
   console.info('[场地表单] 关闭')
   pickerVisible.value = false
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+    searchTimer = null
+  }
+  optionsSeq += 1
   formRef.value?.resetFields()
   ElMessage.closeAll()
 }

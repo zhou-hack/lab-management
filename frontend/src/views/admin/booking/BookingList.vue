@@ -429,7 +429,7 @@ async function onCheckout(row) {
 onMounted(() => {
   loadData()
   loadStats()
-  listSpaceOptions({})
+  listSpaceOptions({ limit: 100 })
     .then((list) => {
       spaceOptions.value = list || []
     })

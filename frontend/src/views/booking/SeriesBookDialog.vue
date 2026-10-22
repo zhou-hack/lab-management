@@ -305,7 +305,7 @@ function genId() {
 async function initForm() {
   try {
     const [spaces, periods, teachers] = await Promise.all([
-      listSpaceOptions({ availableOnly: true }),
+      listSpaceOptions({ availableOnly: true, limit: 100 }),
       listPeriods(),
       listTeachers()
     ])
