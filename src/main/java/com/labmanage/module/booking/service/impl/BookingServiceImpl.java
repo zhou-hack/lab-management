@@ -14,6 +14,7 @@ import com.labmanage.module.booking.dto.BookingCheckoutDTO;
 import com.labmanage.module.booking.dto.BookingCreateDTO;
 import com.labmanage.module.booking.dto.BookingPageQuery;
 import com.labmanage.module.booking.dto.BookingRejectDTO;
+import com.labmanage.module.booking.entity.ClassPeriod;
 import com.labmanage.module.booking.entity.LabBooking;
 import com.labmanage.module.booking.entity.LabSlot;
 import com.labmanage.module.booking.enums.BookingStatus;
@@ -22,6 +23,7 @@ import com.labmanage.module.document.entity.BizDocument;
 import com.labmanage.module.booking.flow.enums.DocumentEventType;
 import com.labmanage.module.booking.flow.service.BookingFlowService;
 import com.labmanage.module.booking.flow.vo.BookingTimelineEventVO;
+import com.labmanage.module.booking.mapper.ClassPeriodMapper;
 import com.labmanage.module.booking.mapper.LabBookingMapper;
 import com.labmanage.module.booking.mapper.LabSlotMapper;
 import com.labmanage.module.booking.service.BookingExpiryService;
@@ -71,6 +73,7 @@ public class BookingServiceImpl implements BookingService {
 
     private final LabBookingMapper bookingMapper;
     private final LabSlotMapper slotMapper;
+    private final ClassPeriodMapper periodMapper;
     private final BizSpaceMapper spaceMapper;
     private final SysUserMapper userMapper;
     private final BookingFlowService flowService;
@@ -78,12 +81,14 @@ public class BookingServiceImpl implements BookingService {
 
     public BookingServiceImpl(LabBookingMapper bookingMapper,
                               LabSlotMapper slotMapper,
+                              ClassPeriodMapper periodMapper,
                               BizSpaceMapper spaceMapper,
                               SysUserMapper userMapper,
                               BookingFlowService flowService,
                               BookingExpiryService expiryService) {
         this.bookingMapper = bookingMapper;
         this.slotMapper = slotMapper;
+        this.periodMapper = periodMapper;
         this.spaceMapper = spaceMapper;
         this.userMapper = userMapper;
         this.flowService = flowService;
@@ -97,8 +102,12 @@ public class BookingServiceImpl implements BookingService {
     public BookingDetailVO create(BookingCreateDTO dto) {
         Long operatorId = SecurityUtils.currentUserId();
         long begin = System.nanoTime();
-        log.info("[预约提交] 开始：操作人={}, 场地ID={}, 时段=[{} ~ {}], 人数={}",
-                operatorId, dto.spaceId(), dto.startAt(), dto.endAt(), dto.participantCount());
+        log.info("[预约提交] 开始：操作人={}, 场地ID={}, 时段=[{} ~ {}], 人数={}, 节次=[{}~{}]",
+                operatorId, dto.spaceId(), dto.startAt(), dto.endAt(), dto.participantCount(),
+                dto.startPeriodId(), dto.endPeriodId());
+
+        // 学生纯只读：禁止发起（前端按钮已按权限隐藏，此处为服务端兜底 40300）
+        requireNonStudent(operatorId, "发起场地预约");
 
         BizSpace space = requireSpace(dto.spaceId());
         if (space.getStatus() != SpaceStatus.AVAILABLE) {
@@ -119,6 +128,7 @@ public class BookingServiceImpl implements BookingService {
             throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "预约开始时间必须晚于当前时间");
         }
         validateWindow(space, dto.startAt(), dto.endAt());
+        validatePeriodConsistency(dto);
 
         long conflicts = slotMapper.countConflict(dto.spaceId(), dto.startAt(), dto.endAt());
         if (conflicts > 0) {
@@ -130,6 +140,12 @@ public class BookingServiceImpl implements BookingService {
         LabBooking booking = new LabBooking();
         booking.setLabId(dto.spaceId());
         booking.setApplicantId(operatorId);
+        booking.setBookingDate(dto.bookingDate());
+        booking.setStartPeriodId(dto.startPeriodId());
+        booking.setEndPeriodId(dto.endPeriodId());
+        booking.setCourseName(trimToNull(dto.courseName()));
+        booking.setClassName(trimToNull(dto.className()));
+        booking.setTeacherId(dto.teacherId());
         booking.setPurpose(dto.purpose().trim());
         booking.setParticipantCount(dto.participantCount());
         booking.setStartAt(dto.startAt());
@@ -179,6 +195,10 @@ public class BookingServiceImpl implements BookingService {
         log.info("[预约核对批准] 开始：操作人={}, 预约ID={}", operatorId, id);
 
         LabBooking booking = requireBooking(id);
+        if (booking.getApplicantId().equals(operatorId)) {
+            log.warn("[预约核对批准] 申请人不审自己的单，拒绝：操作人={}, 预约ID={}", operatorId, id);
+            throw new BusinessException(ResultCode.FORBIDDEN.getCode(), "申请人不审自己的单，请交由其他管理员核对");
+        }
         if (booking.getStatus() != BookingStatus.PENDING) {
             log.warn("[预约核对批准] 状态非待核对，拒绝：操作人={}, 预约ID={}, 状态={}",
                     operatorId, id, booking.getStatus());
@@ -403,6 +423,41 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
+    public List<BookingVO> recent(Long spaceId) {
+        Long operatorId = SecurityUtils.currentUserId();
+        long begin = System.nanoTime();
+        // 上海固定每日 24 小时档；时间点统一 UTC：窗口 [now, now+24h)，重叠即命中
+        Instant now = Instant.now();
+        Instant horizon = now.plus(java.time.Duration.ofHours(24));
+        List<LabBooking> records = bookingMapper.selectList(new LambdaQueryWrapper<LabBooking>()
+                .eq(LabBooking::getLabId, spaceId)
+                .in(LabBooking::getStatus, BookingStatus.PENDING, BookingStatus.APPROVED)
+                .lt(LabBooking::getStartAt, horizon)
+                .gt(LabBooking::getEndAt, now)
+                .orderByAsc(LabBooking::getStartAt)
+                .last("LIMIT 100"));
+        Map<Long, BizSpace> spaces = loadSpaces(records);
+        Map<Long, SysUser> users = loadUsers(records);
+        Map<Long, SysUser> teachers = loadTeachers(records);
+        Map<Long, ClassPeriod> periods = loadPeriods(records);
+        Map<Long, Map<String, Instant>> checkTimes =
+                flowService.loadCheckTimes(records.stream().map(LabBooking::getId).toList());
+        List<BookingVO> result = records.stream()
+                .map(b -> {
+                    Map<String, Instant> ct = checkTimes.get(b.getId());
+                    Instant checkin = ct == null ? null : ct.get("CHECKIN");
+                    Instant checkout = ct == null ? null : ct.get("CHECKOUT");
+                    SysUser teacher = b.getTeacherId() == null ? null : teachers.get(b.getTeacherId());
+                    return toVO(b, spaces.get(b.getLabId()), users.get(b.getApplicantId()),
+                            teacher, periods, now, checkin, checkout);
+                })
+                .toList();
+        log.info("[场地近期预约] 完成：操作人={}, 场地ID={}, 窗口=[{} ~ +24h], 返回条数={}, 耗时={}ms",
+                operatorId, spaceId, now, result.size(), (System.nanoTime() - begin) / 1_000_000);
+        return result;
+    }
+
+    @Override
     public BookingStatsVO stats() {
         Long operatorId = SecurityUtils.currentUserId();
         long pending = 0;
@@ -468,6 +523,8 @@ public class BookingServiceImpl implements BookingService {
         List<LabBooking> records = page.getRecords();
         Map<Long, BizSpace> spaces = loadSpaces(records);
         Map<Long, SysUser> users = loadUsers(records);
+        Map<Long, SysUser> teachers = loadTeachers(records);
+        Map<Long, ClassPeriod> periods = loadPeriods(records);
         Map<Long, Map<String, Instant>> checkTimes =
                 flowService.loadCheckTimes(records.stream().map(LabBooking::getId).toList());
         Instant now = Instant.now();
@@ -476,7 +533,9 @@ public class BookingServiceImpl implements BookingService {
                     Map<String, Instant> ct = checkTimes.get(b.getId());
                     Instant checkin = ct == null ? null : ct.get("CHECKIN");
                     Instant checkout = ct == null ? null : ct.get("CHECKOUT");
-                    return toVO(b, spaces.get(b.getLabId()), users.get(b.getApplicantId()), now, checkin, checkout);
+                    SysUser teacher = b.getTeacherId() == null ? null : teachers.get(b.getTeacherId());
+                    return toVO(b, spaces.get(b.getLabId()), users.get(b.getApplicantId()),
+                            teacher, periods, now, checkin, checkout);
                 })
                 .toList();
         return PageResult.of(vos, page.getTotal(), (int) page.getCurrent(), (int) page.getSize());
@@ -506,21 +565,74 @@ public class BookingServiceImpl implements BookingService {
         return map;
     }
 
-    private BookingVO toVO(LabBooking b, BizSpace space, SysUser applicant, Instant now,
+    private Map<Long, SysUser> loadTeachers(List<LabBooking> records) {
+        List<Long> ids = records.stream().map(LabBooking::getTeacherId)
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, SysUser> map = new HashMap<>();
+        for (SysUser user : userMapper.selectBatchIds(ids)) {
+            map.put(user.getId(), user);
+        }
+        return map;
+    }
+
+    private Map<Long, ClassPeriod> loadPeriods(List<LabBooking> records) {
+        List<Long> ids = new java.util.ArrayList<>();
+        for (LabBooking b : records) {
+            if (b.getStartPeriodId() != null) {
+                ids.add(b.getStartPeriodId());
+            }
+            if (b.getEndPeriodId() != null) {
+                ids.add(b.getEndPeriodId());
+            }
+        }
+        List<Long> distinct = ids.stream().distinct().toList();
+        if (distinct.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, ClassPeriod> map = new HashMap<>();
+        for (ClassPeriod p : periodMapper.selectPeriodsByIds(distinct)) {
+            map.put(p.getId(), p);
+        }
+        return map;
+    }
+
+    private BookingVO toVO(LabBooking b, BizSpace space, SysUser applicant, SysUser teacher,
+                           Map<Long, ClassPeriod> periods, Instant now,
                            Instant checkinAt, Instant checkoutAt) {
+        ClassPeriod startPeriod = null;
+        ClassPeriod endPeriod = null;
+        if (periods != null) {
+            if (b.getStartPeriodId() != null) {
+                startPeriod = periods.get(b.getStartPeriodId());
+            }
+            if (b.getEndPeriodId() != null) {
+                endPeriod = periods.get(b.getEndPeriodId());
+            }
+        }
         return new BookingVO(
                 String.valueOf(b.getId()),
                 String.valueOf(b.getLabId()),
                 space == null ? null : space.getLabName(),
+                b.getCourseName(),
+                b.getClassName(),
+                b.getTeacherId() == null ? null : String.valueOf(b.getTeacherId()),
+                teacher == null ? null : teacher.getRealName(),
                 b.getPurpose(),
                 b.getParticipantCount(),
                 b.getStartAt(),
                 b.getEndAt(),
+                b.getBookingDate(),
+                startPeriod == null ? null : startPeriod.getPeriodName(),
+                endPeriod == null ? null : endPeriod.getPeriodName(),
                 b.getStatus(),
                 b.getStatus() == null ? null : b.getStatus().getDisplayName(),
                 runtimePhase(b, now, checkinAt, checkoutAt),
                 String.valueOf(b.getApplicantId()),
                 applicant == null ? null : applicant.getRealName(),
+                b.getRejectReason(),
                 b.getCreateTime(),
                 checkinAt,
                 checkoutAt
@@ -531,6 +643,9 @@ public class BookingServiceImpl implements BookingService {
         LabBooking b = requireBooking(id);
         BizSpace space = spaceMapper.selectById(b.getLabId());
         SysUser applicant = userMapper.selectById(b.getApplicantId());
+        SysUser teacher = b.getTeacherId() == null ? null : userMapper.selectById(b.getTeacherId());
+        ClassPeriod startPeriod = b.getStartPeriodId() == null ? null : periodMapper.selectById(b.getStartPeriodId());
+        ClassPeriod endPeriod = b.getEndPeriodId() == null ? null : periodMapper.selectById(b.getEndPeriodId());
         List<BookingTimelineEventVO> timeline = flowService.timeline(id);
         Instant checkinAt = null;
         Instant checkoutAt = null;
@@ -545,10 +660,17 @@ public class BookingServiceImpl implements BookingService {
                 String.valueOf(b.getId()),
                 String.valueOf(b.getLabId()),
                 space == null ? null : space.getLabName(),
+                b.getCourseName(),
+                b.getClassName(),
+                b.getTeacherId() == null ? null : String.valueOf(b.getTeacherId()),
+                teacher == null ? null : teacher.getRealName(),
                 b.getPurpose(),
                 b.getParticipantCount(),
                 b.getStartAt(),
                 b.getEndAt(),
+                b.getBookingDate(),
+                startPeriod == null ? null : startPeriod.getPeriodName(),
+                endPeriod == null ? null : endPeriod.getPeriodName(),
                 b.getStatus(),
                 b.getStatus() == null ? null : b.getStatus().getDisplayName(),
                 runtimePhase(b, Instant.now(), checkinAt, checkoutAt),
@@ -623,6 +745,58 @@ public class BookingServiceImpl implements BookingService {
             boolean system = cancelType == CancelType.AUTO_EXPIRED;
             flowService.onCancel(doc, booking, system ? null : operatorId, system, reason);
         }
+    }
+
+    /** 学生纯只读：写操作身份门禁（前端按钮已按权限隐藏，此处为服务端兜底 40300） */
+    private void requireNonStudent(Long operatorId, String action) {
+        SysUser user = userMapper.selectById(operatorId);
+        if (user != null && "STUDENT".equals(user.getUserType())) {
+            log.warn("[{}] 学生禁止操作：操作人={}", action, operatorId);
+            throw new BusinessException(ResultCode.FORBIDDEN.getCode(), "学生为只读身份，不能" + action);
+        }
+    }
+
+    /**
+     * 节次口径一致性校验：携带 bookingDate/节次时，须与 startAt/endAt 推导一致
+     * （上海本地节次时刻 → UTC），保证时间轴三色小卡片与占用时段口径统一。
+     */
+    private void validatePeriodConsistency(BookingCreateDTO dto) {
+        boolean hasPeriod = dto.bookingDate() != null || dto.startPeriodId() != null || dto.endPeriodId() != null;
+        if (!hasPeriod) {
+            return;
+        }
+        if (dto.bookingDate() == null || dto.startPeriodId() == null || dto.endPeriodId() == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(),
+                    "节次预约须同时指定日期、起始节次与结束节次");
+        }
+        ClassPeriod startPeriod = periodMapper.selectById(dto.startPeriodId());
+        ClassPeriod endPeriod = periodMapper.selectById(dto.endPeriodId());
+        if (startPeriod == null || endPeriod == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "节次不存在或已停用");
+        }
+        if (startPeriod.getPeriodNo() > endPeriod.getPeriodNo()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "起始节次不能晚于结束节次");
+        }
+        Instant expectStart = dto.bookingDate().atStartOfDay(SHANGHAI)
+                .withHour(startPeriod.getStartClock().getHour())
+                .withMinute(startPeriod.getStartClock().getMinute()).toInstant();
+        Instant expectEnd = dto.bookingDate().atStartOfDay(SHANGHAI)
+                .withHour(endPeriod.getEndClock().getHour())
+                .withMinute(endPeriod.getEndClock().getMinute()).toInstant();
+        if (!dto.startAt().equals(expectStart) || !dto.endAt().equals(expectEnd)) {
+            log.warn("[预约提交] 节次时段与起止时间不一致：期望=[{}~{}], 实际=[{}~{}]",
+                    expectStart, expectEnd, dto.startAt(), dto.endAt());
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(),
+                    "节次时段与所选起止时间不一致，请刷新后重试");
+        }
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String v = value.trim();
+        return v.isEmpty() ? null : v;
     }
 
     /** 上海时区窗口校验：起止同日、不早于开放开始、不晚于开放结束 */

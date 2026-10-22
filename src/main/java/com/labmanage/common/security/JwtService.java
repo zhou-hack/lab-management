@@ -22,6 +22,7 @@ import java.util.Date;
 public class JwtService {
 
     public static final String CLAIM_TYPE = "typ";
+    public static final String CLAIM_ACTIVE_ROLE = "role";
     public static final String TYPE_ACCESS = "access";
     public static final String TYPE_REFRESH = "refresh";
 
@@ -43,32 +44,42 @@ public class JwtService {
         this.refreshTtl = Duration.ofSeconds(refreshTtlSeconds);
     }
 
-    /** 签发 access token（sub=userId） */
-    public String issueAccess(Long userId) {
-        return issue(userId, TYPE_ACCESS, accessTtl);
+    /** 签发 access token（sub=userId，携带活动角色声明用于多角色身份视图） */
+    public String issueAccess(Long userId, String activeRole) {
+        return issue(userId, activeRole, TYPE_ACCESS, accessTtl);
     }
 
-    /** 签发 refresh token（sub=userId，仅换 token 用） */
-    public String issueRefresh(Long userId) {
-        return issue(userId, TYPE_REFRESH, refreshTtl);
+    /** 签发 refresh token（sub=userId，仅换 token 用；刷新时保留活动角色） */
+    public String issueRefresh(Long userId, String activeRole) {
+        return issue(userId, activeRole, TYPE_REFRESH, refreshTtl);
     }
 
-    private String issue(Long userId, String type, Duration ttl) {
+    private String issue(Long userId, String activeRole, String type, Duration ttl) {
         Instant now = Instant.now();
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .issuer(issuer)
                 .subject(String.valueOf(userId))
                 .claim(CLAIM_TYPE, type)
                 .issuedAt(Date.from(now))
-                .expiration(Date.from(now.plus(ttl)))
-                .signWith(key)
-                .compact();
+                .expiration(Date.from(now.plus(ttl)));
+        if (activeRole != null && !activeRole.isBlank()) {
+            builder.claim(CLAIM_ACTIVE_ROLE, activeRole);
+        }
+        return builder.signWith(key).compact();
     }
 
     /**
      * 校验并解析 userId；类型不符、签名错误或过期返回 null（由调用方转 40100）。
      */
     public Long parseUserId(String token, String expectType) {
+        Parsed parsed = parse(token, expectType);
+        return parsed == null ? null : parsed.userId();
+    }
+
+    /**
+     * 校验并解析 userId 与活动角色声明（角色缺失返回 null，由服务端按默认活动角色兜底）。
+     */
+    public Parsed parse(String token, String expectType) {
         try {
             Claims claims = Jwts.parser()
                     .verifyWith(key)
@@ -79,10 +90,15 @@ public class JwtService {
             if (!expectType.equals(claims.get(CLAIM_TYPE, String.class))) {
                 return null;
             }
-            return Long.valueOf(claims.getSubject());
+            return new Parsed(Long.valueOf(claims.getSubject()),
+                    claims.get(CLAIM_ACTIVE_ROLE, String.class));
         } catch (JwtException | IllegalArgumentException e) {
             return null;
         }
+    }
+
+    /** 解析结果：userId + 活动角色声明（无角色声明时 activeRole 为 null） */
+    public record Parsed(Long userId, String activeRole) {
     }
 
     public long getAccessTtlSeconds() {

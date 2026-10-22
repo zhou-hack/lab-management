@@ -85,6 +85,18 @@ public class BookingController {
         return Result.success(bookingService.availability(spaceId, date));
     }
 
+    /**
+     * 场地近期预约（时间轴「24h 近期」卡片）：待审批/已批准单中与
+     * [now, now+24h) 窗口重叠的记录，按开始时间升序。（任意预约权限可读）
+     */
+    @GetMapping("/recent")
+    @RequirePermission(value = {"booking:lab:view", "booking:lab:list",
+            "booking:lab:create", "booking:lab:approve"}, mode = RequirePermission.Mode.OR)
+    public Result<java.util.List<com.labmanage.module.booking.vo.BookingVO>> recent(
+            @RequestParam Long spaceId) {
+        return Result.success(bookingService.recent(spaceId));
+    }
+
     @GetMapping("/{id}")
     @RequirePermission(
             value = {"booking:lab:list", "booking:lab:view", "booking:lab:approve"},

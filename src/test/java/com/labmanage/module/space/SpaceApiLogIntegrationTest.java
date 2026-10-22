@@ -6,6 +6,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.labmanage.common.result.Result;
 import com.labmanage.common.security.JwtService;
+import com.labmanage.common.security.LoginUser;
 import com.labmanage.roles.service.AuthService;
 import com.labmanage.module.space.service.impl.SpaceServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
@@ -73,7 +74,7 @@ class SpaceApiLogIntegrationTest {
 
             @GetMapping("/test/login")
             Result<String> login() {
-                return Result.success(jwtService.issueAccess(1L));
+                return Result.success(jwtService.issueAccess(1L, null));
             }
         }
     }
@@ -98,11 +99,10 @@ class SpaceApiLogIntegrationTest {
 
     @BeforeEach
     void login() throws Exception {
-        Mockito.when(authService.loadPermissionCodes(Mockito.any()))
-                .thenReturn(List.of("space:space:list", "space:space:read", "space:space:create",
-                        "space:space:update", "space:space:delete"));
-        Mockito.when(authService.loadRoleCodes(Mockito.any()))
-                .thenReturn(List.of("ADMIN"));
+        Mockito.when(authService.buildLoginUser(Mockito.any(), Mockito.any()))
+                .thenReturn(new LoginUser(1L, "ADMIN", List.of("ADMIN"),
+                        List.of("space:space:list", "space:space:read", "space:space:create",
+                                "space:space:update", "space:space:delete"), null));
         // Spring Boot 上下文在测试实例创建阶段才启动，其日志系统初始化会重置
         // logback context，因此捕获器须在上下文就绪后（此时）挂载，不能用 @BeforeAll
         if (logAppender == null) {

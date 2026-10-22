@@ -2,6 +2,7 @@ package com.labmanage.module.booking;
 
 import com.labmanage.common.result.Result;
 import com.labmanage.common.security.JwtService;
+import com.labmanage.common.security.LoginUser;
 import com.labmanage.roles.service.AuthService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -74,7 +75,7 @@ class BookingApiIntegrationTest {
 
             @GetMapping("/test/login")
             Result<String> login(@RequestParam(defaultValue = "1") long userId) {
-                return Result.success(jwtService.issueAccess(userId));
+                return Result.success(jwtService.issueAccess(userId, null));
             }
         }
     }
@@ -105,9 +106,10 @@ class BookingApiIntegrationTest {
 
     @BeforeEach
     void login() throws Exception {
-        Mockito.when(authService.loadPermissionCodes(1L)).thenReturn(ADMIN_PERMS);
-        Mockito.when(authService.loadPermissionCodes(2L)).thenReturn(TEACHER_PERMS);
-        Mockito.when(authService.loadRoleCodes(Mockito.any())).thenReturn(List.of("ADMIN"));
+        Mockito.when(authService.buildLoginUser(Mockito.eq(1L), Mockito.any()))
+                .thenReturn(new LoginUser(1L, "ADMIN", List.of("ADMIN"), ADMIN_PERMS, null));
+        Mockito.when(authService.buildLoginUser(Mockito.eq(2L), Mockito.any()))
+                .thenReturn(new LoginUser(2L, "TEACHER", List.of("TEACHER"), TEACHER_PERMS, null));
         adminToken = login(1);
         teacherToken = login(2);
     }

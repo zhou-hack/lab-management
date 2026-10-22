@@ -4,6 +4,7 @@ import com.labmanage.common.result.Result;
 import com.labmanage.roles.dto.AccountLoginDTO;
 import com.labmanage.roles.dto.PasswordConfirmDTO;
 import com.labmanage.roles.dto.RefreshTokenDTO;
+import com.labmanage.roles.dto.SwitchRoleDTO;
 import com.labmanage.roles.service.AuthService;
 import com.labmanage.roles.vo.ConfirmVO;
 import com.labmanage.roles.vo.LoginVO;
@@ -23,7 +24,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 认证接口：取盐、账号密码登录、token 刷新、身份、二级确认、注销。
+ * 认证接口：取盐、账号密码登录、token 刷新、身份、活动角色切换、二级确认、注销。
  * 口令全程为客户端 bcrypt 密文，不传输明文（公开端点由 JwtAuthFilter 放行）。
  */
 @Tag(name = "认证")
@@ -51,16 +52,22 @@ public class AuthController {
         return Result.success(authService.login(dto));
     }
 
-    @Operation(summary = "refresh token 换新（签发新 token 对）")
+    @Operation(summary = "refresh token 换新（签发新 token 对，保留活动角色）")
     @PostMapping("/refresh")
     public Result<LoginVO> refresh(@Valid @RequestBody RefreshTokenDTO dto) {
         return Result.success(authService.refresh(dto));
     }
 
-    @Operation(summary = "当前身份（角色/权限/菜单）")
+    @Operation(summary = "当前身份（按活动角色装配角色/权限/菜单）")
     @GetMapping("/profile")
     public Result<ProfileVO> profile() {
         return Result.success(authService.profile());
+    }
+
+    @Operation(summary = "切换活动角色（多角色用户切换身份视图，重签 token 对）")
+    @PostMapping("/switch_role")
+    public Result<LoginVO> switchRole(@Valid @RequestBody SwitchRoleDTO dto) {
+        return Result.success(authService.switchRole(dto));
     }
 
     @Operation(summary = "敏感操作二次密码确认（password 为客户端 bcrypt 密文）")

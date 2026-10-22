@@ -99,8 +99,9 @@ public class SpaceController {
     @RequirePermission("space:space:list")
     public Result<List<SpaceOptionVO>> options(@RequestParam(required = false) SpaceType labType,
                                                 @RequestParam(required = false) Integer minCapacity,
-                                                @RequestParam(required = false) Boolean availableOnly) {
-        return Result.success(spaceService.options(labType, minCapacity, availableOnly));
+                                                @RequestParam(required = false) Boolean availableOnly,
+                                                @RequestParam(required = false) String keyword) {
+        return Result.success(spaceService.options(labType, minCapacity, availableOnly, keyword));
     }
 
     @GetMapping("/stats")

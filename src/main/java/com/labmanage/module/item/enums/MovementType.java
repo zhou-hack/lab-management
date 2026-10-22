@@ -14,7 +14,7 @@ public enum MovementType {
     RETURN_IN,
     /** 调拨 */
     TRANSFER,
-    /** 盘点调账 */
+    /** 调账（库存差异调整单据） */
     ADJUST,
     /** 报废 */
     SCRAP,

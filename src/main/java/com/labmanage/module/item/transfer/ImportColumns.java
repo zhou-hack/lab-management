@@ -22,10 +22,6 @@ public final class ImportColumns {
     /** 期初余额导入模板列（有效行组装为一张 OPENING 期初入库草稿单，走既有审批过账） */
     public static final List<String> BALANCE_OPENING_HEADER = List.of("库位编码", "SKU码", "数量", "单价");
 
-    /** 盘点快照导出列（前 6 列与实盘回导模板一致，已录入行带值支持中断续盘） */
-    public static final List<String> STOCKTAKE_SNAPSHOT_HEADER =
-            List.of("库位编码", "SKU码", "物料名称", "账面数", "实盘数", "差异原因");
-
     private ImportColumns() {
     }
 

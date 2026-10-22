@@ -9,14 +9,20 @@ import com.labmanage.roles.dto.PolicyPageQueryDTO;
 import com.labmanage.roles.dto.PolicyPublishDTO;
 import com.labmanage.roles.entity.BusinessPolicy;
 import com.labmanage.roles.mapper.BusinessPolicyMapper;
+import com.labmanage.roles.policy.PolicySchemas;
 import com.labmanage.roles.service.PolicyService;
 import com.labmanage.roles.service.SysPolicyService;
 import com.labmanage.roles.vo.PolicyPageItemVO;
+import com.labmanage.roles.vo.PolicySchemaFieldVO;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 业务策略管理服务实现
@@ -47,6 +53,11 @@ public class SysPolicyServiceImpl implements SysPolicyService {
     }
 
     @Override
+    public Map<String, List<PolicySchemaFieldVO>> schemas() {
+        return PolicySchemas.all();
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public int publish(PolicyPublishDTO dto) {
         Integer maxVersion = policyMapper.selectMaxVersion(dto.policyCode());
@@ -56,7 +67,7 @@ public class SysPolicyServiceImpl implements SysPolicyService {
         if (dto.effectiveTo() != null && !dto.effectiveTo().isAfter(dto.effectiveFrom())) {
             throw new BusinessException(40000, "生效结束必须晚于生效开始");
         }
-        validateConfig(dto.config());
+        validateConfig(dto.policyCode(), dto.config());
         // 发布即替代：同事务停用同码全部旧启用版本，保证任一时刻同码仅一个生效版本
         // （预置版本 effective_to 为 NULL 长期有效，严格区间不重叠会使新版本永远无法发布）
         BusinessPolicy disableOld = new BusinessPolicy();
@@ -82,8 +93,8 @@ public class SysPolicyServiceImpl implements SysPolicyService {
         return newVersion;
     }
 
-    /** config 必须为合法 JSON 对象（策略参数为固定结构 JSON） */
-    private void validateConfig(String config) {
+    /** config 必须为合法 JSON 对象，且字段名/类型/取值范围符合该编码的参数元数据 */
+    private void validateConfig(String policyCode, String config) {
         JsonNode node;
         try {
             node = jsonMapper.readTree(config);
@@ -92,6 +103,34 @@ public class SysPolicyServiceImpl implements SysPolicyService {
         }
         if (node == null || !node.isObject()) {
             throw new BusinessException(40000, "策略参数必须为 JSON 对象");
+        }
+        List<PolicySchemaFieldVO> fields = PolicySchemas.fieldsOf(policyCode);
+        if (fields == null) {
+            throw new BusinessException(40000, "该策略未登记参数元数据，不允许发布");
+        }
+        for (PolicySchemaFieldVO field : fields) {
+            JsonNode value = node.get(field.key());
+            if (value == null) {
+                throw new BusinessException(40000, "缺少参数 " + field.key() + "（" + field.label() + "）");
+            }
+            if (!value.isIntegralNumber()) {
+                throw new BusinessException(40000,
+                        "参数 " + field.key() + "（" + field.label() + "）必须为整数");
+            }
+            long v = value.longValue();
+            if (v < field.min() || v > field.max()) {
+                throw new BusinessException(40000,
+                        "参数 " + field.key() + "（" + field.label() + "）取值范围为 "
+                                + field.min() + "-" + field.max() + " " + field.unit());
+            }
+        }
+        Iterator<String> names = node.propertyNames().iterator();
+        while (names.hasNext()) {
+            String name = names.next();
+            boolean known = fields.stream().anyMatch(f -> f.key().equals(name));
+            if (!known) {
+                throw new BusinessException(40000, "存在未登记的参数项：" + name);
+            }
         }
     }
 }

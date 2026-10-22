@@ -31,6 +31,10 @@ public record StockLocationUpdateDTO(
 
         @Schema(description = "位置详述", example = "A 区 3 层左柜")
         @Size(max = 255, message = "位置详述不能超过 255 个字符")
-        String locationDetail
+        String locationDetail,
+
+        @Schema(description = "保管人 ID（→ sys_user.id，每库位一名；传空清除）", example = "1234567890123456789")
+        @Pattern(regexp = "^\\d{1,19}$", message = "保管人 ID 格式无效")
+        String custodianId
 ) {
 }

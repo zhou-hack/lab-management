@@ -78,12 +78,12 @@ class BookingFlowTest {
 
     private RestClient restClient;
 
+    /** MySQL 可用标志：@BeforeAll 经 Assumptions 跳过后 @AfterAll 仍会执行，cleanup 须由此守卫 */
+    private static boolean databaseAvailable = false;
+
     private String adminToken;
     private String teacherToken;
     private String studentToken;
-
-    /** BeforeAll 中止（库不可达）时 AfterAll 不再触碰数据源 */
-    private boolean databaseReady;
 
     /** 流程中产生的申请单 ID（用例间传递） */
     private String normalBookingId;
@@ -93,13 +93,12 @@ class BookingFlowTest {
     void prepare() {
         checkDatabaseAvailable();
         seed();
-        databaseReady = true;
         restClient = RestClient.builder().baseUrl("http://localhost:" + port).build();
     }
 
     @AfterAll
     void cleanup() {
-        if (!databaseReady) {
+        if (!databaseAvailable) {
             return;
         }
         cleanupTestDocuments();
@@ -379,14 +378,9 @@ class BookingFlowTest {
     }
 
     private String login(String username) throws Exception {
-        // 新登录契约：预取盐 → 客户端 bcrypt → 密文登录（与前端行为一致）
-        HttpResp saltResp = get(null, AUTH + "/salt?accountName=" + username);
-        assertOk(saltResp);
-        String salt = json(saltResp).path("data").path("salt").asText();
-        String hash = org.springframework.security.crypto.bcrypt.BCrypt.hashpw("admin123", salt);
-        HttpResp resp = post(null, AUTH + "/login", Map.of("accountName", username, "password", hash));
+        HttpResp resp = post(null, AUTH + "/login", Map.of("username", username, "password", "admin123"));
         assertOk(resp);
-        return json(resp).path("data").path("accessToken").asText();
+        return json(resp).path("data").path("token").asText();
     }
 
     /** 幂等重建 91xxx 测试设备（分类→型号→三台设备）与演示账号 */
@@ -474,6 +468,7 @@ class BookingFlowTest {
         String password = envOrDefault("DB_PASSWORD", "root");
         try (Connection conn = DriverManager.getConnection(url, user, password)) {
             Assumptions.assumeTrue(conn.isValid(5), "MySQL 测试库连接不可用，跳过集成测试");
+            databaseAvailable = true;
         } catch (Exception e) {
             Assumptions.abort("MySQL 3306 不可达或凭据无效，跳过集成测试：" + e.getMessage());
         }

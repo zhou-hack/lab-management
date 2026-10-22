@@ -8,6 +8,8 @@
 
 DROP TABLE IF EXISTS lab_slot;
 DROP TABLE IF EXISTS lab_booking;
+DROP TABLE IF EXISTS lab_booking_series;
+DROP TABLE IF EXISTS class_period;
 DROP TABLE IF EXISTS document_event;
 DROP TABLE IF EXISTS approval_task;
 DROP TABLE IF EXISTS biz_document;
@@ -72,6 +74,13 @@ CREATE TABLE lab_booking (
     cancel_reason      VARCHAR(512) NULL,
     cancel_type        VARCHAR(32)  NULL,
     cancelled_at       TIMESTAMP(3) NULL,
+    booking_date       DATE         NULL,
+    start_period_id    BIGINT       NULL,
+    end_period_id      BIGINT       NULL,
+    series_id          BIGINT       NULL,
+    course_name        VARCHAR(128) NULL,
+    class_name         VARCHAR(128) NULL,
+    teacher_id         BIGINT       NULL,
     create_time        TIMESTAMP(3) NOT NULL,
     update_time        TIMESTAMP(3) NOT NULL,
     deleted            TINYINT      NOT NULL DEFAULT 0,
@@ -105,6 +114,64 @@ CREATE TABLE lab_slot (
 );
 
 CREATE INDEX idx_lab_slot_conflict ON lab_slot (lab_id, released_at, start_at, end_at);
+
+-- ============================================================================
+-- 节次定义表 + 周期预约规则表（对应 sql/migrations/booking_period_series.sql）
+-- ============================================================================
+
+CREATE TABLE class_period (
+    id          BIGINT       NOT NULL,
+    period_no   INT          NOT NULL,
+    period_name VARCHAR(32)  NOT NULL,
+    start_clock TIME         NOT NULL,
+    end_clock   TIME         NOT NULL,
+    enabled     TINYINT      NOT NULL DEFAULT 1,
+    create_time TIMESTAMP(3) NOT NULL,
+    update_time TIMESTAMP(3) NOT NULL,
+    deleted     TINYINT      NOT NULL DEFAULT 0,
+    create_user_id BIGINT    NULL,
+    update_user_id BIGINT    NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_class_period_no UNIQUE (period_no),
+    CONSTRAINT chk_class_period_clock CHECK (start_clock < end_clock),
+    CONSTRAINT chk_class_period_enabled CHECK (enabled IN (0, 1))
+);
+
+CREATE TABLE lab_booking_series (
+    id                BIGINT       NOT NULL,
+    lab_id            BIGINT       NOT NULL,
+    applicant_id      BIGINT       NOT NULL,
+    course_name       VARCHAR(128) NULL,
+    class_name        VARCHAR(128) NULL,
+    teacher_id        BIGINT       NULL,
+    purpose           VARCHAR(512) NOT NULL,
+    participant_count INT          NOT NULL,
+    weekday           TINYINT      NOT NULL,
+    start_period_id   BIGINT       NOT NULL,
+    end_period_id     BIGINT       NOT NULL,
+    cycle_start_date  DATE         NOT NULL,
+    cycle_end_date    DATE         NOT NULL,
+    status            VARCHAR(32)  NOT NULL,
+    reject_reason     VARCHAR(512) NULL,
+    cancel_reason     VARCHAR(512) NULL,
+    cancel_type       VARCHAR(32)  NULL,
+    cancelled_at      TIMESTAMP(3) NULL,
+    idempotency_key   VARCHAR(128) NOT NULL,
+    create_time       TIMESTAMP(3) NOT NULL,
+    update_time       TIMESTAMP(3) NOT NULL,
+    deleted           TINYINT      NOT NULL DEFAULT 0,
+    create_user_id    BIGINT       NULL,
+    update_user_id    BIGINT       NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_lab_booking_series_idem UNIQUE (applicant_id, idempotency_key),
+    CONSTRAINT chk_lab_booking_series_weekday CHECK (weekday BETWEEN 1 AND 7),
+    CONSTRAINT chk_lab_booking_series_cycle CHECK (cycle_start_date <= cycle_end_date),
+    CONSTRAINT chk_lab_booking_series_count CHECK (participant_count > 0),
+    CONSTRAINT chk_lab_booking_series_status CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'))
+);
+
+CREATE INDEX idx_lab_booking_series_applicant ON lab_booking_series (applicant_id, create_time);
+CREATE INDEX idx_lab_booking_series ON lab_booking (series_id);
 
 -- ============================================================================
 -- 权级流程三表（对应 sql/booking_flow_deploy.sql，H2 不建外键）

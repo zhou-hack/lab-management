@@ -90,7 +90,7 @@ public class MaterialSkuController {
         return Result.success();
     }
 
-    @Operation(summary = "删除物料（逻辑删除；被余额/单据明细/申领明细/定额/盘点明细引用时拒绝）")
+    @Operation(summary = "删除物料（逻辑删除；被余额/单据明细/申领明细/定额引用时拒绝）")
     @RequirePermission("item:material:delete")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@Parameter(description = "物料 ID") @PathVariable String id) {

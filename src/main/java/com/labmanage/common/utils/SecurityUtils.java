@@ -26,6 +26,11 @@ public final class SecurityUtils {
         return requireLogin().userId();
     }
 
+    /** 当前登录用户（含活动角色/角色/权限）；未登录抛 40100 */
+    public static LoginUser currentUser() {
+        return requireLogin();
+    }
+
     /** 是否已登录（审计字段填充等容忍未登录场景使用） */
     public static boolean isLogin() {
         return AuthContext.get() != null;

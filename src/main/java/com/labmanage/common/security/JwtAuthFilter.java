@@ -11,7 +11,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -51,16 +50,19 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         String header = request.getHeader("Authorization");
-        Long userId = header != null && header.startsWith(BEARER)
-                ? jwtService.parseUserId(header.substring(BEARER.length()).trim(), JwtService.TYPE_ACCESS)
+        JwtService.Parsed parsed = header != null && header.startsWith(BEARER)
+                ? jwtService.parse(header.substring(BEARER.length()).trim(), JwtService.TYPE_ACCESS)
                 : null;
-        if (userId == null) {
+        if (parsed == null) {
             writeUnauthorized(response);
             return;
         }
-        List<String> roles = authService.loadRoleCodes(userId);
-        List<String> permissions = authService.loadPermissionCodes(userId);
-        AuthContext.set(new LoginUser(userId, roles, permissions, null));
+        LoginUser user = authService.buildLoginUser(parsed.userId(), parsed.activeRole());
+        if (user == null) {
+            writeUnauthorized(response);
+            return;
+        }
+        AuthContext.set(user);
         try {
             chain.doFilter(request, response);
         } finally {

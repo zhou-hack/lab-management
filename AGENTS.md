@@ -26,7 +26,7 @@
   - `common/result`: `Result<T>`（code/msg/data）、`PageResult<T>`（records/total/pageNum/pageSize）、`ResultCode` 枚举
   - `common/exception`: `BusinessException` + `GlobalExceptionHandler`（统一处理校验、认证、404、500）
   - `common/serializer`: `InstantSerializer`（UTC 三位毫秒输出）、`InstantDeserializer`（ISO 8601 偏移量解析）
-  - `common/utils`: `PageUtils`（MyBatis-Plus Page 与 PageResult 互转）
+  - `common/utils`: `PageUtils`（MyBatis-Plus Page 与 PageResult 互转）、`SecurityUtils`（当前登录态/权限判断/二级认证）
   - `common/security`: `JwtService`（access/refresh 签发与校验）、`JwtAuthFilter`（/api/v1 认证过滤）、`AuthContext`/`LoginUser`（ThreadLocal 登录态）、`@RequirePermission` + 切面（AND/OR 权限校验）
   - `config`: `JacksonConfig`、`MybatisPlusConfig`（分页插件）、`MyMetaObjectHandler`（审计字段填充）、`SecurityConfig`（过滤器注册）
   - 实体继承 `BaseEntity` 并加 `@TableName`；DTO 使用 record + Jakarta Validation；VO 使用 record；Service 接口+实现；Controller 加 `@RequirePermission` 并返回 `Result`/`PageResult`。
@@ -47,14 +47,14 @@
 
 ## 数据库与实体（Final）
 
-- Schema 以 [docs/数据库设计.md](docs/数据库设计.md)（评审稿 v1.0）为准；建表脚本按模块放 `sql/`，RBAC 已定稿为 [sql/sys_rbac.sql](sql/sys_rbac.sql)（11 张表：部门、名单、用户、角色、权限、菜单、三组关联、数据范围、预约限制）。后续模块脚本按实施分组 A→E 补充，不另行设计。
+- Schema 以 [docs/数据库设计.md](docs/数据库设计.md)（评审稿 v1.0）为准；建表脚本按模块放 `sql/`，RBAC 已定稿为 [sql/sys_rbac.sql](sql/sys_rbac.sql)（11 张表：部门、名单、用户、角色、权限、菜单、三组关联、数据范围、预约限制）。space 模块（校区/楼栋/实验室）已于 2026-10-20 整体下线；后续模块脚本按实施分组 B→E 补充，原依赖 space 表的设计待重新评审。
 - 主键统一雪花 ID：`BIGINT`（MyBatis-Plus `ASSIGN_ID`），接口序列化为字符串，避免 JavaScript 精度损失；关联字段同类型。初始数据使用固定小 ID（如角色 1-4、管理员 1），与雪花 ID 不冲突。
 - 公共字段：`id/create_time/update_time/deleted/create_user_id/update_user_id`；当前 `BaseEntity` 已覆盖前四项，后续接入数据库时补齐操作者字段。`version` 仅余额等需并发控制的可变表使用，从 0 起条件更新递增。
 - 时间列 `DATETIME(3)` 存 UTC，列默认值 `UTC_TIMESTAMP(3)`；会话 `+00:00` 时 `ON UPDATE CURRENT_TIMESTAMP(3)` 即 UTC。
 - 类型记号：`CODE=VARCHAR(64)`、`NAME=VARCHAR(128)`、`SHORT=VARCHAR(32)`（Java 枚举映射，不用 MySQL ENUM）、`BOOL=TINYINT`（仅 0/1，加 CHECK）、`QTY=DECIMAL(18,3)`、`MONEY=DECIMAL(18,2)`、`PRICE=DECIMAL(18,4)`、`DATE=DATE`（纯日期）、`CLOCK=TIME(0)`（上海本地节次）。
-- 外键默认 `RESTRICT`，不级联删除历史业务；审计字段 `create_user_id/update_user_id` 不建外键（避免组织/用户循环依赖）；跨模块引用（如 `campus_id`、`source_document_id`）只建列与索引，外键由所属模块脚本补充。
+- 外键默认 `RESTRICT`，不级联删除历史业务；审计字段 `create_user_id/update_user_id` 不建外键（避免组织/用户循环依赖）；跨模块引用（如 `source_document_id`）只建列与索引，外键由所属模块脚本补充；`sys_user_data_scope` 与 `assistant_grant_scope` 的 campus/building/lab 列为预留（空间功能已于 2026-10-20 下线），不建外键。
 - 唯一与删除：业务码、学工号逻辑删除后不复用；关系表保持一行唯一（组合唯一建索引），不用 `(业务键, deleted)` 解决重复创建；含可空列的目标去重使用生成列归一（参照 `sys_user_data_scope.scope_target_id`）。
-- RBAC 定稿规则：预置角色 `ADMIN/TEACHER/STUDENT/ASSISTANT/OPS_ADMIN`；学生/老师首登须匹配 `sys_person_roster` 预录名单，不能自行提升身份；`ASSISTANT` 不持久化到 `sys_user_role`，由有效 `assistant_grant` 动态计算；`OPS_ADMIN`（运维管理员）为最高级运维角色，仅 SQL 预置不开放页面创建，绑定全部权限（后续模块新增权限随各自脚本同步绑定），不受数据范围约束，opsadmin 账号仅 OPS_ADMIN 本人可编辑/启停/重置；角色本身仍 SQL 预置不可增删，但 OPS_ADMIN 角色权限绑定锁定不可页面调整（40900），其余 4 个预置角色的权限绑定可由运维管理员整集替换（`system:role:assign` 仅绑 OPS_ADMIN，变更踢该角色持有者会话）；管理员数据范围用 `sys_user_data_scope`（ALL/DEPARTMENT/CAMPUS/BUILDING/LAB + READ/WRITE），无范围记录不自动授予全校数据。
+- RBAC 定稿规则：预置角色 `ADMIN/TEACHER/STUDENT/ASSISTANT/OPS_ADMIN`；学生/老师首登须匹配 `sys_person_roster` 预录名单，不能自行提升身份；老师账号可经用户管理页叠加绑定/解绑 `ADMIN` 角色（`system:user:bind_role`，仅老师可绑、调用方须全校写，JWT 无状态会话不踢人，变更随 access 短时效自然生效）；一人多角色时登录默认以主身份角色为活动角色，权限/菜单按活动角色装配，`POST /api/v1/auth/switch_role` 校验持有后重签双 token；`ASSISTANT` 不持久化到 `sys_user_role`，由有效 `assistant_grant` 动态计算；`OPS_ADMIN`（运维管理员）为最高级运维角色，仅 SQL 预置不开放页面创建，绑定全部权限（后续模块新增权限随各自脚本同步绑定），不受数据范围约束，opsadmin 账号仅 OPS_ADMIN 本人可编辑/启停/重置；角色本身仍 SQL 预置不可增删，但 OPS_ADMIN 角色权限绑定锁定不可页面调整（40900），其余 4 个预置角色的权限绑定可由运维管理员整集替换（`system:role:assign` 仅绑 OPS_ADMIN，变更随持有者 access 过期自然生效）；系统管理（用户/名单/组织/角色/数据范围/参数配置/授权审计）整体归 OPS_ADMIN 专属（2026-10-20 起；预约限制页面与接口 2026-10-21 下线，`user_booking_restriction` 表与 Mapper 保留供预约模块逾期冻结使用），ADMIN 仅保留操作日志页且仅可见业务模块日志（module_code 不含 system/auth）；管理员数据范围用 `sys_user_data_scope`（一期开放 ALL/DEPARTMENT + READ/WRITE；CAMPUS/BUILDING/LAB 预留不开放），无范围记录不自动授予全校数据。
 - 初始数据：预置部门"设备处"（id=1）、5 个角色、管理员 `admin`（id=1）与运维管理员 `opsadmin`（id=2）（密码哈希均为占位值，部署前必须替换并强制首登修改）；权限与菜单初始数据由业务模块脚本按 `模块:资源:操作` 规范登记。
 - 权限标识规范 `模块:资源:操作`（如 `item:material:create`），前后端一致，登记在 `sys_permission`。
 
@@ -74,7 +74,7 @@
 - 使用 JWT 无状态会话实现 RBAC：用户关联角色，角色关联菜单与权限。权限标识为 `模块:资源:操作`，前后端一致。
 - 登录仅支持账号密码：前端先 `GET /auth/salt` 按账号取该账号 BCrypt 盐前缀，用 bcryptjs 以同一盐复算出口令哈希后上传，服务端常量时间比对库中哈希，全程不传输明文口令；哈希即凭据可被重放，内网/开发场景接受该风险，传输层安全仍以 HTTPS 为准。
 - 双 token：access（2 小时）+ refresh（7 天），HS256 签名，密钥经 `JWT_SECRET` 环境变量注入（≥32 字节）；`POST /auth/refresh` 轮换双 token。角色与权限每请求实时从库加载，变更即时生效，无会话缓存；无状态会话无法主动踢人，依赖 access 短时效自然过期。
-- 每个受保护接口由后端校验权限（`@RequirePermission`）；前端使用路由守卫、动态菜单及 `v-permission`（随业务页面重建恢复），不能依赖前端隐藏按钮保证授权。
+- 每个受保护接口由后端校验权限（`@RequirePermission`）；前端使用路由守卫、动态菜单及 `v-permission`，不能依赖前端隐藏按钮保证授权。
 - 动态路由使用本地组件白名单映射；登录及刷新加载权限，注销或 401 后移除动态路由并清理用户状态。
 - access/refresh token 存在 `sessionStorage`，通过统一工具访问；Axios 添加 `Authorization: Bearer <access token>`，401 时先单飞刷新并重试原请求，刷新失败再清态跳登录。
 - Axios 统一处理返回体、401、403 和网络错误，页面不得重复实现认证逻辑。

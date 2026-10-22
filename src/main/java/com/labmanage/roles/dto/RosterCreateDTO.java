@@ -15,7 +15,7 @@ public record RosterCreateDTO(
         String personNo,
 
         @NotBlank(message = "身份类型不能为空")
-        @Pattern(regexp = "STUDENT|TEACHER", message = "身份类型仅支持 STUDENT/TEACHER")
+        @Pattern(regexp = "STUDENT|TEACHER", message = "身份类型仅支持 STUDENT/TEACHER（CSV 导入也可用 学生/老师）")
         String personType,
 
         @NotBlank(message = "姓名不能为空")

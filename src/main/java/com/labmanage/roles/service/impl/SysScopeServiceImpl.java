@@ -174,7 +174,7 @@ public class SysScopeServiceImpl implements SysScopeService {
 
     /**
      * OPS_ADMIN 不受数据范围约束（docs/RBAC权限管理总设计方案.md 3.2 节）；
-     * 仅豁免范围写校验，接口权限码仍由 @SaCheckPermission 独立控制。
+     * 仅豁免范围写校验，接口权限码仍由 @RequirePermission 独立控制。
      */
     private boolean isOpsAdmin() {
         return SecurityUtils.currentRoles().contains(RoleCode.OPS_ADMIN.name());

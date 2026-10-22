@@ -24,9 +24,6 @@ public class EquipmentAsset extends BaseEntity {
     /** 序列号（不强制全局唯一） */
     private String serialNo;
 
-    /** 保管实验室（→ lab.id） */
-    private Long labId;
-
     /** 归口部门（→ sys_department.id） */
     private Long departmentId;
 
@@ -85,14 +82,6 @@ public class EquipmentAsset extends BaseEntity {
 
     public void setSerialNo(String serialNo) {
         this.serialNo = serialNo;
-    }
-
-    public Long getLabId() {
-        return labId;
-    }
-
-    public void setLabId(Long labId) {
-        this.labId = labId;
     }
 
     public Long getDepartmentId() {

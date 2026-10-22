@@ -30,8 +30,33 @@ public interface SysUserRefMapper {
     List<UserRef> selectNamesByIds(@Param("ids") List<Long> ids);
 
     /**
+     * 保管人候选搜索：按姓名/账号/学工号前缀匹配启用用户（只读，最多 20 条）
+     */
+    @Select("""
+            <script>
+            SELECT id AS userId, real_name AS realName, account_name AS accountName, person_no AS personNo
+            FROM sys_user
+            WHERE enabled = 1 AND deleted = 0
+            <if test="keyword != null and keyword != ''">
+              AND (real_name LIKE CONCAT(#{keyword}, '%')
+                   OR account_name LIKE CONCAT(#{keyword}, '%')
+                   OR person_no LIKE CONCAT(#{keyword}, '%'))
+            </if>
+            ORDER BY id
+            LIMIT 20
+            </script>
+            """)
+    List<UserOption> searchOptionsByKeyword(@Param("keyword") String keyword);
+
+    /**
      * 用户名称解析结果
      */
     record UserRef(Long userId, String realName) {
+    }
+
+    /**
+     * 用户候选选项（保管人选择等场景）
+     */
+    record UserOption(Long userId, String realName, String accountName, String personNo) {
     }
 }

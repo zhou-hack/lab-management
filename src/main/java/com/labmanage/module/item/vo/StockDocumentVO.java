@@ -6,6 +6,7 @@ import com.labmanage.module.item.enums.StockDocumentStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
+import java.util.Map;
 
 /**
  * 库存单据 VO（列表项）
@@ -40,10 +41,17 @@ public record StockDocumentVO(
         Instant postedAt,
 
         @Schema(description = "登记时间（UTC）", example = "2026-10-13T00:58:00.000Z")
-        Instant createTime
+        Instant createTime,
+
+        @Schema(description = "经办人 ID（→ sys_user.id，单据实际操作人）", example = "1234567890123456789")
+        String operatorId,
+
+        @Schema(description = "经办人姓名（缺失用户时为空，前端回退显示 ID）", example = "张老师")
+        String operatorName
 ) {
 
-    public static StockDocumentVO from(StockDocument e) {
+    public static StockDocumentVO from(StockDocument e, Map<Long, String> userNames) {
+        String operatorId = e.getOperatorId() == null ? null : String.valueOf(e.getOperatorId());
         return new StockDocumentVO(
                 String.valueOf(e.getId()),
                 String.valueOf(e.getDocumentId()),
@@ -54,7 +62,9 @@ public record StockDocumentVO(
                 e.getReason(),
                 e.getOccurredAt(),
                 e.getPostedAt(),
-                e.getCreateTime()
+                e.getCreateTime(),
+                operatorId,
+                operatorId == null ? null : userNames.get(e.getOperatorId())
         );
     }
 }

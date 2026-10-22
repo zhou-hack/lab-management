@@ -54,7 +54,7 @@ import java.util.regex.Pattern;
 /**
  * 场地业务实现（lab 单表）。
  * <p>
- * 授权说明：接口访问由 @SaCheckPermission 按权限标识控制（管理员全量、
+ * 授权说明：接口访问由 @RequirePermission 按权限标识控制（管理员全量、
  * 师生只读 space:space:list/read）。sys_user_data_scope 的 DEPARTMENT/CAMPUS/BUILDING
  * 行级范围在单表模式下无组织锚点列，一期不做行级过滤；LAB 级范围仍以
  * lab.id 为目标，删除前做引用检查。
@@ -135,7 +135,7 @@ public class SpaceServiceImpl implements SpaceService {
     }
 
     @Override
-    public List<SpaceOptionVO> options(SpaceType labType, Integer minCapacity, Boolean availableOnly) {
+    public List<SpaceOptionVO> options(SpaceType labType, Integer minCapacity, Boolean availableOnly, String keyword) {
         LambdaQueryWrapper<BizSpace> wrapper = new LambdaQueryWrapper<>();
         if (labType != null) {
             wrapper.eq(BizSpace::getLabType, labType);
@@ -146,6 +146,10 @@ public class SpaceServiceImpl implements SpaceService {
         if (Boolean.TRUE.equals(availableOnly)) {
             wrapper.eq(BizSpace::getStatus, SpaceStatus.AVAILABLE);
         }
+        // Typeahead 关键字模糊查询（联想下拉）
+        if (keyword != null && !keyword.isBlank()) {
+            wrapper.like(BizSpace::getLabName, keyword.trim());
+        }
         wrapper.orderByAsc(BizSpace::getLabName);
 
         List<SpaceOptionVO> result = spaceMapper.selectList(wrapper).stream()
@@ -153,8 +157,8 @@ public class SpaceServiceImpl implements SpaceService {
                         String.valueOf(s.getId()), s.getLabName(), s.getLabType(),
                         s.getCapacity(), s.getStatus()))
                 .toList();
-        log.info("[场地选项] 完成：操作人={}, 类型={}, 最小容量={}, 仅可用={}, 返回条数={}",
-                SecurityUtils.currentUserId(), labType, minCapacity, availableOnly, result.size());
+        log.info("[场地选项] 完成：操作人={}, 类型={}, 最小容量={}, 仅可用={}, 关键字={}, 返回条数={}",
+                SecurityUtils.currentUserId(), labType, minCapacity, availableOnly, keyword, result.size());
         return result;
     }
 

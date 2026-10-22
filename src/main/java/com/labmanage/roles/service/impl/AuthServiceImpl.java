@@ -3,10 +3,12 @@ package com.labmanage.roles.service.impl;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.labmanage.common.exception.BusinessException;
 import com.labmanage.common.security.JwtService;
+import com.labmanage.common.security.LoginUser;
 import com.labmanage.common.utils.SecurityUtils;
 import com.labmanage.roles.dto.AccountLoginDTO;
 import com.labmanage.roles.dto.PasswordConfirmDTO;
 import com.labmanage.roles.dto.RefreshTokenDTO;
+import com.labmanage.roles.dto.SwitchRoleDTO;
 import com.labmanage.roles.entity.SysMenu;
 import com.labmanage.roles.entity.SysRole;
 import com.labmanage.roles.entity.SysUser;
@@ -37,10 +39,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 认证服务实现（JWT 无状态会话）。
+ * 认证服务实现（JWT 无状态会话 + 活动角色）。
  * <p>
  * 口令链路：客户端按账号预取盐 → 本地 bcrypt 算出与库中一致的哈希 → 上传，
  * 服务端常量时间比对，全程无明文传输（内网/开发场景接受哈希即凭据的重放风险）。
+ * <p>
+ * 多角色（一人多角色）：登录默认以主身份为活动角色，access/refresh token 均携带
+ * 活动角色声明；/auth/switch_role 校验目标角色后重签 token 对，权限/菜单按活动角色装配。
  */
 @Service
 public class AuthServiceImpl implements AuthService {
@@ -105,32 +110,50 @@ public class AuthServiceImpl implements AuthService {
             onPasswordFail(user);
         }
         resetPasswordFail(user);
-        return issueTokens(user);
+        List<String> heldRoles = loadRoleCodes(user.getId());
+        return issueTokens(user, defaultActiveRole(user, heldRoles), heldRoles);
     }
 
     @Override
     public LoginVO refresh(RefreshTokenDTO dto) {
-        Long userId = jwtService.parseUserId(dto.refreshToken(), JwtService.TYPE_REFRESH);
-        if (userId == null) {
+        JwtService.Parsed parsed = jwtService.parse(dto.refreshToken(), JwtService.TYPE_REFRESH);
+        if (parsed == null) {
             throw new BusinessException(40100, "refresh token 无效或已过期");
         }
-        SysUser user = userMapper.selectById(userId);
+        SysUser user = userMapper.selectById(parsed.userId());
         if (user == null || !Integer.valueOf(1).equals(user.getEnabled())) {
             throw new BusinessException(40100, "账号不存在或已停用");
         }
-        return issueTokens(user);
+        List<String> heldRoles = loadRoleCodes(user.getId());
+        // 刷新时保留原活动角色；角色已被解绑等失效场景回退默认活动角色
+        String activeRole = resolveActiveRole(user, heldRoles, parsed.activeRole());
+        return issueTokens(user, activeRole, heldRoles);
     }
 
     @Override
     public ProfileVO profile() {
-        Long userId = SecurityUtils.currentUserId();
-        SysUser user = userMapper.selectById(userId);
+        LoginUser current = SecurityUtils.currentUser();
+        SysUser user = userMapper.selectById(current.userId());
         if (user == null || !Integer.valueOf(1).equals(user.getEnabled())) {
             throw new BusinessException(40100, "账号不存在或已停用");
         }
-        return new ProfileVO(String.valueOf(user.getId()), user.getRealName(), user.getUserType(),
-                loadRoleCodes(userId), loadPermissionCodes(userId),
-                buildMenuTree(menuMapper.selectMenusByUserId(userId)));
+        List<String> heldRoles = loadRoleCodes(user.getId());
+        return assembleProfile(user, resolveActiveRole(user, heldRoles, current.activeRole()), heldRoles);
+    }
+
+    @Override
+    public LoginVO switchRole(SwitchRoleDTO dto) {
+        LoginUser current = SecurityUtils.currentUser();
+        SysUser user = userMapper.selectById(current.userId());
+        if (user == null || !Integer.valueOf(1).equals(user.getEnabled())) {
+            throw new BusinessException(40100, "账号不存在或已停用");
+        }
+        List<String> heldRoles = loadRoleCodes(user.getId());
+        String target = dto.roleCode().trim();
+        if (RoleCode.ASSISTANT.name().equals(target) || !heldRoles.contains(target)) {
+            throw new BusinessException(40300, "未持有该角色，无法切换");
+        }
+        return issueTokens(user, target, heldRoles);
     }
 
     @Override
@@ -149,6 +172,25 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public void logout() {
         // 无状态 JWT：服务端不持有会话，客户端丢弃 token 即完成注销
+    }
+
+    @Override
+    public LoginUser buildLoginUser(Long userId, String claimedActiveRole) {
+        SysUser user = userMapper.selectById(userId);
+        if (user == null || !Integer.valueOf(1).equals(user.getEnabled())) {
+            return null;
+        }
+        List<String> heldRoles = loadRoleCodes(userId);
+        String activeRole = resolveActiveRole(user, heldRoles, claimedActiveRole);
+        boolean assistant = heldRoles.contains(RoleCode.ASSISTANT.name());
+        List<String> roles = new ArrayList<>();
+        roles.add(activeRole);
+        if (assistant) {
+            roles.add(RoleCode.ASSISTANT.name());
+        }
+        List<String> permissions = permissionMapper.selectPermissionCodesByRoleIds(
+                assembleRoleIds(activeRole, assistant));
+        return new LoginUser(userId, activeRole, roles, permissions, null);
     }
 
     @Override
@@ -180,11 +222,72 @@ public class AuthServiceImpl implements AuthService {
         // 无状态 JWT 无法主动踢会话；角色权限每请求实时加载，access token 最长 2h 自然过期
     }
 
-    /** 签发 access+refresh token 并装配响应 */
-    private LoginVO issueTokens(SysUser user) {
-        return new LoginVO(jwtService.issueAccess(user.getId()), jwtService.issueRefresh(user.getId()),
+    /**
+     * 默认活动角色：主身份（user_type 派生，与角色码一致）若持有则取之；
+     * 否则取第一个持有的非 ASSISTANT 角色（如 opsadmin 仅持 OPS_ADMIN 的兜底）。
+     */
+    private String defaultActiveRole(SysUser user, List<String> heldRoles) {
+        if (heldRoles.contains(user.getUserType())) {
+            return user.getUserType();
+        }
+        return heldRoles.stream()
+                .filter(code -> !RoleCode.ASSISTANT.name().equals(code))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(40100, "账号未分配有效角色"));
+    }
+
+    /**
+     * 校验 token 声明的活动角色：须为当前持有且非 ASSISTANT 的角色，否则回退默认。
+     */
+    private String resolveActiveRole(SysUser user, List<String> heldRoles, String claimed) {
+        if (claimed != null && !claimed.isBlank()
+                && !RoleCode.ASSISTANT.name().equals(claimed)
+                && heldRoles.contains(claimed)) {
+            return claimed;
+        }
+        return defaultActiveRole(user, heldRoles);
+    }
+
+    /** 活动角色（+有效助理授权的 ASSISTANT）→ 装配用角色 ID 集合 */
+    private List<Long> assembleRoleIds(String activeRole, boolean assistant) {
+        List<Long> roleIds = new ArrayList<>();
+        roleIds.add(RoleCode.valueOf(activeRole).getId());
+        if (assistant) {
+            roleIds.add(RoleCode.ASSISTANT.getId());
+        }
+        return roleIds;
+    }
+
+    /** 按活动角色装配身份响应（角色/权限/菜单 + 可切换角色） */
+    private ProfileVO assembleProfile(SysUser user, String activeRole, List<String> heldRoles) {
+        boolean assistant = heldRoles.contains(RoleCode.ASSISTANT.name());
+        List<String> roles = new ArrayList<>();
+        roles.add(activeRole);
+        if (assistant) {
+            roles.add(RoleCode.ASSISTANT.name());
+        }
+        List<String> permissions = permissionMapper.selectPermissionCodesByRoleIds(
+                assembleRoleIds(activeRole, assistant));
+        List<MenuVO> menus = buildMenuTree(menuMapper.selectMenusByRoleIds(assembleRoleIds(activeRole, assistant)));
+        List<String> switchableRoles = heldRoles.stream()
+                .filter(code -> !RoleCode.ASSISTANT.name().equals(code) && !code.equals(activeRole))
+                .toList();
+        return new ProfileVO(String.valueOf(user.getId()), user.getRealName(), user.getUserType(),
+                user.getAccountName(), roles, permissions, menus, activeRole, switchableRoles);
+    }
+
+    /** 签发 access+refresh token 并装配响应（roles 按活动角色口径） */
+    private LoginVO issueTokens(SysUser user, String activeRole, List<String> heldRoles) {
+        boolean assistant = heldRoles.contains(RoleCode.ASSISTANT.name());
+        List<String> roles = new ArrayList<>();
+        roles.add(activeRole);
+        if (assistant) {
+            roles.add(RoleCode.ASSISTANT.name());
+        }
+        return new LoginVO(jwtService.issueAccess(user.getId(), activeRole),
+                jwtService.issueRefresh(user.getId(), activeRole),
                 jwtService.getAccessTtlSeconds(), String.valueOf(user.getId()), user.getRealName(),
-                user.getUserType(), loadRoleCodes(user.getId()));
+                user.getUserType(), user.getAccountName(), roles, activeRole);
     }
 
     /** 常量时间比对客户端 bcrypt 密文与库中哈希（防时序侧信道） */

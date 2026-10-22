@@ -232,39 +232,37 @@ VALUES
  '期初导入：《实训室设备物料清单与工作流程.docx》中规格单一、数量明确的 5 项耗材；其余 SKU 待实盘确认后另行 OPENING。',
  1, 1);
 
--- 9. 单据行（入库位=总库房；DOCX 无耗材单价，价格快照 NULL）
+-- 9. 单据行（入库位=总库房；2026-10-19 需求定稿：库存不记价格，单价/金额快照列已砍除）
 INSERT INTO stock_document_line (id, stock_document_id, line_no, sku_id,
-                                 from_location_id, to_location_id, qty,
-                                 unit_price_snapshot, amount_snapshot,
+                                 from_location_id, to_location_id, quantity,
                                  create_user_id, update_user_id)
 VALUES
-(1, 1, 1, 4, NULL, 1, 3, NULL, NULL, 1, 1),
-(2, 1, 2, 5, NULL, 1, 60, NULL, NULL, 1, 1),
-(3, 1, 3, 11, NULL, 1, 20, NULL, NULL, 1, 1),
-(4, 1, 4, 12, NULL, 1, 30, NULL, NULL, 1, 1),
-(5, 1, 5, 25, NULL, 1, 500, NULL, NULL, 1, 1);
+(1, 1, 1, 4, NULL, 1, 3, 1, 1),
+(2, 1, 2, 5, NULL, 1, 60, 1, 1),
+(3, 1, 3, 11, NULL, 1, 20, 1, 1),
+(4, 1, 4, 12, NULL, 1, 30, 1, 1),
+(5, 1, 5, 25, NULL, 1, 500, 1, 1);
 
--- 10. 库存流水（IN；金额未知记 0）
+-- 10. 库存流水（IN；价值变动/移动均价列已随 2026-10-19 需求定稿砍除）
 INSERT INTO stock_movement (id, document_line_id, location_id, sku_id, direction,
-                            qty_delta, before_qty, after_qty, value_delta,
-                            before_avg_price, after_avg_price, occurred_at, movement_key,
+                            qty_delta, before_qty, after_qty, occurred_at, movement_key,
                             create_user_id, update_user_id)
 VALUES
-(1, 1, 1, 4, 'IN', 3, 0, 3, 0, 0, 0, UTC_TIMESTAMP(3), 'STK:20261015000001:1:IN', 1, 1),
-(2, 2, 1, 5, 'IN', 60, 0, 60, 0, 0, 0, UTC_TIMESTAMP(3), 'STK:20261015000001:2:IN', 1, 1),
-(3, 3, 1, 11, 'IN', 20, 0, 20, 0, 0, 0, UTC_TIMESTAMP(3), 'STK:20261015000001:3:IN', 1, 1),
-(4, 4, 1, 12, 'IN', 30, 0, 30, 0, 0, 0, UTC_TIMESTAMP(3), 'STK:20261015000001:4:IN', 1, 1),
-(5, 5, 1, 25, 'IN', 500, 0, 500, 0, 0, 0, UTC_TIMESTAMP(3), 'STK:20261015000001:5:IN', 1, 1);
+(1, 1, 1, 4, 'IN', 3, 0, 3, UTC_TIMESTAMP(3), 'STK:20261015000001:1:IN', 1, 1),
+(2, 2, 1, 5, 'IN', 60, 0, 60, UTC_TIMESTAMP(3), 'STK:20261015000001:2:IN', 1, 1),
+(3, 3, 1, 11, 'IN', 20, 0, 20, UTC_TIMESTAMP(3), 'STK:20261015000001:3:IN', 1, 1),
+(4, 4, 1, 12, 'IN', 30, 0, 30, UTC_TIMESTAMP(3), 'STK:20261015000001:4:IN', 1, 1),
+(5, 5, 1, 25, 'IN', 500, 0, 500, UTC_TIMESTAMP(3), 'STK:20261015000001:5:IN', 1, 1);
 
 -- 11. 库存余额（safe=DOCX 预警线，target=safe；version 0）
 INSERT INTO stock_balance (id, location_id, sku_id, stock_qty, safe_qty, target_qty,
-                           moving_average_price, version, create_user_id, update_user_id)
+                           version, create_user_id, update_user_id)
 VALUES
-(1, 1, 4, 3, 1, 1, 0, 0, 1, 1),
-(2, 1, 5, 60, 20, 20, 0, 0, 1, 1),
-(3, 1, 11, 20, 5, 5, 0, 0, 1, 1),
-(4, 1, 12, 30, 10, 10, 0, 0, 1, 1),
-(5, 1, 25, 500, 200, 200, 0, 0, 1, 1);
+(1, 1, 4, 3, 1, 1, 0, 1, 1),
+(2, 1, 5, 60, 20, 20, 0, 1, 1),
+(3, 1, 11, 20, 5, 5, 0, 1, 1),
+(4, 1, 12, 30, 10, 10, 0, 1, 1),
+(5, 1, 25, 500, 200, 200, 0, 1, 1);
 
 -- ----------------------------------------------------------------------------
 -- 12. 型号数量按台账回填（未删除资产数；重复执行结果不变）

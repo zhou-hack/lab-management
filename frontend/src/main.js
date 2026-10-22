@@ -8,12 +8,14 @@ import '@/styles/element.css'
 import '@/styles/base.css'
 import App from '@/App.vue'
 import router from '@/router'
+import { permission } from '@/utils/permission'
 
 const app = createApp(App)
 
 app.use(createPinia())
 app.use(router)
 app.use(ElementPlus, { locale: zhCn })
+app.directive('permission', permission)
 
 // 组件内未捕获异常兜底：避免白屏，统一提示并输出日志
 app.config.errorHandler = (err, instance, info) => {

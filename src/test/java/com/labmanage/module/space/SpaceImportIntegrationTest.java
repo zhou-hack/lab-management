@@ -2,6 +2,7 @@ package com.labmanage.module.space;
 
 import com.labmanage.common.result.Result;
 import com.labmanage.common.security.JwtService;
+import com.labmanage.common.security.LoginUser;
 import com.labmanage.roles.service.AuthService;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,7 +69,7 @@ class SpaceImportIntegrationTest {
 
             @GetMapping("/test/login")
             Result<String> login() {
-                return Result.success(jwtService.issueAccess(1L));
+                return Result.success(jwtService.issueAccess(1L, null));
             }
         }
     }
@@ -91,11 +92,10 @@ class SpaceImportIntegrationTest {
 
     @BeforeEach
     void login() throws Exception {
-        Mockito.when(authService.loadPermissionCodes(Mockito.any()))
-                .thenReturn(List.of("space:space:list", "space:space:read", "space:space:create",
-                        "space:space:update", "space:space:delete"));
-        Mockito.when(authService.loadRoleCodes(Mockito.any()))
-                .thenReturn(List.of("ADMIN"));
+        Mockito.when(authService.buildLoginUser(Mockito.any(), Mockito.any()))
+                .thenReturn(new LoginUser(1L, "ADMIN", List.of("ADMIN"),
+                        List.of("space:space:list", "space:space:read", "space:space:create",
+                                "space:space:update", "space:space:delete"), null));
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("http://127.0.0.1:" + port + "/test/login"))
                 .GET()
@@ -311,10 +311,9 @@ class SpaceImportIntegrationTest {
     @DisplayName("权限控制：无 space:space:create 权限调用导入返回 403")
     void importWithoutCreatePermission_forbidden() throws Exception {
         Mockito.reset(authService);
-        Mockito.when(authService.loadPermissionCodes(Mockito.any()))
-                .thenReturn(List.of("space:space:list", "space:space:read"));
-        Mockito.when(authService.loadRoleCodes(Mockito.any()))
-                .thenReturn(List.of("TEACHER"));
+        Mockito.when(authService.buildLoginUser(Mockito.any(), Mockito.any()))
+                .thenReturn(new LoginUser(1L, "TEACHER", List.of("TEACHER"),
+                        List.of("space:space:list", "space:space:read"), null));
 
         String csv = TEMPLATE_HEADER + "\r\nH301 越权实训室,实训室,H 楼,20,,,,\r\n";
         int status = uploadStatus("spaces.csv", "text/csv", csv.getBytes(StandardCharsets.UTF_8));

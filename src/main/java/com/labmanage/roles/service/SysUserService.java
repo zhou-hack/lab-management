@@ -1,6 +1,7 @@
 package com.labmanage.roles.service;
 
 import com.labmanage.common.result.PageResult;
+import com.labmanage.roles.dto.UserAdminRoleDTO;
 import com.labmanage.roles.dto.UserCreateDTO;
 import com.labmanage.roles.dto.UserEnabledDTO;
 import com.labmanage.roles.dto.UserPageQueryDTO;
@@ -34,6 +35,9 @@ public interface SysUserService {
 
     /** 重置密码：置为指定初始密码、强制首登改密并踢出全部会话；不允许重置当前登录账号 */
     void resetPassword(Long id, UserPasswordResetDTO dto);
+
+    /** 绑定/解绑老师账号的 ADMIN 角色（变更踢出全部会话）；仅老师账号可操作，状态不符抛 40900 */
+    void updateAdminRole(Long id, UserAdminRoleDTO dto);
 
     /** 启用部门下拉选项（用户管理表单用） */
     List<DepartmentOptionVO> departmentOptions();
