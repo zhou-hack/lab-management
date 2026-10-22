@@ -13,12 +13,13 @@
 | module_code | 模块 | 设计依据（数据库设计） | 初始数据 ID 段 |
 | --- | --- | --- | --- |
 | system | 身份、组织、权限、日志、策略 | 4.1 / 4.6 / 4.9 | 1–999 |
-| space | 校区、楼栋、实验室、课程排课 | 4.2 | 1000–1999 |
 | asset | 器材台账、工位 | 4.3 | 2000–2999 |
 | booking | 场地预约、器材借用、使用台账 | 4.4 / 4.5 | 3000–3999 |
 | item | 物料、配件库存 | 4.7 | 4000–4999 |
 | maintain | 损坏、保养、报废 | 4.8 | 5000–5999 |
 | report | 看板与报表 | 8 | 6000–6999 |
+
+> space 模块（校区/楼栋/实验室/课程排课，原 1000–1999 段）已于 2026-10-20 整体下线移除；段号留废不再使用，后续模块勿复用。
 
 各模块的权限/菜单/角色绑定初始数据随本模块建表脚本登记；system 模块初始数据已在 [sql/sys_rbac.sql](../sql/sys_rbac.sql)。
 
@@ -26,35 +27,28 @@
 
 ## 二、权限标识登记
 
-「归属角色」为初始绑定；ASSISTANT 为附加角色，由有效 assistant_grant 动态计算，按授权范围与动作（ISSUE/RETURN）生效。
+「归属角色」为初始绑定；ASSISTANT 为附加角色，由有效 assistant_grant 动态计算；授权权力落 assistant_grant_scope（当前开放 MATERIAL_ISSUE 物料领取，OFFERING/LAB 预留）。
+OPS_ADMIN（运维管理员）为最高级预置运维角色，仅 SQL 预置不开放页面创建，绑定全部已登记权限（后续模块新增权限随各自脚本同步绑定 OPS_ADMIN），不受数据范围约束。
+2026-10-20 起系统管理（用户/名单/组织/角色/数据范围/预约限制/参数配置/授权审计）整体划归 OPS_ADMIN 专属，ADMIN 仅保留 system:log:list 且仅可见业务模块日志（module_code 不含 system/auth）。2026-10-21 预约限制页面与接口下线（system:restriction:* 权限与菜单移除），user_booking_restriction 表与 UserBookingRestrictionMapper.countActive 保留供预约模块逾期冻结使用。
 
 ### 2.1 system 模块（已出初始 SQL）
 
 | permission_code | 名称 | 归属角色 |
 | --- | --- | --- |
-| system:user:list / get / create / update / enable | 用户管理 | ADMIN |
-| system:roster:list / create / update / enable | 预录名单管理 | ADMIN |
-| system:department:list / create / update / enable | 组织管理 | ADMIN |
-| system:role:list | 角色与权限查看（一期角色预置只读） | ADMIN |
-| system:scope:list / grant | 数据范围查看 / 授权 | ADMIN |
-| system:restriction:list / create / revoke | 预约限制（手动冻结/撤销） | ADMIN |
-| system:log:list | 操作日志查询 | ADMIN |
-| system:policy:list / publish | 策略参数查看 / 发布 | ADMIN |
-| system:grant:list / create / revoke | 助理授权（老师本人） | TEACHER |
-| system:grant:audit | 助理授权全局审计 | ADMIN |
+| system:user:list / get / create / update / enable / reset_password / bind_role | 用户管理 | 仅 OPS_ADMIN（createAdmin 固定绑 ADMIN 角色且调用方须全校写；bind_role 仅老师账号可绑定/解绑 ADMIN 角色、调用方须全校写，变更踢目标用户会话；OPS_ADMIN 账号仅 OPS_ADMIN 本人可编辑/启停/重置/绑定操作） |
+| system:roster:list / create / update / enable / export / import | 预录名单管理（export 导出 CSV 复用列表筛选；import 批量导入 CSV 部分成功、需二级认证） | 仅 OPS_ADMIN |
+| system:department:list / create / update / enable | 组织管理 | 仅 OPS_ADMIN |
+| system:role:list | 角色与权限查看（角色仍 SQL 预置不可增删） | 仅 OPS_ADMIN |
+| system:role:assign | 调整角色权限（整集替换 + 踢持有者会话；锁 OPS_ADMIN 角色） | 仅 OPS_ADMIN |
+| system:scope:list / grant | 数据范围查看 / 授权 | 仅 OPS_ADMIN |
+| system:log:list | 操作日志查询 | OPS_ADMIN（全量）/ ADMIN（仅业务模块日志，module_code 不含 system/auth） |
+| system:policy:list / publish | 策略参数查看 / 发布 | 仅 OPS_ADMIN |
+| system:grant:list / create / revoke | 助理授权（老师本人） | TEACHER / OPS_ADMIN |
+| system:grant:audit | 助理授权全局审计 | 仅 OPS_ADMIN |
 
-### 2.2 space 模块（随空间脚本登记）
+### 2.2 space 模块（已于 2026-10-20 整体下线）
 
-| permission_code | 名称 | 归属角色 |
-| --- | --- | --- |
-| space:campus:list / create / update / enable | 校区管理 | ADMIN |
-| space:building:list / create / update / enable | 楼栋管理 | ADMIN |
-| space:lab:list | 实验室目录 | ADMIN / TEACHER / STUDENT（只读目录） |
-| space:lab:create / update / enable | 实验室台账 | ADMIN |
-| space:course:list | 课程列表 | TEACHER / ADMIN |
-| space:course:create / update / enable | 课程维护 | ADMIN |
-| space:course:import | 排课导入 | ADMIN |
-| space:schedule:view | 教室使用表（课表+预约周视图） | ADMIN |
+space:campus/building/lab 共 12 项权限（ID 1000–1011）及其角色绑定、菜单 1000–1002 已随功能下线全部移除；sql/space.sql 已删除，段号留废。
 
 ### 2.3 asset 模块
 
@@ -123,17 +117,19 @@
 
 | menu_code | 名称 | route_path | component_key | 绑定权限 | 归属角色 |
 | --- | --- | --- | --- | --- | --- |
-| system（目录） | 系统管理 | /system | — | — | ADMIN |
-| system_user | 用户管理 | /system/user | SystemUser | system:user:list | ADMIN |
-| system_roster | 名单管理 | /system/roster | SystemRoster | system:roster:list | ADMIN |
-| system_department | 组织管理 | /system/department | SystemDepartment | system:department:list | ADMIN |
-| system_role | 角色权限 | /system/role | SystemRole | system:role:list | ADMIN |
-| system_scope | 数据范围 | /system/scope | SystemScope | system:scope:list | ADMIN |
-| system_restriction | 预约限制 | /system/restriction | SystemRestriction | system:restriction:list | ADMIN |
-| system_log | 操作日志 | /system/log | SystemLog | system:log:list | ADMIN |
-| system_policy | 参数配置 | /system/policy | SystemPolicy | system:policy:list | ADMIN |
-| system_grant_audit | 助理授权审计 | /system/grant | SystemGrantAudit | system:grant:audit | ADMIN |
+| system（目录） | 系统管理 | /system | — | — | ADMIN / OPS_ADMIN（ADMIN 仅见其下操作日志页） |
+| system_user | 人员管理 | /system/user | SystemUserRoster | system:user:list | 仅 OPS_ADMIN（名单管理 2026-10-21 并入为统一人员视图：名单与账号一行一人，列表数据走 GET /system/persons（需 system:user:list + system:roster:list 双权限）；名单操作接口仍由 system:roster:* 保护，旧地址 /system/roster 静态重定向至本页） |
+| system_department | 组织管理 | /system/department | SystemDepartment | system:department:list | 仅 OPS_ADMIN |
+| system_role | 角色权限 | /system/role | SystemRole | system:role:list | 仅 OPS_ADMIN |
+| system_scope | 数据范围 | /system/scope | SystemScope | system:scope:list | 仅 OPS_ADMIN |
+| system_log | 操作日志 | /system/log | SystemLog | system:log:list | ADMIN / OPS_ADMIN（ADMIN 仅业务模块日志） |
+| system_policy | 参数配置 | /system/policy | SystemPolicy | system:policy:list | 仅 OPS_ADMIN |
+| system_grant_audit | 助理授权审计 | /system/grant | SystemGrantAudit | system:grant:audit | 仅 OPS_ADMIN |
 | grant_manage | 助理管理（老师端） | /grant | GrantManage | system:grant:list | TEACHER |
+
+### 3.1 space 模块（已于 2026-10-20 整体下线）
+
+space 目录及 space_campus / space_lab 两个页面菜单（ID 1000–1002）已随功能下线全部移除。
 
 ---
 
@@ -146,7 +142,8 @@
 | 账号密码登录（公开） | POST /auth/login | 管理员 | accountName, password | token, userId, realName, userType, roles, passwordChangeRequired | 40100 凭据错误/账号锁定（msg 含剩余分钟）；40000 参数校验 |
 | 发送短信验证码（公开） | POST /auth/sms/send | 学生/老师 | phone | ttlSeconds | 40000 手机号格式；40900 触发限流（60s 重发/日上限） |
 | 验证码登录（公开） | POST /auth/sms/login | 首登匹配 sys_person_roster 自动建档并派生角色 | phone, code | 同登录 + needSetPassword（老师 true） | 40100 验证码错误/失效；40900 名单未匹配或已停用 |
-| 当前身份 | GET /auth/profile | 登录后/刷新时加载 | — | userId, realName, userType, roles, permissions, menus | 40100 未登录 |
+| 当前身份 | GET /auth/profile | 登录后/刷新时加载 | — | userId, realName, userType, roles, permissions, menus, activeRole, switchableRoles | 40100 未登录 |
+| 切换活动角色 | POST /auth/switch_role | 多角色用户会话内直接切换身份视图（不校验），重新装配权限/菜单 | roleCode | 同 profile（新活动角色全量装配） | 40300 未持有该角色/目标为 ASSISTANT |
 | 设置/修改密码 | PUT /auth/password | 学生/老师首次设置免旧密码；管理员必须旧密码 | oldPassword?, newPassword | null | 40000 密码规则（≥8 位含数字字母）；40100 旧密码错误 |
 | 敏感操作确认 | POST /auth/password/confirm | 审批、报废处置等二次确认，通过后开启 Sa-Token 二级认证 | password | validSeconds（300，期内敏感接口免再确认） | 40100 密码错误 |
 | 注销 | POST /auth/logout | 前端移除动态路由并清理状态 | — | null | — |
@@ -154,8 +151,8 @@
 实施规则：
 
 1. 连续 5 次密码错误锁定 30 分钟（`failed_login_count`/`locked_until`）；验证码 6 位数字、5 分钟有效、错误 5 次作废。
-2. 会话有效期按用户类型区分：学生/老师 2 小时、管理员 8 小时，登录时 `StpUtil.login(id, SaLoginParameter.setTimeout(...))` 设置。注意当前 `sa-token.timeout: 86400` 全局默认值与本规则不一致，roles 模块落地时修正。
-3. 90 天强制换密依据 `password_changed_at`；登录响应 `passwordChangeRequired=true` 时前端强制跳转改密页。
+2. 会话有效期按用户类型区分：学生/老师与管理员均为 8 小时（2026-10-20 起，普通用户由 2 小时放宽），登录时 `StpUtil.login(id, SaLoginParameter.setTimeout(...))` 设置。注意当前 `sa-token.timeout: 86400` 全局默认值与本规则不一致，roles 模块落地时修正。
+3. 密码不设有效期（PASSWORD_EXPIRE_DAYS 策略 2026-10-20 移除）；`password_changed_at` 为空（初始占位/被重置）时登录响应 `passwordChangeRequired=true`，前端强制跳转改密页。
 4. 首登建档事务：匹配有效名单（学工号+手机号）→ 创建 sys_user → 写入主身份 sys_user_role，角色由名单 `person_type` 派生，客户端不得指定。
 
 ---

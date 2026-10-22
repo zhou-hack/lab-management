@@ -1,6 +1,11 @@
 <template>
   <div class="login_page">
-    <div class="login_card">
+    <div class="login_card sweep">
+      <div class="login_card__brand">
+        <span class="login_card__mark">
+          <el-icon><Tools /></el-icon>
+        </span>
+      </div>
       <h1 class="login_card__title">
         实验室设备管理系统
       </h1>
@@ -31,13 +36,17 @@
         <template v-if="mode === 'password'">
           <el-form-item
             label="账号"
-            prop="username"
+            prop="accountName"
           >
             <el-input
-              v-model="form.username"
-              placeholder="学号 / 工号"
+              v-model="form.accountName"
+              placeholder="请输入账号 / 学工号"
               size="large"
-            />
+            >
+              <template #prefix>
+                <el-icon><User /></el-icon>
+              </template>
+            </el-input>
           </el-form-item>
           <el-form-item
             label="密码"
@@ -50,7 +59,11 @@
               size="large"
               show-password
               @keyup.enter="submit"
-            />
+            >
+              <template #prefix>
+                <el-icon><Lock /></el-icon>
+              </template>
+            </el-input>
           </el-form-item>
         </template>
         <template v-else>
@@ -63,7 +76,11 @@
               placeholder="11 位手机号"
               size="large"
               maxlength="11"
-            />
+            >
+              <template #prefix>
+                <el-icon><Iphone /></el-icon>
+              </template>
+            </el-input>
           </el-form-item>
           <el-form-item
             label="验证码"
@@ -97,40 +114,45 @@
         >
           登 录
         </el-button>
-
-        <!-- 开发环境测试入口（后端接入后删除） -->
-        <div
-          v-if="isDev"
-          class="login_test"
-        >
-          <div class="login_test__label t-hint">
-            测试账号（仅开发环境）
-          </div>
-          <div class="login_test__btns">
-            <el-button
-              size="small"
-              round
-              @click="loginTest('STUDENT')"
-            >
-              学生
-            </el-button>
-            <el-button
-              size="small"
-              round
-              @click="loginTest('TEACHER')"
-            >
-              老师
-            </el-button>
-            <el-button
-              size="small"
-              round
-              @click="loginTest('ADMIN')"
-            >
-              管理员
-            </el-button>
-          </div>
-        </div>
       </el-form>
+
+      <!-- dev 环境测试账号快捷填充（生产构建不渲染） -->
+      <div
+        v-if="isDev"
+        class="login_test"
+      >
+        <span class="login_test__label">测试账号</span>
+        <div class="login_test__btns">
+          <button
+            type="button"
+            class="login_test__btn"
+            @click="fillAccount('admin')"
+          >
+            管理员
+          </button>
+          <button
+            type="button"
+            class="login_test__btn"
+            @click="fillAccount('opsadmin')"
+          >
+            运维
+          </button>
+          <button
+            type="button"
+            class="login_test__btn"
+            @click="fillSms('13800000002')"
+          >
+            老师
+          </button>
+          <button
+            type="button"
+            class="login_test__btn"
+            @click="fillSms('13800000001')"
+          >
+            学生
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -139,6 +161,7 @@
 import { onBeforeUnmount, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Iphone, Lock, Tools, User } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import { sendSmsCode } from '@/api/user'
 
@@ -154,17 +177,10 @@ const tabs = [
 const mode = ref('password')
 const loading = ref(false)
 const formRef = ref()
-const form = reactive({ username: '', password: '', phone: '', code: '' })
-
-const isDev = import.meta.env.DEV
-
-function loginTest(role) {
-  store.loginAsTest(role)
-  router.push(store.homePath)
-}
+const form = reactive({ accountName: '', password: '', phone: '', code: '' })
 
 const rules = {
-  username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
+  accountName: [{ required: true, message: '请输入账号', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
   phone: [
     { required: true, message: '请输入手机号', trigger: 'blur' },
@@ -186,12 +202,19 @@ async function sendCode() {
     return
   }
   try {
-    await sendSmsCode(form.phone)
-    ElMessage.success('验证码已发送')
+    const res = await sendSmsCode(form.phone)
+    // dev 环境模拟通道：验证码直接回显自动回填；其他环境 devCode 为空
+    if (res && res.devCode) {
+      form.code = res.devCode
+      ElMessage.success('模拟通道：验证码已自动回填')
+    } else {
+      ElMessage.success('验证码已发送')
+    }
+    countdown.value = (res && res.ttlSeconds) || 60
   } catch {
-    // 接口错误提示由请求拦截器统一处理；后端未就绪时此处不再重复提示
+    // 接口错误提示由请求拦截器统一处理；失败时不启动倒计时，允许立即重试
+    return
   }
-  countdown.value = 60
   timer = setInterval(() => {
     countdown.value -= 1
     if (countdown.value <= 0) {
@@ -211,6 +234,11 @@ async function submit() {
   loading.value = true
   try {
     await store.login({ mode: mode.value, ...form })
+    // 强制改密（管理员首登/被重置 · 老师首登）优先于目标路由
+    if (store.mustSetPassword) {
+      router.push('/set_password')
+      return
+    }
     router.push(route.query.redirect || '/')
   } finally {
     loading.value = false
@@ -220,6 +248,23 @@ async function submit() {
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer)
 })
+
+// ---------- dev 测试账号快捷填充 ----------
+const isDev = import.meta.env.DEV
+
+function fillAccount(accountName) {
+  mode.value = 'password'
+  form.accountName = accountName
+  form.password = 'Admin123456'
+}
+
+async function fillSms(phone) {
+  mode.value = 'phone'
+  form.phone = phone
+  form.code = ''
+  // dev 模拟通道：发送成功后验证码自动回填；60s 间隔内重发会提示 409，不启动倒计时
+  await sendCode()
+}
 </script>
 
 <style scoped>
@@ -236,12 +281,33 @@ onBeforeUnmount(() => {
 
 /* 登录卡：特大容器 r-xl 22px（规范第 5 节） */
 .login_card {
+  position: relative;
+  z-index: 1;
   width: 100%;
   max-width: 400px;
   padding: 34px 32px 30px;
   background: var(--surface);
   border-radius: var(--r-xl);
   border: .5px solid var(--hair);
+  box-shadow: 0 24px 64px -28px rgba(15, 30, 60, .18);
+}
+
+.login_card__brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.login_card__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: var(--brand-grad);
+  color: #fff;
+  font-size: 24px;
+  box-shadow: var(--brand-shadow-lg);
 }
 
 .login_card__title {
@@ -255,6 +321,18 @@ onBeforeUnmount(() => {
 .login_card__sub {
   margin: 6px 0 22px;
   text-align: center;
+}
+
+/* 输入框高 46px（规范 7.6） */
+.login_card :deep(.el-input__wrapper) {
+  min-height: 46px;
+}
+.login_card :deep(.el-input__prefix) {
+  color: var(--g4);
+}
+.login_card :deep(.el-input__wrapper.is-focus .el-input__prefix),
+.login_card :deep(.el-input__wrapper:focus-within .el-input__prefix) {
+  color: var(--brand);
 }
 
 /* 分段控件（规范 7.6）：sunken 槽 + 选中项白底浮起 + 蓝字，全圆角 */
@@ -310,17 +388,43 @@ onBeforeUnmount(() => {
   transform: scale(.985);
 }
 
+/* dev 测试账号：低调弱化，贴卡片底部 */
 .login_test {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: .5px dashed var(--hair-strong);
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: .5px dashed var(--hair);
+}
+
+.login_test__label {
+  font-size: 12px;
+  color: var(--g4);
+  letter-spacing: 2px;
 }
 
 .login_test__btns {
   display: flex;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 10px;
+}
+
+.login_test__btn {
+  height: 28px;
+  padding: 0 16px;
+  border: .5px solid var(--hair);
+  border-radius: var(--r-full);
+  background: var(--surface-sunken);
+  font-size: 12px;
+  color: var(--g3);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.login_test__btn:hover {
+  color: var(--brand);
+  border-color: var(--brand);
+  background: var(--brand-a12);
 }
 </style>

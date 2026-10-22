@@ -16,11 +16,12 @@
 --   * MySQL 8.4.11 LTS， InnoDB / utf8mb4 / utf8mb4_0900_ai_ci；
 --   * 服务端与连接会话时区均为 +00:00（Connector/J 参数 connectionTimeZone=UTC
 --     &forceConnectionTimeZoneToSession=true），此时 CURRENT_TIMESTAMP 即 UTC；
---   * 跨模块引用（campus/building/lab/biz_document）只建列与索引，外键由所属
---     模块脚本补充（实施分组 A 的空间表、分组 B 的单据表）；
+--   * 跨模块引用只建列与索引，外键由所属模块脚本补充（分组 B 的单据表）；
+--     campus/building/lab 为预留列（空间功能已下线），不建外键；
 --   * 审计字段 create_user_id/update_user_id 统一不建外键，避免组织/用户表
 --     循环依赖；其值由服务端写入 sys_user.id，系统任务为 NULL。
--- 初始数据：预置部门（设备处）、4 个角色、初始管理员 admin 及其角色绑定；
+-- 初始数据：预置部门（设备处）、4 个角色（第 5 个角色 OPS_ADMIN 见增量脚本
+--   sql/sys_ops_role.sql）、初始管理员 admin 及其角色绑定；
 --   权限与菜单初始数据由业务模块脚本按 `模块:资源:操作` 规范登记。
 -- ============================================================================
 
@@ -88,7 +89,7 @@ CREATE TABLE sys_user (
     person_no           VARCHAR(64)  NULL                    COMMENT '学工号（唯一，删除后不复用）',
     department_id       BIGINT       NOT NULL                COMMENT '所属部门（→ sys_department.id）',
     password_hash       VARCHAR(255) NULL                    COMMENT '密码散列（带算法参数；管理员必填）',
-    password_changed_at DATETIME(3)  NULL                    COMMENT '最近改密时间（UTC，90 天强制更换依据）',
+    password_changed_at DATETIME(3)  NULL                    COMMENT '最近改密时间（UTC，为空表示初始/被重置密码，首登强制改密依据）',
     failed_login_count  INT          NOT NULL DEFAULT 0      COMMENT '连续登录失败次数（达 5 次锁定 30 分钟）',
     locked_until        DATETIME(3)  NULL                    COMMENT '锁定截止时间（UTC）',
     enabled             TINYINT      NOT NULL DEFAULT 1      COMMENT '启用：1正常 0停用',
@@ -249,16 +250,16 @@ CREATE TABLE sys_user_role (
 -- ----------------------------------------------------------------------------
 -- 10. sys_user_data_scope 用户数据范围表
 --     仅管理员写范围按归口授权；ALL 不填目标 ID，其余类型恰好填写对应目标。
---     campus_id/building_id/lab_id 为跨模块引用，外键由对应模块脚本补充。
+--     campus_id/building_id/lab_id 为预留列（空间功能已下线），不建外键。
 -- ----------------------------------------------------------------------------
 CREATE TABLE sys_user_data_scope (
     id            BIGINT      NOT NULL                COMMENT '主键',
     user_id       BIGINT      NOT NULL                COMMENT '用户 ID（→ sys_user.id）',
     scope_type    VARCHAR(32) NOT NULL                COMMENT '范围类型：ALL/DEPARTMENT/CAMPUS/BUILDING/LAB',
     department_id BIGINT      NULL                    COMMENT '目标部门（→ sys_department.id，scope_type=DEPARTMENT 时必填）',
-    campus_id     BIGINT      NULL                    COMMENT '目标校区（→ campus.id，跨模块，外键由空间模块补充）',
-    building_id   BIGINT      NULL                    COMMENT '目标楼栋（→ building.id，跨模块，外键由空间模块补充）',
-    lab_id        BIGINT      NULL                    COMMENT '目标实验室（→ lab.id，跨模块，外键由空间模块补充）',
+    campus_id     BIGINT      NULL                    COMMENT '目标校区（预留，空间功能已下线，不建外键）',
+    building_id   BIGINT      NULL                    COMMENT '目标楼栋（预留，空间功能已下线，不建外键）',
+    lab_id        BIGINT      NULL                    COMMENT '目标实验室（预留，空间功能已下线，不建外键）',
     access_mode   VARCHAR(32) NOT NULL                COMMENT '操作级别：READ/WRITE（WRITE 含 READ）',
     -- 目标去重键：MySQL 唯一索引允许多个 NULL，用生成列将四目标归一为非空键
     scope_target_id BIGINT GENERATED ALWAYS AS (COALESCE(department_id, campus_id, building_id, lab_id, 0)) STORED COMMENT '范围目标归一键（生成列，勿写）',
@@ -314,7 +315,7 @@ CREATE TABLE user_booking_restriction (
 INSERT INTO sys_department (id, parent_id, department_code, department_name, department_type, enabled)
 VALUES (1, NULL, 'ASSET_OFFICE', '设备处', 'ASSET_OFFICE', 1);
 
--- 预置角色（对应权限清单四类角色；ID 固定小值，与雪花 ID 不冲突）
+-- 预置角色（权限清单四类业务角色；第 5 个角色 OPS_ADMIN 见 sql/sys_ops_role.sql；ID 固定小值，与雪花 ID 不冲突）
 INSERT INTO sys_role (id, role_code, role_name, enabled) VALUES
 (1, 'ADMIN',     '管理员',   1),
 (2, 'TEACHER',   '老师',     1),
@@ -322,7 +323,7 @@ INSERT INTO sys_role (id, role_code, role_name, enabled) VALUES
 (4, 'ASSISTANT', '老师助理', 1);
 
 -- 初始管理员账号（password_hash 为占位值，部署前必须替换为 BCrypt 密文并强制首登修改；
--- 密码规则：长度 ≥8 位且含数字+字母，90 天强制更换）
+-- 密码规则：长度 ≥8 位且含数字+字母，不设有效期）
 INSERT INTO sys_user (id, roster_id, user_type, real_name, account_name, phone, person_no,
                       department_id, password_hash, failed_login_count, enabled)
 VALUES (1, NULL, 'ADMIN', '系统管理员', 'admin', NULL, NULL,
@@ -336,27 +337,29 @@ INSERT INTO sys_user_role (id, user_id, role_id, enabled) VALUES (1, 1, 1, 1);
 -- ID 段约定：system 模块 1-999，业务模块按 RBAC实施清单 第一节分段登记。
 -- ============================================================================
 
--- system 模块权限（26 项）
+-- system 模块权限（31 项）
 INSERT INTO sys_permission (id, permission_code, permission_name, module_code, enabled) VALUES
 (1,  'system:user:list',        '用户列表',       'system', 1),
 (2,  'system:user:get',         '用户详情',       'system', 1),
 (3,  'system:user:create',      '创建用户',       'system', 1),
 (4,  'system:user:update',      '编辑用户',       'system', 1),
 (5,  'system:user:enable',      '启用停用用户',   'system', 1),
+(27, 'system:user:reset_password', '重置密码',    'system', 1),
+(31, 'system:user:bind_role',   '绑定管理员角色', 'system', 1),
 (6,  'system:roster:list',      '名单列表',       'system', 1),
 (7,  'system:roster:create',    '名单录入',       'system', 1),
 (8,  'system:roster:update',    '名单编辑',       'system', 1),
 (9,  'system:roster:enable',    '名单启用停用',   'system', 1),
+(29, 'system:roster:export',    '名单导出',       'system', 1),
+(30, 'system:roster:import',    '名单导入',       'system', 1),
 (10, 'system:department:list',   '组织列表',       'system', 1),
 (11, 'system:department:create', '组织新增',       'system', 1),
 (12, 'system:department:update', '组织编辑',       'system', 1),
 (13, 'system:department:enable', '组织启用停用',   'system', 1),
 (14, 'system:role:list',         '角色权限查看',   'system', 1),
+(28, 'system:role:assign',       '调整角色权限',   'system', 1),
 (15, 'system:scope:list',        '数据范围查看',   'system', 1),
 (16, 'system:scope:grant',       '数据范围授权',   'system', 1),
-(17, 'system:restriction:list',   '预约限制查看',   'system', 1),
-(18, 'system:restriction:create', '预约限制新增',   'system', 1),
-(19, 'system:restriction:revoke', '预约限制撤销',   'system', 1),
 (20, 'system:log:list',          '操作日志查询',   'system', 1),
 (21, 'system:policy:list',       '策略参数查看',   'system', 1),
 (22, 'system:policy:publish',    '策略参数发布',   'system', 1),
@@ -365,31 +368,26 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code, e
 (25, 'system:grant:revoke',      '助理授权撤销',   'system', 1),
 (26, 'system:grant:audit',       '助理授权审计',   'system', 1);
 
--- system 模块菜单（目录 1 + 页面 10）
+-- system 模块菜单（目录 1 + 页面 8；名单管理 2026-10-21 并入「人员管理」统一人员视图；
+-- 预约限制页面与接口 2026-10-21 下线，user_booking_restriction 表保留供预约模块逾期冻结使用）
 INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
 (1,  NULL, 'system',              '系统管理',     '/system',            NULL,              NULL, 'DIRECTORY', 90, 1),
-(2,  1,    'system_user',         '用户管理',     '/system/user',       'SystemUser',       1,    'PAGE',      1,  1),
-(3,  1,    'system_roster',       '名单管理',     '/system/roster',     'SystemRoster',     6,    'PAGE',      2,  1),
-(4,  1,    'system_department',   '组织管理',     '/system/department', 'SystemDepartment', 10,   'PAGE',      3,  1),
-(5,  1,    'system_role',         '角色权限',     '/system/role',       'SystemRole',       14,   'PAGE',      4,  1),
-(6,  1,    'system_scope',        '数据范围',     '/system/scope',      'SystemScope',      15,   'PAGE',      5,  1),
-(7,  1,    'system_restriction',  '预约限制',     '/system/restriction','SystemRestriction',17,   'PAGE',      6,  1),
-(8,  1,    'system_log',          '操作日志',     '/system/log',        'SystemLog',        20,   'PAGE',      7,  1),
-(9,  1,    'system_policy',       '参数配置',     '/system/policy',     'SystemPolicy',     21,   'PAGE',      8,  1),
-(10, 1,    'system_grant_audit',  '授权审计',     '/system/grant',      'SystemGrantAudit', 26,   'PAGE',      9,  1),
+(2,  1,    'system_user',         '人员管理',     '/system/user',       'SystemUserRoster', 1,    'PAGE',      1,  1),
+(4,  1,    'system_department',   '组织管理',     '/system/department', 'SystemDepartment', 10,   'PAGE',      2,  1),
+(5,  1,    'system_role',         '角色权限',     '/system/role',       'SystemRole',       14,   'PAGE',      3,  1),
+(6,  1,    'system_scope',        '数据范围',     '/system/scope',      'SystemScope',      15,   'PAGE',      4,  1),
+(8,  1,    'system_log',          '操作日志',     '/system/log',        'SystemLog',        20,   'PAGE',      6,  1),
+(9,  1,    'system_policy',       '参数配置',     '/system/policy',     'SystemPolicy',     21,   'PAGE',      7,  1),
+(10, 1,    'system_grant_audit',  '授权审计',     '/system/grant',      'SystemGrantAudit', 26,   'PAGE',      8,  1),
 (11, NULL, 'grant_manage',        '助理管理',     '/grant',             'GrantManage',      23,   'PAGE',      50, 1);
 
--- 角色权限绑定：ADMIN 全部系统权限（1-22、26），TEACHER 助理授权三项（23-25）
+-- 角色权限绑定：ADMIN 仅操作日志（20），系统管理其余权限归 OPS_ADMIN 独占（2026-10-20 起，
+-- 系统管理整体划归运维管理员，ADMIN 保留其所管业务的操作日志只读）；TEACHER 助理授权三项（23-25）
 INSERT INTO sys_role_permission (id, role_id, permission_id, enabled) VALUES
-(1,  1, 1,  1), (2,  1, 2,  1), (3,  1, 3,  1), (4,  1, 4,  1), (5,  1, 5,  1),
-(6,  1, 6,  1), (7,  1, 7,  1), (8,  1, 8,  1), (9,  1, 9,  1), (10, 1, 10, 1),
-(11, 1, 11, 1), (12, 1, 12, 1), (13, 1, 13, 1), (14, 1, 14, 1), (15, 1, 15, 1),
-(16, 1, 16, 1), (17, 1, 17, 1), (18, 1, 18, 1), (19, 1, 19, 1), (20, 1, 20, 1),
-(21, 1, 21, 1), (22, 1, 22, 1), (23, 1, 26, 1),
+(84, 1, 20, 1),
 (24, 2, 23, 1), (25, 2, 24, 1), (26, 2, 25, 1);
 
--- 角色菜单绑定：ADMIN 系统管理目录及 9 个页面，TEACHER 助理管理页
+-- 角色菜单绑定：ADMIN 系统管理目录及操作日志页（其余 6 页归 OPS_ADMIN 专属），TEACHER 助理管理页
 INSERT INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
-(1,  1, 1,  1), (2,  1, 2,  1), (3,  1, 3,  1), (4,  1, 4,  1), (5,  1, 5,  1),
-(6,  1, 6,  1), (7,  1, 7,  1), (8,  1, 8,  1), (9,  1, 9,  1), (10, 1, 10, 1),
+(1,  1, 1,  1), (8,  1, 8,  1),
 (11, 2, 11, 1);

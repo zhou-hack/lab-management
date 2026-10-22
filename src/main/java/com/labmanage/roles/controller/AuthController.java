@@ -1,12 +1,14 @@
 package com.labmanage.roles.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
+import com.labmanage.common.log.OperationLog;
 import com.labmanage.common.result.Result;
 import com.labmanage.roles.dto.AccountLoginDTO;
 import com.labmanage.roles.dto.PasswordConfirmDTO;
 import com.labmanage.roles.dto.PasswordUpdateDTO;
 import com.labmanage.roles.dto.SmsLoginDTO;
 import com.labmanage.roles.dto.SmsSendDTO;
+import com.labmanage.roles.dto.SwitchRoleDTO;
 import com.labmanage.roles.service.AuthService;
 import com.labmanage.roles.vo.ConfirmVO;
 import com.labmanage.roles.vo.LoginVO;
@@ -37,6 +39,8 @@ public class AuthController {
     }
 
     @Operation(summary = "账号密码登录（管理员）")
+    @OperationLog(moduleCode = "auth", actionCode = "auth:login", targetTable = "sys_user",
+            targetId = "#result?.data?.userId")
     @PostMapping("/login")
     public Result<LoginVO> login(@Valid @RequestBody AccountLoginDTO dto) {
         return Result.success(authService.login(dto));
@@ -49,6 +53,8 @@ public class AuthController {
     }
 
     @Operation(summary = "短信验证码登录（首登自动建档）")
+    @OperationLog(moduleCode = "auth", actionCode = "auth:sms_login", targetTable = "sys_user",
+            targetId = "#result?.data?.userId")
     @PostMapping("/sms/login")
     public Result<LoginVO> smsLogin(@Valid @RequestBody SmsLoginDTO dto) {
         return Result.success(authService.smsLogin(dto));
@@ -59,6 +65,14 @@ public class AuthController {
     @GetMapping("/profile")
     public Result<ProfileVO> profile() {
         return Result.success(authService.profile());
+    }
+
+    @Operation(summary = "切换活动角色（多角色用户会话内切换身份视图）")
+    @OperationLog(moduleCode = "auth", actionCode = "auth:switch_role", targetTable = "sys_user")
+    @SaCheckLogin
+    @PostMapping("/switch_role")
+    public Result<ProfileVO> switchRole(@Valid @RequestBody SwitchRoleDTO dto) {
+        return Result.success(authService.switchRole(dto));
     }
 
     @Operation(summary = "设置/修改密码")
@@ -77,6 +91,7 @@ public class AuthController {
     }
 
     @Operation(summary = "注销")
+    @OperationLog(moduleCode = "auth", actionCode = "auth:logout", targetTable = "sys_user")
     @SaCheckLogin
     @PostMapping("/logout")
     public Result<Void> logout() {

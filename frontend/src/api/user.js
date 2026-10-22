@@ -1,23 +1,42 @@
 import request from './request'
 
-/** 账号密码登录 → { token } */
+/**
+ * 认证接口（契约见 docs/RBAC实施清单.md 第四节，路径以后端 AuthController 为准）
+ */
+
+/** 账号密码登录（管理员）→ LoginVO { token, roles, passwordChangeRequired, needSetPassword, ... } */
 export function loginByPassword(data) {
   return request.post('/auth/login', data)
 }
 
-/** 手机验证码登录 → { token } */
-export function loginByPhone(data) {
-  return request.post('/auth/login_phone', data)
-}
-
-/** 发送短信验证码 */
+/** 发送短信验证码 → { ttlSeconds, devCode }（devCode 仅 dev 环境模拟通道回显） */
 export function sendSmsCode(phone) {
-  return request.post('/auth/sms_code', { phone })
+  return request.post('/auth/sms/send', { phone })
 }
 
-/** 当前用户 + 角色 + 权限 + 菜单树 */
-export function getUserMenus() {
-  return request.get('/auth/user_menus')
+/** 短信验证码登录（学生/老师，首登匹配名单自动建档）→ LoginVO */
+export function loginByPhone(data) {
+  return request.post('/auth/sms/login', data)
+}
+
+/** 当前身份：用户 / 角色 / 权限 / 菜单树 + 活动角色 + 强制改密标志 → ProfileVO */
+export function getProfile() {
+  return request.get('/auth/profile')
+}
+
+/** 切换活动角色（多角色用户会话内切换身份视图）→ ProfileVO（新身份全量装配） */
+export function switchRole(roleCode) {
+  return request.post('/auth/switch_role', { roleCode })
+}
+
+/** 设置/修改密码（首次设置无密码散列免旧密码）→ { oldPassword?, newPassword } */
+export function updatePassword(data) {
+  return request.put('/auth/password', data)
+}
+
+/** 敏感操作二次密码确认 → { validSeconds }（期内敏感接口免再次确认） */
+export function confirmPassword(password) {
+  return request.post('/auth/password/confirm', { password })
 }
 
 /** 注销 */

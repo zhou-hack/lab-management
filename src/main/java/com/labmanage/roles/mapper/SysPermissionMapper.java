@@ -25,4 +25,18 @@ public interface SysPermissionMapper extends BaseMapper<SysPermission> {
             WHERE ur.deleted = 0 AND ur.enabled = 1 AND ur.user_id = #{userId}
             """)
     List<String> selectPermissionCodesByUserId(@Param("userId") Long userId);
+
+    /**
+     * 按角色集合查询权限标识（活动角色装配用）。
+     */
+    @Select("""
+            <script>
+            SELECT DISTINCT p.permission_code
+            FROM sys_role_permission rp
+            JOIN sys_permission p ON p.id = rp.permission_id AND p.deleted = 0 AND p.enabled = 1
+            WHERE rp.deleted = 0 AND rp.enabled = 1 AND rp.role_id IN
+            <foreach collection="roleIds" item="roleId" open="(" separator="," close=")">#{roleId}</foreach>
+            </script>
+            """)
+    List<String> selectPermissionCodesByRoleIds(@Param("roleIds") List<Long> roleIds);
 }

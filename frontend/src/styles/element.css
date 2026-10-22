@@ -1,5 +1,6 @@
 /* ==========================================================================
    Element Plus 变量覆盖与精修——《UI设计规范》v1.0 第 12 节
+   单一品牌蓝 · 发丝线分隔 · 大圆角 · 卡片无阴影
    ========================================================================== */
 
 :root {
@@ -22,8 +23,14 @@
   --el-border-color-extra-light: var(--hair);
 
   --el-border-radius-base: var(--r-xs);
+  --el-border-radius-small: var(--r-xs);
   --el-box-shadow-light: none;
   --el-box-shadow-lighter: none;
+
+  --el-fill-color-blank: var(--surface);
+  --el-bg-color: var(--surface);
+  --el-bg-color-page: var(--bg);
+  --el-fill-color-light: var(--surface-sunken);
 }
 
 /* ---------- 卡片：去阴影、大圆角、0.5px 细线 ---------- */
@@ -31,6 +38,33 @@
   border-radius: var(--r-lg);
   border: .5px solid var(--hair);
   box-shadow: none;
+}
+.el-card__header {
+  padding: 15px 20px;
+  border-bottom: .5px solid var(--hair);
+}
+
+/* ---------- 输入框：--r-md 圆角、hair-strong 描边、focus 品牌蓝 ---------- */
+.el-input__wrapper,
+.el-textarea__inner {
+  border-radius: var(--r-md);
+  box-shadow: 0 0 0 .5px var(--hair-strong) inset;
+  transition: box-shadow var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.el-input__wrapper:hover,
+.el-textarea__inner:hover {
+  box-shadow: 0 0 0 .5px var(--hair-brand) inset;
+}
+.el-input__wrapper.is-focus,
+.el-input__wrapper:focus-within {
+  background: var(--brand-a04);
+  box-shadow: 0 0 0 .5px var(--brand) inset;
+}
+/* 表单标签（规范 7.6：12.5px · 500 · g3） */
+.el-form-item__label {
+  font-size: 12.5px;
+  font-weight: var(--fw-medium);
+  color: var(--g3);
 }
 
 /* ---------- 表格：表头 sunken 底 + g3 字，行 hover a04 ---------- */
@@ -41,38 +75,170 @@
   --el-table-row-hover-bg-color: var(--brand-a04);
   border-radius: var(--r-md);
 }
+.el-table th.el-table__cell {
+  font-weight: var(--fw-medium);
+  font-size: 12.5px;
+}
+.el-table td.el-table__cell,
+.el-table th.el-table__cell.is-leaf {
+  border-bottom: .5px solid var(--hair);
+}
 
-/* ---------- Tag：全圆角 + 语义浅底 ---------- */
+/* ---------- Tag：全圆角 + 语义浅底、无描边 ---------- */
 .el-tag {
   border-radius: var(--r-full);
   border: none;
+  font-weight: var(--fw-medium);
 }
 
 /* ---------- 分页：选中页码渐变 + 品牌投影 ---------- */
+.el-pagination.is-background .el-pager li.is-active,
 .el-pagination .el-pager li.is-active {
   background: var(--brand-grad);
   color: #fff;
   box-shadow: var(--brand-shadow);
 }
-
-/* ---------- 菜单：无右边线 ---------- */
-.el-menu {
-  border-right: none;
+.el-pagination .el-pager li {
+  border-radius: var(--r-full);
 }
 
-/* ---------- 主按钮：品牌渐变 + 品牌投影 ---------- */
+/* ---------- Tabs：指示条 = 品牌渐变 3px 全圆角（规范第 12 节） ---------- */
+.el-tabs__active-bar {
+  height: 3px;
+  border-radius: var(--r-full);
+  background: var(--brand-grad);
+}
+.el-tabs__item.is-active {
+  font-weight: var(--fw-semibold);
+}
+.el-tabs__nav-wrap::after {
+  height: .5px;
+  background: var(--hair);
+}
+
+/* ---------- 菜单：无右边线，选中态品牌浅底 + 品牌蓝字 ---------- */
+.el-menu {
+  border-right: none;
+  --el-menu-active-color: var(--brand);
+  --el-menu-hover-bg-color: var(--brand-a04);
+  --el-menu-item-height: 46px;
+}
+.el-menu-item,
+.el-sub-menu__title {
+  border-radius: var(--r-sm);
+  margin: 2px 8px;
+  width: calc(100% - 16px);
+}
+.el-menu-item.is-active {
+  background: var(--brand-a08);
+  font-weight: var(--fw-medium);
+}
+.el-menu--collapse .el-menu-item,
+.el-menu--collapse .el-sub-menu__title {
+  margin: 2px 6px;
+  width: calc(100% - 12px);
+}
+
+/* ---------- 按钮：主按钮品牌渐变 + 品牌投影（规范 7.2） ---------- */
+.el-button {
+  border-radius: var(--r-full);
+  font-weight: var(--fw-medium);
+}
 .el-button--primary {
   background: var(--brand-grad);
   border: none;
   box-shadow: var(--brand-shadow);
+  transition: all var(--dur) var(--ease);
 }
 .el-button--primary:hover {
   background: var(--brand-grad-hover);
   box-shadow: var(--brand-shadow-lg);
+  transform: translateY(-1.5px);
+}
+.el-button--primary:active {
+  transform: scale(.985);
+}
+.el-button--primary.is-disabled,
+.el-button--primary.is-disabled:hover {
+  background: var(--brand-300);
+  box-shadow: none;
+  transform: none;
+}
+/* 次按钮：透明底 + a32 蓝描边 + 蓝字 */
+.el-button--default {
+  border-color: var(--brand-a32);
+  color: var(--brand);
+  transition: all var(--dur) var(--ease);
+}
+.el-button--default:hover {
+  background: var(--brand-a08);
+  border-color: var(--brand-a32);
+  color: var(--brand);
+}
+/* 文字按钮 hover 浅底 */
+.el-button.is-text:hover,
+.el-button.is-link:hover {
+  background: var(--brand-a08);
+  border-radius: var(--r-full);
 }
 
-/* ---------- 弹窗：大圆角、轻投影 ---------- */
+/* ---------- 弹窗：大圆角、轻投影（规范 6/7.8） ---------- */
 .el-dialog {
   border-radius: var(--r-lg);
   box-shadow: 0 24px 64px -20px rgba(15, 30, 60, .22);
+}
+.el-dialog__header {
+  padding: 20px 22px 0;
+  margin-right: 0;
+}
+.el-dialog__title {
+  font-size: 16px;
+  font-weight: var(--fw-semibold);
+  color: var(--g1);
+}
+.el-dialog__body { padding: 16px 22px; }
+.el-dialog__footer { padding: 6px 22px 20px; }
+/* 下拉/消息盒：大圆角 + 细线 */
+.el-dropdown-menu,
+.el-message-box {
+  border-radius: var(--r-md);
+  border: .5px solid var(--hair);
+}
+.el-message-box { box-shadow: 0 24px 64px -20px rgba(15, 30, 60, .22); }
+
+/* ---------- Message/Toast：全圆角胶囊 + 0.5px 细线（规范 7.8） ---------- */
+.el-message {
+  border-radius: var(--r-full);
+  border: .5px solid var(--hair);
+  box-shadow: 0 8px 24px -12px rgba(15, 30, 60, .18);
+  padding: 11px 18px;
+  min-width: auto;
+}
+
+/* ---------- 面包屑：三级灰阶 ---------- */
+.el-breadcrumb__inner,
+.el-breadcrumb__separator {
+  color: var(--g3);
+  font-weight: var(--fw-regular);
+}
+.el-breadcrumb__item:last-child .el-breadcrumb__inner {
+  color: var(--g1);
+  font-weight: var(--fw-medium);
+}
+
+/* ---------- 下拉菜单项 ---------- */
+.el-dropdown-menu__item {
+  border-radius: var(--r-xs);
+  margin: 2px 6px;
+  font-size: 13.5px;
+}
+.el-dropdown-menu__item:not(.is-disabled):hover {
+  background: var(--brand-a08);
+  color: var(--brand);
+}
+
+/* ---------- 空状态：文案降级为 g3 ---------- */
+.el-empty__description p {
+  color: var(--g3);
+  font-size: 13px;
 }
