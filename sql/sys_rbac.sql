@@ -346,6 +346,7 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code, e
 (5,  'system:user:enable',      '启用停用用户',   'system', 1),
 (27, 'system:user:reset_password', '重置密码',    'system', 1),
 (31, 'system:user:bind_role',   '绑定管理员角色', 'system', 1),
+(36, 'system:user:batch_dept',  '批量修改部门',   'system', 1),
 (6,  'system:roster:list',      '名单列表',       'system', 1),
 (7,  'system:roster:create',    '名单录入',       'system', 1),
 (8,  'system:roster:update',    '名单编辑',       'system', 1),
@@ -358,8 +359,6 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code, e
 (13, 'system:department:enable', '组织启用停用',   'system', 1),
 (14, 'system:role:list',         '角色权限查看',   'system', 1),
 (28, 'system:role:assign',       '调整角色权限',   'system', 1),
-(15, 'system:scope:list',        '数据范围查看',   'system', 1),
-(16, 'system:scope:grant',       '数据范围授权',   'system', 1),
 (20, 'system:log:list',          '操作日志查询',   'system', 1),
 (21, 'system:policy:list',       '策略参数查看',   'system', 1),
 (22, 'system:policy:publish',    '策略参数发布',   'system', 1),
@@ -368,14 +367,14 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code, e
 (25, 'system:grant:revoke',      '助理授权撤销',   'system', 1),
 (26, 'system:grant:audit',       '助理授权审计',   'system', 1);
 
--- system 模块菜单（目录 1 + 页面 8；名单管理 2026-10-21 并入「人员管理」统一人员视图；
--- 预约限制页面与接口 2026-10-21 下线，user_booking_restriction 表保留供预约模块逾期冻结使用）
+-- system 模块菜单（目录 1 + 页面 7；名单管理 2026-10-21 并入「人员管理」统一人员视图；
+-- 预约限制页面与接口 2026-10-21 下线，user_booking_restriction 表保留供预约模块逾期冻结使用；
+-- 数据范围页面与接口 2026-10-22 下线，sys_user_data_scope 表保留，管理员不再受数据范围约束）
 INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
 (1,  NULL, 'system',              '系统管理',     '/system',            NULL,              NULL, 'DIRECTORY', 90, 1),
 (2,  1,    'system_user',         '人员管理',     '/system/user',       'SystemUserRoster', 1,    'PAGE',      1,  1),
 (4,  1,    'system_department',   '组织管理',     '/system/department', 'SystemDepartment', 10,   'PAGE',      2,  1),
 (5,  1,    'system_role',         '角色权限',     '/system/role',       'SystemRole',       14,   'PAGE',      3,  1),
-(6,  1,    'system_scope',        '数据范围',     '/system/scope',      'SystemScope',      15,   'PAGE',      4,  1),
 (8,  1,    'system_log',          '操作日志',     '/system/log',        'SystemLog',        20,   'PAGE',      6,  1),
 (9,  1,    'system_policy',       '参数配置',     '/system/policy',     'SystemPolicy',     21,   'PAGE',      7,  1),
 (10, 1,    'system_grant_audit',  '授权审计',     '/system/grant',      'SystemGrantAudit', 26,   'PAGE',      8,  1),

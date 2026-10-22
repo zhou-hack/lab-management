@@ -70,7 +70,7 @@ const staticRoutes = [
 // 已登录用户直接访问其中未获授权的页面时落 403；其余未注册路径仍按 404/首页兜底。
 // /system/roster 已改为静态重定向（见上方路由表），不经本集合判定
 const KNOWN_PAGE_PATHS = new Set([
-  '/system/user', '/system/department', '/system/role', '/system/scope',
+  '/system/user', '/system/department', '/system/role',
   '/system/log', '/system/policy', '/system/grant',
   '/grant'
 ])

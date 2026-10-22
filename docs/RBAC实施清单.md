@@ -28,19 +28,18 @@
 ## 二、权限标识登记
 
 「归属角色」为初始绑定；ASSISTANT 为附加角色，由有效 assistant_grant 动态计算；授权权力落 assistant_grant_scope（当前开放 MATERIAL_ISSUE 物料领取，OFFERING/LAB 预留）。
-OPS_ADMIN（运维管理员）为最高级预置运维角色，仅 SQL 预置不开放页面创建，绑定全部已登记权限（后续模块新增权限随各自脚本同步绑定 OPS_ADMIN），不受数据范围约束。
-2026-10-20 起系统管理（用户/名单/组织/角色/数据范围/预约限制/参数配置/授权审计）整体划归 OPS_ADMIN 专属，ADMIN 仅保留 system:log:list 且仅可见业务模块日志（module_code 不含 system/auth）。2026-10-21 预约限制页面与接口下线（system:restriction:* 权限与菜单移除），user_booking_restriction 表与 UserBookingRestrictionMapper.countActive 保留供预约模块逾期冻结使用。
+OPS_ADMIN（运维管理员）为最高级预置运维角色，仅 SQL 预置不开放页面创建，绑定全部已登记权限（后续模块新增权限随各自脚本同步绑定 OPS_ADMIN）。
+2026-10-20 起系统管理（用户/名单/组织/角色/参数配置/授权审计）整体划归 OPS_ADMIN 专属，ADMIN 仅保留 system:log:list 且仅可见业务模块日志（module_code 不含 system/auth）。2026-10-21 预约限制页面与接口下线（system:restriction:* 权限与菜单移除），user_booking_restriction 表与 UserBookingRestrictionMapper.countActive 保留供预约模块逾期冻结使用。2026-10-22 数据范围页面与接口下线（system:scope:list / grant 权限与菜单移除），sys_user_data_scope 表与 SysUserDataScopeMapper 保留，管理员不再受数据范围约束（SysScopeService 及逐接口范围校验一并移除）。
 
 ### 2.1 system 模块（已出初始 SQL）
 
 | permission_code | 名称 | 归属角色 |
 | --- | --- | --- |
-| system:user:list / get / create / update / enable / reset_password / bind_role | 用户管理 | 仅 OPS_ADMIN（createAdmin 固定绑 ADMIN 角色且调用方须全校写；bind_role 仅老师账号可绑定/解绑 ADMIN 角色、调用方须全校写，变更踢目标用户会话；OPS_ADMIN 账号仅 OPS_ADMIN 本人可编辑/启停/重置/绑定操作） |
+| system:user:list / get / create / update / enable / reset_password / bind_role / batch_dept | 用户管理 | 仅 OPS_ADMIN（createAdmin 固定绑 ADMIN 角色；bind_role 仅老师账号可绑定/解绑 ADMIN 角色，变更踢目标用户会话；batch_dept 名单与账号混合整批改部门、需二级认证；OPS_ADMIN 账号仅 OPS_ADMIN 本人可编辑/启停/重置/绑定操作） |
 | system:roster:list / create / update / enable / export / import | 预录名单管理（export 导出 CSV 复用列表筛选；import 批量导入 CSV 部分成功、需二级认证） | 仅 OPS_ADMIN |
 | system:department:list / create / update / enable | 组织管理 | 仅 OPS_ADMIN |
 | system:role:list | 角色与权限查看（角色仍 SQL 预置不可增删） | 仅 OPS_ADMIN |
 | system:role:assign | 调整角色权限（整集替换 + 踢持有者会话；锁 OPS_ADMIN 角色） | 仅 OPS_ADMIN |
-| system:scope:list / grant | 数据范围查看 / 授权 | 仅 OPS_ADMIN |
 | system:log:list | 操作日志查询 | OPS_ADMIN（全量）/ ADMIN（仅业务模块日志，module_code 不含 system/auth） |
 | system:policy:list / publish | 策略参数查看 / 发布 | 仅 OPS_ADMIN |
 | system:grant:list / create / revoke | 助理授权（老师本人） | TEACHER / OPS_ADMIN |
@@ -68,7 +67,7 @@ space:campus/building/lab 共 12 项权限（ID 1000–1011）及其角色绑定
 | permission_code | 名称 | 归属角色 |
 | --- | --- | --- |
 | booking:equipment:create / cancel | 器材借用申请 / 撤销 | STUDENT / TEACHER |
-| booking:equipment:list | 借用记录（数据范围控制可见性） | STUDENT / TEACHER / ADMIN |
+| booking:equipment:list | 借用记录（本人可见本人单，管理角色见全量；原“数据范围控制可见性”随 2026-10-22 数据范围下线作废） | STUDENT / TEACHER / ADMIN |
 | booking:equipment:approve | 借用审批（老师，含被催办单） | TEACHER |
 | booking:equipment:audit | 贵重器材审批 / 超时代批 | ADMIN |
 | booking:equipment:checkout / return | 确认借出 / 归还（强制外观照） | STUDENT / TEACHER / ADMIN（代借代还） |
@@ -121,7 +120,6 @@ space:campus/building/lab 共 12 项权限（ID 1000–1011）及其角色绑定
 | system_user | 人员管理 | /system/user | SystemUserRoster | system:user:list | 仅 OPS_ADMIN（名单管理 2026-10-21 并入为统一人员视图：名单与账号一行一人，列表数据走 GET /system/persons（需 system:user:list + system:roster:list 双权限）；名单操作接口仍由 system:roster:* 保护，旧地址 /system/roster 静态重定向至本页） |
 | system_department | 组织管理 | /system/department | SystemDepartment | system:department:list | 仅 OPS_ADMIN |
 | system_role | 角色权限 | /system/role | SystemRole | system:role:list | 仅 OPS_ADMIN |
-| system_scope | 数据范围 | /system/scope | SystemScope | system:scope:list | 仅 OPS_ADMIN |
 | system_log | 操作日志 | /system/log | SystemLog | system:log:list | ADMIN / OPS_ADMIN（ADMIN 仅业务模块日志） |
 | system_policy | 参数配置 | /system/policy | SystemPolicy | system:policy:list | 仅 OPS_ADMIN |
 | system_grant_audit | 助理授权审计 | /system/grant | SystemGrantAudit | system:grant:audit | 仅 OPS_ADMIN |

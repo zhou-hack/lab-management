@@ -18,8 +18,8 @@
 
 | 原则 | 含义 | 落地体现 |
 | --- | --- | --- |
-| 服务端强制 | 每个受保护接口由后端校验权限，前端指令/菜单只是镜像 | `@SaCheckPermission` + 数据范围 Service 校验 |
-| 最小权限 | 无范围记录不自动授予全校数据；无授权不获得助理身份 | sys_user_data_scope 空表即零范围；ASSISTANT 动态计算 |
+| 服务端强制 | 每个受保护接口由后端校验权限，前端指令/菜单只是镜像 | `@SaCheckPermission` |
+| 最小权限 | 无授权不获得助理身份；管理员数据范围控制 2026-10-22 下线（表保留） | ASSISTANT 动态计算 |
 | 身份不可自提 | 用户不能通过客户端指定 user_type / role_code 提升身份 | 首登匹配 sys_person_roster 派生角色；OPS_ADMIN 仅 SQL 预置 |
 | 权限可即时回收 | 停用、撤销、范围收窄立即生效，不等会话自然过期 | `AuthService.evictSession` 踢会话强制重载 |
 | 审计只追加 | 操作日志不外键、不更新、不删除 | sys_operation_log 仅 INSERT |
@@ -40,7 +40,7 @@
 │                                                                 │
 │  认证层  AuthService：账密/短信验证码登录、首登建档、锁定限流、二级确认 │
 │  装配层  StpInterfaceImpl：会话缓存的角色/权限装配（踢会话即失效）      │
-│  校验层  @SaCheckPermission（功能权限）+ SysScopeService（数据范围）   │
+│  校验层  @SaCheckPermission（功能权限）                                 │
 │  授权层  AssistantGrantService：助理授权生命周期，动态派生 ASSISTANT   │
 │  审计层  @OperationLog AOP：独立事务写 sys_operation_log            │
 └──────────────┬─────────────────────────────────────────────────┘
@@ -51,7 +51,7 @@
 └────────────────────────────────────────────────────────────────┘
 ```
 
-三层含义：**身份**（你是谁，名单预录派生）、**角色**（你能干什么，权限集合）、**范围**（你能对哪些数据动手，显式授权行）。
+三层含义原含**身份**（你是谁，名单预录派生）、**角色**（你能干什么，权限集合）、**范围**（你能对哪些数据动手）；范围层已于 2026-10-22 下线（见五），现为身份 + 角色两层。
 
 ---
 
@@ -68,11 +68,11 @@
 
 | 角色 | id | 定位 | 权限来源 | 创建方式 | 数据范围 |
 | --- | --- | --- | --- | --- | --- |
-| ADMIN | 1 | 设备处业务管理员 | 静态绑定 1 项 system 权限（20 操作日志；2026-10-20 起系统管理整体划归 OPS_ADMIN，ADMIN 仅保留操作日志页且仅可见业务模块日志，module_code 不含 system/auth） | 用户管理页 createAdmin（绑固定角色）；老师账号可经用户管理页绑定/解绑 ADMIN 角色（system:user:bind_role，仅老师可绑，变更踢会话） | 受 sys_user_data_scope 约束，无行即零范围 |
+| ADMIN | 1 | 设备处业务管理员 | 静态绑定 1 项 system 权限（20 操作日志；2026-10-20 起系统管理整体划归 OPS_ADMIN，ADMIN 仅保留操作日志页且仅可见业务模块日志，module_code 不含 system/auth） | 用户管理页 createAdmin（绑固定角色）；老师账号可经用户管理页绑定/解绑 ADMIN 角色（system:user:bind_role，仅老师可绑，变更踢会话） | 全量业务数据（原 sys_user_data_scope 范围控制 2026-10-22 下线） |
 | TEACHER | 2 | 授课老师 | 静态绑定助理授权 3 项（23-25）+ 业务模块增量 | 名单首登自动建档派生 | 本人 + 课程名单计算，不可登记范围行 |
 | STUDENT | 3 | 在校学生 | 业务模块增量 | 名单首登自动建档派生 | 仅本人数据 |
 | ASSISTANT | 4 | 老师助理（附加角色） | 不持久化，由有效 assistant_grant 动态计算 | 老师授权产生，到期/撤销自动还原 | 授权范围（OFFERING/LAB + ISSUE/RETURN） |
-| OPS_ADMIN | 5 | 最高级运维管理员 | 静态绑定全部权限（当前 28 项：system 模块；后续模块新增权限随各自脚本同步绑定）；系统管理（用户/名单/组织/角色/数据范围/参数配置/授权审计）自 2026-10-20 起为其专属 | 仅 SQL 预置（sql/sys_ops_role.sql），页面不可创建；其权限绑定锁定不可页面调整（40900），其余 4 个预置角色的权限绑定可由运维管理员整集替换（system:role:assign） | 不受范围约束（面向全系统数据与配置；实现层豁免见 SysScopeServiceImpl.isOpsAdmin） |
+| OPS_ADMIN | 5 | 最高级运维管理员 | 静态绑定全部权限（当前 27 项：system 模块；后续模块新增权限随各自脚本同步绑定）；系统管理（用户/名单/组织/角色/参数配置/授权审计）自 2026-10-20 起为其专属 | 仅 SQL 预置（sql/sys_ops_role.sql），页面不可创建；其权限绑定锁定不可页面调整（40900），其余 4 个预置角色的权限绑定可由运维管理员整集替换（system:role:assign） | 面向全系统数据与配置 |
 
 层级关系：OPS_ADMIN 为最高级运维角色，普通 ADMIN 无法通过任何页面操作创建或提升账号为 OPS_ADMIN；2026-10-20 起系统管理功能整体归 OPS_ADMIN 专属，形成新权限层级（OPS_ADMIN 管系统、ADMIN 管业务），ADMIN 仅保留操作日志页（仅业务模块日志）；ASSISTANT 附加在 STUDENT 之上，授权期内同时持有 STUDENT + ASSISTANT。
 
@@ -107,7 +107,6 @@
      → StpInterfaceImpl 装配（会话缓存命中？直接用 : 实时装配回写）
      → @SaCheckPermission("模块:资源:操作")（40300）
      → Controller 参数校验（40000）
-     → Service 数据范围校验（仅管理员写操作，40300）
      → 业务规则校验（40400/40900）
      → @OperationLog 落审计（独立事务，不影响主流程）
 ```
@@ -126,7 +125,6 @@
 | 用户被停用 | 立即踢该用户全部会话 | SysUserServiceImpl.updateEnabled → evictSession |
 | 助理授权创建 | 踢学生会话，重登装配 ASSISTANT | AssistantGrantServiceImpl.create |
 | 助理授权撤销 | 踢学生会话，助理身份随重登消失 | AssistantGrantServiceImpl.revoke |
-| 数据范围增删 | 范围实时查询无缓存，无需踢会话 | SysScopeService 直查 sys_user_data_scope |
 | 角色权限调整 | ✅ 已实现（OPS_ADMIN 整集替换，锁 OPS_ADMIN 角色）：踢该角色全部用户会话（含 ASSISTANT 动态持有者） | SysRoleServiceImpl.assignPermissions → evictRoleHolders |
 | 老师绑定/解绑管理员角色 | 踢该老师全部会话，重登按新持有角色装配 | SysUserServiceImpl.updateAdminRole → evictSession |
 
@@ -139,34 +137,13 @@
 
 ---
 
-## 五、数据范围设计（sys_user_data_scope）
+## 五、数据范围设计（2026-10-22 下线）
 
-### 5.1 语义
+数据范围管理页面与接口（SystemScopeController、SysScopeService、system:scope:list / system:scope:grant 权限与菜单）已于 2026-10-22 整体下线：
 
-| 规则 | 内容 |
-| --- | --- |
-| 适用对象 | 仅 ADMIN 类型用户；学生/老师范围由本人+课程名单+有效助理授权计算，不可登记范围行 |
-| scope_type | ALL / DEPARTMENT（一期）；CAMPUS / BUILDING / LAB 为预留类型（空间功能已下线，不开放） |
-| access_mode | READ / WRITE；WRITE 蕴含 READ |
-| 存储 | 唯一键 (user_id, scope_type, access_mode, scope_target_id)，scope_target_id 为生成列归一（ALL 行目标为 NULL 也可去重）；同目标 READ/WRITE 可各存一行，升降级=增删行 |
-| 匹配 | ALL 行匹配任意请求；DEPARTMENT 精确匹配，不向下继承子部门 |
-| 空表语义 | 无任何范围行 = 零范围，不自动授予全校数据 |
-
-### 5.2 强制执行点
-
-| 操作 | 校验 |
-| --- | --- |
-| 创建管理员 | 调用方须全校写（requireAllWrite），防止部门管理员制造同僚 |
-| 用户编辑（部门变更） | 迁出部门与迁入部门双查写权限 |
-| 用户停用/启用 | 目标部门写权限 |
-| 名单新建/批量/编辑/启停 | 目标部门写权限 |
-| 根部门创建 | 全校写；子部门创建/编辑/启停按部门写 |
-| 范围授权（scope:grant） | 调用方须全校写，防止放大自身范围 |
-| 范围删除 | 禁止删除本人最后一条全校写范围（40900，防自锁） |
-
-### 5.3 OPS_ADMIN 豁免
-
-OPS_ADMIN 绑定全部权限但不登记、也不需要范围行：`SysScopeServiceImpl.isOpsAdmin` 在 requireAllWrite / requireDepartmentWrite 入口对 OPS_ADMIN 直接放行（实现层豁免，接口权限码仍由 @SaCheckPermission 独立控制）。无此豁免时，其全量写权限将因"空表=零范围"全部落空；豁免后 OPS_ADMIN 成为真正面向全系统的兜底角色。
+- 管理员不再受数据范围约束，原逐接口范围校验（requireAllWrite / requireDepartmentWrite，及 SysScopeServiceImpl.isOpsAdmin 豁免）随服务一并移除；OPS_ADMIN 不再需要豁免逻辑。
+- sys_user_data_scope 表与 SysUserDataScopeMapper 保留（含生成列归一去重设计），已登记数据失去消费方；sql/sys_scope.sql 的 admin 全校写范围初始行同步失去语义，脚本保留备查。
+- 后续模块如需按部门/归口控制可见性或写权限，重新评审设计后再接入，不沿用旧实现。
 
 ---
 
@@ -247,11 +224,11 @@ assistant_grant_scope 表达授权权力，一单可含多种：
 | 部门「设备处」 | 1 | sql/sys_rbac.sql |
 | 角色 ADMIN/TEACHER/STUDENT/ASSISTANT | 1-4 | sql/sys_rbac.sql |
 | 角色 OPS_ADMIN | 5 | sql/sys_ops_role.sql |
-| system 权限 31 项 | 1-31 | sql/sys_rbac.sql（26=授权审计、27=重置密码、28=调整角色权限、29-30=名单导出/导入、31=绑定管理员角色） |
-| system 菜单 11 项 | 1-11 | sql/sys_rbac.sql |
+| system 权限 27 项 | 1-14、20-31、36 | sql/sys_rbac.sql（15-16=数据范围 2026-10-22 下线移除、17-19=预约限制 2026-10-21 下线移除；26=授权审计、27=重置密码、28=调整角色权限、29-30=名单导出/导入、31=绑定管理员角色、36=批量修改部门） |
+| system 菜单 8 项 | 1-2、4-5、8-11 | sql/sys_rbac.sql（3=原名单页 2026-10-21 并入人员管理、6=数据范围 2026-10-22 下线、7=预约限制 2026-10-21 下线） |
 | 管理员 admin | 1 | sql/sys_rbac.sql |
 | 运维管理员 opsadmin | 2 | sql/sys_ops_role.sql |
-| admin 全校写范围 | 1 | sql/sys_scope.sql |
+| admin 全校写范围 | 1 | sql/sys_scope.sql（数据范围 2026-10-22 下线，初始行失去消费方，脚本保留备查） |
 | 安全策略参数 9 项 | business_policy | sql/sys_policy.sql |
 
 初始数据使用固定小 ID（system 段 1–999），与雪花 ID 不冲突；各业务模块按 ID 段随建表脚本登记本模块的权限/菜单/角色绑定。
@@ -273,7 +250,7 @@ RBAC 核心 11 表（sql/sys_rbac.sql）：sys_department、sys_person_roster、
 1. 在[权限清单.md](权限清单.md)功能矩阵确认功能归属角色（PRD 层）。
 2. 在[RBAC实施清单.md](RBAC实施清单.md)登记 `模块:资源:操作` 权限码与菜单（含 component_key 白名单名）。
 3. 模块建表脚本内登记本模块 sys_permission/sys_menu/sys_role_permission/sys_role_menu 初始数据，使用本模块 ID 段。
-4. 后端 Controller 加 `@SaCheckPermission`，写操作涉及部门归属的注入 SysScopeService 校验。
+4. 后端 Controller 加 `@SaCheckPermission`。
 5. 敏感操作（审批、处置）加二级确认；关键变更加 `@OperationLog` 埋点。
 6. 前端在 `router/dynamic.js` 登记组件白名单，页面按钮用 `v-permission`。
 7. 新增预置角色：sys_role 固定小 ID + RoleCode 枚举 + 绑定脚本 + 同步 AGENTS.md 与数据库设计.md（OPS_ADMIN 为范例）；一期仍不开放页面自定义角色。
@@ -286,9 +263,9 @@ RBAC 核心 11 表（sql/sys_rbac.sql）：sys_department、sys_person_roster、
 | --- | --- |
 | 认证链路（登录/验证码/首登建档/profile/改密/二级确认/注销） | ✅ 已落地并验证 |
 | 锁定限流、会话分时长、动态 ASSISTANT 装配 | ✅ 已落地并验证 |
-| 用户/名单（含 CSV 导出与批量导入）/组织/角色只读/数据范围/操作日志/参数配置 | ✅ 已落地并验证；2026-10-20 起系统管理页面整体归 OPS_ADMIN 专属，ADMIN 仅保留操作日志页；2026-10-21 用户与名单合并为统一人员视图（菜单 system_user「人员管理」→ SystemUserRoster，名单与账号一行一人，列表走 GET /system/persons 需 system:user:list + system:roster:list 双权限，旧地址 /system/roster 静态重定向）；预约限制页面与接口 2026-10-21 下线（表与 countActive 保留供预约模块逾期冻结） |
+| 用户/名单（含 CSV 导出与批量导入）/组织/角色只读/操作日志/参数配置 | ✅ 已落地并验证；2026-10-20 起系统管理页面整体归 OPS_ADMIN 专属，ADMIN 仅保留操作日志页；2026-10-21 用户与名单合并为统一人员视图（菜单 system_user「人员管理」→ SystemUserRoster，名单与账号一行一人，列表走 GET /system/persons 需 system:user:list + system:roster:list 双权限，旧地址 /system/roster 静态重定向）；预约限制页面与接口 2026-10-21 下线（表与 countActive 保留供预约模块逾期冻结）；2026-10-22 统一人员视图新增 roleCode 筛选，角色权限页新增「角色成员」页签（ASSISTANT 成员由授权动态产生故引导至授权审计；ADMIN 成员可经页面添加/移出老师绑定，复用 system:user:bind_role）；2026-10-22 数据范围页面与接口下线（system:scope:list/grant 权限与菜单移除，SysScopeService 及逐接口范围校验一并移除，sys_user_data_scope 表与 Mapper 保留） |
 | 助理授权（创建/撤销/审计 + 权限缓存失效闭环） | ✅ 已落地并验证（范围表已建，业务接入待分组 B→E） |
-| OPS_ADMIN 运维角色 | ✅ 已落地并验证；2026-10-15 由运维子集调整为全部权限；2026-10-17 新增角色权限整集替换（system:role:assign，锁 OPS_ADMIN 角色）；2026-10-20 空间功能下线后回至 30 项，同日新增 system:user:bind_role 后为 31 项；2026-10-20 系统管理整体划归 OPS_ADMIN 专属（ADMIN 剥离至仅操作日志 20，且日志仅可见业务模块）；2026-10-21 预约限制 3 项权限随页面接口下线后为 28 项 |
+| OPS_ADMIN 运维角色 | ✅ 已落地并验证；2026-10-15 由运维子集调整为全部权限；2026-10-17 新增角色权限整集替换（system:role:assign，锁 OPS_ADMIN 角色）；2026-10-20 空间功能下线后回至 30 项，同日新增 system:user:bind_role 后为 31 项；2026-10-20 系统管理整体划归 OPS_ADMIN 专属（ADMIN 剥离至仅操作日志 20，且日志仅可见业务模块）；2026-10-21 预约限制 3 项权限随页面接口下线后为 28 项；2026-10-22 新增 system:user:batch_dept（批量修改部门，名单与账号混合整批事务、需二级认证）后为 29 项；2026-10-22 数据范围 2 项（system:scope:list/grant）随模块下线后为 27 项 |
 | 一人多角色与活动角色切换 | ✅ 已落地并验证（2026-10-20）：老师可绑定 ADMIN，默认主身份登录，switch_role 会话内直接切换 |
 | 敏感端点二级认证强制执行（checkSafe + 40101 + 前端确认弹窗重试） | ✅ 已落地并验证（策略发布等敏感端点接入） |
 | 空间模块（校区/楼栋/实验室/开放规则） | ❌ 已于 2026-10-20 整体下线（模块代码、页面、权限 1000–1011、菜单 1000–1002、四表全部移除；CAMPUS/BUILDING/LAB 范围类型回退为预留） |
@@ -303,5 +280,5 @@ RBAC 核心 11 表（sql/sys_rbac.sql）：sys_department、sys_person_roster、
 1. 运维账号保护已实现：目标用户持有 OPS_ADMIN 角色时，编辑/启停/重置仅 OPS_ADMIN 本人可操作（SysUserServiceImpl.requireOpsAdminOperator，普通管理员调用返回 40300），普通 ADMIN 无法接管 opsadmin 账号；OPS_ADMIN 对普通账号的编辑/启停/重置不受此限（停用/重置本人仍被 40900 拦截）。
 2. 会话缓存按会话隔离：助理授权在未来时刻生效的，学生已在线会话不会到点自动获得助理身份，需重新登录（授权创建时的踢会话只保证创建时点之后的重登生效）。
 3. 短信验证码为单实例内存存储+模拟通道；多实例部署需迁共享存储并接真实通道。
-4. 数据范围类型仅 ALL/DEPARTMENT 开放（写操作按所属部门校验）；CAMPUS/BUILDING/LAB 为预留类型，已随 2026-10-20 空间功能下线不再开放。部门精确匹配不继承。
-5. 跨归口只读（显式 READ 行）规则已定，READ 行的页面化发放随业务模块可见性需求接入。
+4. 数据范围模块已于 2026-10-22 整体下线（页面、接口、逐接口范围校验一并移除）；sys_user_data_scope 表保留，原 ALL/DEPARTMENT 类型与生成列归一设计备查，后续如需范围控制重新评审。
+5. 原跨归口只读（显式 READ 行）规则随 2026-10-22 数据范围下线作废；业务模块可见性需求随分组 B→E 重新评审。

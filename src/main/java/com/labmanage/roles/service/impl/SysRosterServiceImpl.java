@@ -16,7 +16,6 @@ import com.labmanage.roles.mapper.SysDepartmentMapper;
 import com.labmanage.roles.mapper.SysPersonRosterMapper;
 import com.labmanage.roles.mapper.SysUserMapper;
 import com.labmanage.roles.service.SysRosterService;
-import com.labmanage.roles.service.SysScopeService;
 import com.labmanage.roles.vo.RosterExportRowVO;
 import com.labmanage.roles.vo.RosterImportResultVO;
 import com.labmanage.roles.vo.RosterPageItemVO;
@@ -66,16 +65,13 @@ public class SysRosterServiceImpl implements SysRosterService {
 
     private final SysUserMapper userMapper;
 
-    private final SysScopeService scopeService;
-
     private final Validator validator;
 
     public SysRosterServiceImpl(SysPersonRosterMapper rosterMapper, SysDepartmentMapper departmentMapper,
-                                SysUserMapper userMapper, SysScopeService scopeService, Validator validator) {
+                                SysUserMapper userMapper, Validator validator) {
         this.rosterMapper = rosterMapper;
         this.departmentMapper = departmentMapper;
         this.userMapper = userMapper;
-        this.scopeService = scopeService;
         this.validator = validator;
     }
 
@@ -91,7 +87,6 @@ public class SysRosterServiceImpl implements SysRosterService {
     @Override
     public void create(RosterCreateDTO dto) {
         requireEnabledDepartment(dto.departmentId());
-        scopeService.requireDepartmentWrite(dto.departmentId());
         SysPersonRoster roster = new SysPersonRoster();
         roster.setPersonNo(dto.personNo());
         roster.setPersonType(dto.personType());
@@ -109,11 +104,8 @@ public class SysRosterServiceImpl implements SysRosterService {
     @Override
     public void update(Long id, RosterUpdateDTO dto) {
         SysPersonRoster roster = requireRoster(id);
-        scopeService.requireDepartmentWrite(roster.getDepartmentId());
         requireNotMatched(roster, "编辑");
         requireEnabledDepartment(dto.departmentId());
-        // 迁入部门也须在操作者写范围内
-        scopeService.requireDepartmentWrite(dto.departmentId());
         roster.setRealName(dto.realName());
         roster.setPhone(dto.phone());
         roster.setDepartmentId(dto.departmentId());
@@ -127,7 +119,6 @@ public class SysRosterServiceImpl implements SysRosterService {
     @Override
     public void updateEnabled(Long id, RosterEnabledDTO dto) {
         SysPersonRoster roster = requireRoster(id);
-        scopeService.requireDepartmentWrite(roster.getDepartmentId());
         if (Integer.valueOf(0).equals(dto.enabled())) {
             requireNotMatched(roster, "停用");
         }

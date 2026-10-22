@@ -12,7 +12,6 @@ import com.labmanage.roles.mapper.SysDepartmentMapper;
 import com.labmanage.roles.mapper.SysPersonRosterMapper;
 import com.labmanage.roles.mapper.SysUserMapper;
 import com.labmanage.roles.service.SysDepartmentService;
-import com.labmanage.roles.service.SysScopeService;
 import com.labmanage.roles.vo.DepartmentTreeVO;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -37,14 +36,11 @@ public class SysDepartmentServiceImpl implements SysDepartmentService {
 
     private final SysPersonRosterMapper rosterMapper;
 
-    private final SysScopeService scopeService;
-
     public SysDepartmentServiceImpl(SysDepartmentMapper departmentMapper, SysUserMapper userMapper,
-                                    SysPersonRosterMapper rosterMapper, SysScopeService scopeService) {
+                                    SysPersonRosterMapper rosterMapper) {
         this.departmentMapper = departmentMapper;
         this.userMapper = userMapper;
         this.rosterMapper = rosterMapper;
-        this.scopeService = scopeService;
     }
 
     @Override
@@ -69,8 +65,6 @@ public class SysDepartmentServiceImpl implements SysDepartmentService {
 
     @Override
     public void create(DepartmentCreateDTO dto) {
-        // 根部门（parentId=NULL）要求全校写范围；下级部门要求父部门写范围
-        scopeService.requireDepartmentWrite(dto.parentId());
         requireEnabledParent(dto.parentId());
         // 编码留空时自动生成 DEPT_ + 4 位序号；并发取到同一序号由唯一索引兜底，重试重新取号
         boolean autoCode = !StringUtils.hasText(dto.departmentCode());
@@ -105,7 +99,6 @@ public class SysDepartmentServiceImpl implements SysDepartmentService {
     @Override
     public void update(Long id, DepartmentUpdateDTO dto) {
         SysDepartment dept = requireDepartment(id);
-        scopeService.requireDepartmentWrite(id);
         Long newParentId = dto.parentId();
         if (newParentId != null) {
             if (newParentId.equals(id)) {
@@ -125,7 +118,6 @@ public class SysDepartmentServiceImpl implements SysDepartmentService {
     @Override
     public void updateEnabled(Long id, DepartmentEnabledDTO dto) {
         SysDepartment dept = requireDepartment(id);
-        scopeService.requireDepartmentWrite(id);
         if (Integer.valueOf(0).equals(dto.enabled())) {
             Long enabledChildren = departmentMapper.selectCount(Wrappers.<SysDepartment>lambdaQuery()
                     .eq(SysDepartment::getParentId, id)

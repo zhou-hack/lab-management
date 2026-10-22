@@ -62,7 +62,6 @@ const ICON_MAP = {
   SystemUserRoster: UserFilled,
   SystemDepartment: OfficeBuilding,
   SystemRole: Avatar,
-  SystemScope: Key,
   SystemLog: Histogram,
   SystemPolicy: Setting,
   SystemGrantAudit: Document,

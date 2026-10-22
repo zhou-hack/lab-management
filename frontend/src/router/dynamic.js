@@ -14,7 +14,6 @@ const viewModules = {
   SystemUserRoster: { layout: 'admin', load: () => import('@/views/admin/system/SystemUserRoster.vue') },
   SystemDepartment: { layout: 'admin', load: () => import('@/views/admin/system/SystemDepartment.vue') },
   SystemRole: { layout: 'admin', load: () => import('@/views/admin/system/SystemRole.vue') },
-  SystemScope: { layout: 'admin', load: () => import('@/views/admin/system/SystemScope.vue') },
   SystemLog: { layout: 'admin', load: () => import('@/views/admin/system/SystemLog.vue') },
   SystemPolicy: { layout: 'admin', load: () => import('@/views/admin/system/SystemPolicy.vue') },
   SystemGrantAudit: { layout: 'admin', load: () => import('@/views/admin/system/SystemGrantAudit.vue') },
