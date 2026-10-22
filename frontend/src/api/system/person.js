@@ -8,3 +8,8 @@ import request from '../request'
 export function pagePersons(params) {
   return request.get('/system/persons', { params })
 }
+
+/** 批量修改部门（名单与账号可混合，敏感操作需二次密码确认）→ 更新行数 */
+export function batchUpdateDepartment(data) {
+  return request.put('/system/persons/department', data)
+}
