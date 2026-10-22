@@ -154,10 +154,12 @@ const assetLoading = ref(false)
 async function searchEquipment(keyword = '') {
   assetLoading.value = true
   try {
-    const params = { pageNum: 1, pageSize: 20 }
+    // 默认拉取 15 条在架设备；输入关键字搜索时扩大拉取量（服务端收敛为 IDLE 启用视图）
+    const params = { pageNum: 1, pageSize: 15 }
     const text = (keyword || '').trim()
     if (text) {
       params.keyword = text
+      params.pageSize = 50
     }
     const data = await pageAssets(params)
     assetOptions.value = data.records || []
