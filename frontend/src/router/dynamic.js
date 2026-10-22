@@ -13,7 +13,8 @@ const viewModules = {
   '/admin/space/labs': () => import('@/views/admin/space/LabList.vue'),
   '/admin/booking/labs': () => import('@/views/admin/booking/BookingList.vue'),
   '/admin/booking/approval': () => import('@/views/admin/booking/BookingApproval.vue'),
-  '/booking/labs': () => import('@/views/booking/BookingList.vue')
+  '/booking/labs': () => import('@/views/booking/BookingList.vue'),
+  '/grant': () => import('@/views/grant/GrantManage.vue')
 }
 
 const addedRouteNames = []
