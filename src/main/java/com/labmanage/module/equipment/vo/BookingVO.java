@@ -1,12 +1,11 @@
 package com.labmanage.module.equipment.vo;
 
 import com.labmanage.module.equipment.enums.BookingStatus;
-import com.labmanage.module.equipment.enums.ValueLevel;
 
 import java.time.Instant;
 
 /**
- * 设备申请单视图对象（联查单据号/设备/型号/申请人/审批教师）
+ * 设备申请单视图对象（联查单据号/设备/型号/申请人/审批教师/驳回信息）
  */
 public record BookingVO(
         String id,
@@ -23,10 +22,11 @@ public record BookingVO(
         String purpose,
         Instant startAt,
         Instant endAt,
-        ValueLevel valueLevelSnapshot,
         BookingStatus status,
         String cancelReason,
         Instant cancelledAt,
+        String rejectReason,
+        Instant rejectedAt,
         Instant createTime
 ) {
 }

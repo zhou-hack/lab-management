@@ -1,7 +1,6 @@
 package com.labmanage.module.equipment.vo;
 
 import com.labmanage.module.equipment.enums.EquipmentStatus;
-import com.labmanage.module.equipment.enums.ValueLevel;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -17,6 +16,7 @@ public record AssetVO(
         String modelCode,
         String equipmentName,
         String categoryId,
+        String categoryName,
         String departmentId,
         String departmentName,
         String locationDetail,
@@ -25,7 +25,6 @@ public record AssetVO(
         LocalDate purchaseDate,
         BigDecimal purchasePrice,
         LocalDate warrantyUntil,
-        ValueLevel valueLevel,
         EquipmentStatus status,
         Integer enabled
 ) {

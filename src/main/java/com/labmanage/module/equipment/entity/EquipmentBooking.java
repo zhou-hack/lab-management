@@ -34,7 +34,7 @@ public class EquipmentBooking extends BaseEntity {
     /** 借用结束时间（UTC，须晚于开始时间） */
     private Instant endAt;
 
-    /** 提交时设备价值分级快照（审批链按快照执行） */
+    /** 价值分级快照列（价值分级已移除，恒为 NORMAL；列 NOT NULL 零改表保留） */
     private ValueLevel valueLevelSnapshot;
 
     /** 借用状态 */

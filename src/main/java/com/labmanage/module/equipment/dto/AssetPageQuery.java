@@ -20,6 +20,9 @@ public class AssetPageQuery extends BasePageQuery {
     /** 型号过滤 */
     private Long modelId;
 
+    /** 分类过滤（按型号所属分类） */
+    private Long categoryId;
+
     /** 状态过滤（仅维护权限者生效） */
     private EquipmentStatus status;
 
@@ -45,6 +48,14 @@ public class AssetPageQuery extends BasePageQuery {
 
     public void setModelId(Long modelId) {
         this.modelId = modelId;
+    }
+
+    public Long getCategoryId() {
+        return categoryId;
+    }
+
+    public void setCategoryId(Long categoryId) {
+        this.categoryId = categoryId;
     }
 
     public EquipmentStatus getStatus() {

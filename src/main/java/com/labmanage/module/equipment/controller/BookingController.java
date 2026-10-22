@@ -68,7 +68,7 @@ public class BookingController {
         return Result.success(bookingService.teacherPending(query));
     }
 
-    @Operation(summary = "教师初审（通过：普通即生效、贵重转终审；驳回意见必填）")
+    @Operation(summary = "教师初审（通过：申请即生效；驳回意见必填）")
     @SaCheckPermission("equipment:booking:teacher_review")
     @PutMapping("/{id}/teacher_review")
     public Result<Void> teacherReview(@PathVariable String id, @Valid @RequestBody BookingReviewRequest request) {
@@ -83,7 +83,7 @@ public class BookingController {
         return Result.success(bookingService.allBookings(query));
     }
 
-    @Operation(summary = "管理员终审/代批（贵重单终审；学生单超 24h 可代批）")
+    @Operation(summary = "管理员代批（学生单超 24h 可代批；历史遗留 PENDING_ADMIN 单仍可终审）")
     @SaCheckPermission("equipment:booking:admin_review")
     @PutMapping("/{id}/admin_review")
     public Result<Void> adminReview(@PathVariable String id, @Valid @RequestBody BookingReviewRequest request) {

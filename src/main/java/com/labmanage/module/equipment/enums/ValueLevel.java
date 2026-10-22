@@ -1,7 +1,8 @@
 package com.labmanage.module.equipment.enums;
 
 /**
- * 设备价值分级（NULL=待分类，禁止借用）
+ * 设备价值分级（价值分级已从台账移除；本枚举仅 equipment_booking.value_level_snapshot
+ * 保留列使用，新单恒为 NORMAL）
  */
 public enum ValueLevel {
 

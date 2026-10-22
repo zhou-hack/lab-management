@@ -13,11 +13,12 @@ import com.labmanage.module.equipment.dto.AssetPageQuery;
 import com.labmanage.module.equipment.dto.AssetTransferRequest;
 import com.labmanage.module.equipment.dto.AssetUpdateRequest;
 import com.labmanage.module.equipment.entity.EquipmentAsset;
+import com.labmanage.module.equipment.entity.EquipmentCategory;
 import com.labmanage.module.equipment.entity.EquipmentLocationHistory;
 import com.labmanage.module.equipment.entity.EquipmentModel;
 import com.labmanage.module.equipment.enums.EquipmentStatus;
-import com.labmanage.module.equipment.enums.ValueLevel;
 import com.labmanage.module.equipment.mapper.EquipmentAssetMapper;
+import com.labmanage.module.equipment.mapper.EquipmentCategoryMapper;
 import com.labmanage.module.equipment.mapper.EquipmentLocationHistoryMapper;
 import com.labmanage.module.equipment.mapper.EquipmentModelMapper;
 import com.labmanage.module.equipment.service.AssetService;
@@ -72,17 +73,20 @@ public class AssetServiceImpl implements AssetService {
 
     private final EquipmentAssetMapper assetMapper;
     private final EquipmentModelMapper modelMapper;
+    private final EquipmentCategoryMapper categoryMapper;
     private final EquipmentLocationHistoryMapper locationHistoryMapper;
     private final SysDepartmentMapper departmentMapper;
     private final SysUserMapper userMapper;
 
     public AssetServiceImpl(EquipmentAssetMapper assetMapper,
                             EquipmentModelMapper modelMapper,
+                            EquipmentCategoryMapper categoryMapper,
                             EquipmentLocationHistoryMapper locationHistoryMapper,
                             SysDepartmentMapper departmentMapper,
                             SysUserMapper userMapper) {
         this.assetMapper = assetMapper;
         this.modelMapper = modelMapper;
+        this.categoryMapper = categoryMapper;
         this.locationHistoryMapper = locationHistoryMapper;
         this.departmentMapper = departmentMapper;
         this.userMapper = userMapper;
@@ -191,12 +195,12 @@ public class AssetServiceImpl implements AssetService {
     private static final String[] EXPORT_HEADERS = {
             "资产编号", "序列号", "型号码", "设备名称", "品牌", "规格说明",
             "归口部门", "存放位置", "保管人", "购置日期", "购置价格(元)", "保修截止",
-            "价值分级", "状态", "启用", "入账时间(UTC)"
+            "状态", "启用", "入账时间(UTC)"
     };
 
     /** 导入列宽（与 EXPORT_HEADERS 顺序一致） */
     private static final int[] EXPORT_WIDTHS = {
-            16, 18, 20, 22, 14, 26, 18, 16, 12, 12, 14, 12, 10, 10, 8, 20
+            16, 18, 20, 22, 14, 26, 18, 16, 12, 12, 14, 12, 10, 8, 20
     };
 
     /** 导入状态文案/枚举名 → 枚举 */
@@ -204,12 +208,6 @@ public class AssetServiceImpl implements AssetService {
             "空闲", EquipmentStatus.IDLE, "IDLE", EquipmentStatus.IDLE,
             "维护中", EquipmentStatus.MAINTAINING, "MAINTAINING", EquipmentStatus.MAINTAINING,
             "已报废", EquipmentStatus.SCRAPPED, "SCRAPPED", EquipmentStatus.SCRAPPED
-    );
-
-    /** 导入价值分级文案/枚举名 → 枚举 */
-    private static final Map<String, ValueLevel> VALUE_LEVEL_BY_TEXT = Map.of(
-            "普通", ValueLevel.NORMAL, "NORMAL", ValueLevel.NORMAL,
-            "贵重", ValueLevel.VALUABLE, "VALUABLE", ValueLevel.VALUABLE
     );
 
     /** 单次导入行数上限（xlsx 默认上传体积约束下已足够，防止误传整库） */
@@ -381,14 +379,10 @@ public class AssetServiceImpl implements AssetService {
                     continue;
                 }
                 String levelText = text(row, columns, "价值分级");
-                ValueLevel valueLevel = null;
                 if (StringUtils.hasText(levelText)) {
-                    valueLevel = VALUE_LEVEL_BY_TEXT.get(levelText);
-                    if (valueLevel == null) {
-                        errors.add(new AssetImportResultVO.RowError(excelRow,
-                                "价值分级应为 普通/贵重：" + levelText));
-                        continue;
-                    }
+                    errors.add(new AssetImportResultVO.RowError(excelRow,
+                            "模板已不含「价值分级」列，请重新导出模板：当前值：" + levelText));
+                    continue;
                 }
                 Integer enabled = parseEnabled(text(row, columns, "启用"));
                 if (enabled == null) {
@@ -406,7 +400,6 @@ public class AssetServiceImpl implements AssetService {
                 asset.setPurchaseDate(purchaseDate);
                 asset.setPurchasePrice(price);
                 asset.setWarrantyUntil(warrantyUntil);
-                asset.setValueLevel(valueLevel);
                 asset.setStatus(status);
                 asset.setEnabled(enabled);
                 valid.add(asset);
@@ -463,6 +456,11 @@ public class AssetServiceImpl implements AssetService {
         if (query.getModelId() != null) {
             wrapper.eq(EquipmentAsset::getModelId, query.getModelId());
         }
+        if (query.getCategoryId() != null) {
+            // 资产无分类列，按型号所属分类过滤（子查询参数绑定，避免字符串拼接）
+            wrapper.apply("model_id IN (SELECT id FROM equipment_model WHERE category_id = {0})",
+                    query.getCategoryId());
+        }
         if (StringUtils.hasText(query.getKeyword())) {
             String keyword = query.getKeyword();
             List<Long> modelIds = modelMapper.selectList(new LambdaQueryWrapper<EquipmentModel>()
@@ -503,6 +501,10 @@ public class AssetServiceImpl implements AssetService {
                 assets.stream().map(EquipmentAsset::getModelId).collect(Collectors.toSet()),
                 modelMapper::selectBatchIds,
                 EquipmentModel::getId);
+        Map<Long, EquipmentCategory> categories = loadMap(
+                models.values().stream().map(EquipmentModel::getCategoryId).filter(Objects::nonNull).collect(Collectors.toSet()),
+                categoryMapper::selectBatchIds,
+                EquipmentCategory::getId);
         Map<Long, SysDepartment> departments = loadMap(
                 assets.stream().map(EquipmentAsset::getDepartmentId).filter(Objects::nonNull).collect(Collectors.toSet()),
                 departmentMapper::selectBatchIds,
@@ -514,6 +516,8 @@ public class AssetServiceImpl implements AssetService {
         return assets.stream()
                 .map(asset -> {
                     EquipmentModel model = models.get(asset.getModelId());
+                    EquipmentCategory category = model == null || model.getCategoryId() == null
+                            ? null : categories.get(model.getCategoryId());
                     SysDepartment department = departments.get(asset.getDepartmentId());
                     SysUser custodian = custodians.get(asset.getCustodianId());
                     return new AssetVO(
@@ -523,7 +527,8 @@ public class AssetServiceImpl implements AssetService {
                             asset.getModelId().toString(),
                             model != null ? model.getModelCode() : null,
                             model != null ? model.getEquipmentName() : null,
-                            model != null ? model.getCategoryId().toString() : null,
+                            model != null && model.getCategoryId() != null ? model.getCategoryId().toString() : null,
+                            category != null ? category.getCategoryName() : null,
                             asset.getDepartmentId() == null ? null : asset.getDepartmentId().toString(),
                             department != null ? department.getDepartmentName() : null,
                             asset.getLocationDetail(),
@@ -532,7 +537,6 @@ public class AssetServiceImpl implements AssetService {
                             asset.getPurchaseDate(),
                             asset.getPurchasePrice(),
                             asset.getWarrantyUntil(),
-                            asset.getValueLevel(),
                             asset.getStatus(),
                             asset.getEnabled()
                     );
@@ -678,13 +682,11 @@ public class AssetServiceImpl implements AssetService {
         if (row.warrantyUntil() != null) {
             cells[11].setCellValue(row.warrantyUntil().toString());
         }
-        cells[12].setCellValue(row.valueLevel() == null ? "待分类"
-                : row.valueLevel() == ValueLevel.NORMAL ? "普通" : "贵重");
-        cells[13].setCellValue(row.status() == EquipmentStatus.IDLE ? "空闲"
+        cells[12].setCellValue(row.status() == EquipmentStatus.IDLE ? "空闲"
                 : row.status() == EquipmentStatus.MAINTAINING ? "维护中" : "已报废");
-        cells[14].setCellValue(row.enabled() != null && row.enabled() == 1 ? "启用" : "停用");
+        cells[13].setCellValue(row.enabled() != null && row.enabled() == 1 ? "启用" : "停用");
         if (createTime != null) {
-            cells[15].setCellValue(EXCEL_DATETIME_UTC.format(createTime));
+            cells[14].setCellValue(EXCEL_DATETIME_UTC.format(createTime));
         }
         return cells;
     }

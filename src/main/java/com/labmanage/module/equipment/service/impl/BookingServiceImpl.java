@@ -42,7 +42,8 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * 设备使用申请实现（三权级两级审批；复用保留表结构，零改表）
+ * 设备使用申请实现（学生单教师初审通过即生效；教师本人申请免初审；
+ * 超 24h 管理员代批；复用保留表结构，零改表）
  * <p>
  * 冲突协议：申请/审批/借出统一「先锁 equipment_asset 行再校验时段」；
  * 时段重叠以 [start_at, end_at) 与 APPROVED/CHECKED_OUT 单相交判定。
@@ -137,11 +138,10 @@ public class BookingServiceImpl implements BookingService {
         document.setIdempotencyKey(UUID.randomUUID().toString());
         documentMapper.insert(document);
 
-        // 状态分流：学生单待教师初审；教师普通单直接通过；教师贵重单待管理员终审
-        ValueLevel snapshot = asset.getValueLevel();
+        // 状态分流：学生单待教师初审；教师本人申请免初审直接通过
         BookingStatus status = isStudent
                 ? BookingStatus.PENDING_TEACHER
-                : (snapshot == ValueLevel.VALUABLE ? BookingStatus.PENDING_ADMIN : BookingStatus.APPROVED);
+                : BookingStatus.APPROVED;
 
         EquipmentBooking booking = new EquipmentBooking();
         booking.setDocumentId(document.getId());
@@ -151,14 +151,15 @@ public class BookingServiceImpl implements BookingService {
         booking.setPurpose(request.purpose());
         booking.setStartAt(startAt);
         booking.setEndAt(endAt);
-        booking.setValueLevelSnapshot(snapshot);
+        // 价值分级已移除，快照列恒为 NORMAL（列 NOT NULL，零改表保留）
+        booking.setValueLevelSnapshot(ValueLevel.NORMAL);
         booking.setStatus(status);
         bookingMapper.insert(booking);
 
         writeEvent(document.getId(), "SUBMIT", null, status.name(), userId, "USER", null);
         if (status == BookingStatus.APPROVED) {
             writeEvent(document.getId(), "APPROVE", status.name(), status.name(), null, "SYSTEM",
-                    "教师本人申请普通设备，免初审直接通过");
+                    "教师本人申请，免初审直接通过");
         }
     }
 
@@ -220,13 +221,10 @@ public class BookingServiceImpl implements BookingService {
         BookingStatus from = booking.getStatus();
         if (approve) {
             requireNoOverlap(booking);
-            BookingStatus to = booking.getValueLevelSnapshot() == ValueLevel.VALUABLE
-                    ? BookingStatus.PENDING_ADMIN
-                    : BookingStatus.APPROVED;
-            booking.setStatus(to);
+            booking.setStatus(BookingStatus.APPROVED);
             bookingMapper.updateById(booking);
-            writeEvent(booking.getDocumentId(), "APPROVE", from.name(), to.name(), reviewerId, "USER",
-                    to == BookingStatus.PENDING_ADMIN ? "教师初审通过，转管理员终审（贵重设备）" : request.comment());
+            writeEvent(booking.getDocumentId(), "APPROVE", from.name(), BookingStatus.APPROVED.name(),
+                    reviewerId, "USER", request.comment());
         } else {
             booking.setStatus(BookingStatus.REJECTED);
             bookingMapper.updateById(booking);
@@ -256,7 +254,7 @@ public class BookingServiceImpl implements BookingService {
         }
 
         if (booking.getStatus() == BookingStatus.PENDING_ADMIN) {
-            // 贵重设备终审
+            // 历史遗留 PENDING_ADMIN 单终审（价值分级已移除，新单不再产生）
         } else if (booking.getStatus() == BookingStatus.PENDING_TEACHER) {
             // 代批：学生单教师初审超时 24h，管理员可代批
             if (booking.getCreateTime() == null

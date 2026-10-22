@@ -38,8 +38,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>
  * 覆盖三权级流程：学生/教师申请、时段双校验（提交只看 APPROVED/CHECKED_OUT
  * 占用、待审单不占时段；同槽并存单最后批准者冲突被拒）、
- * 教师初审（普通通过即生效、贵重转终审、驳回意见必填）、管理员终审与
- * 超 24h 代批、借出发放（设备置 IN_USE、重复借出拒绝、借出中禁删）、
+ * 教师初审（通过即生效、驳回意见必填）、管理员超 24h 代批、
+ * 借出发放（设备置 IN_USE、重复借出拒绝、借出中禁删）、
  * 归还（完好恢复空闲、损坏必填备注转维护中）、越权 403、撤销本人申请。
  * 测试数据用独立 91xxx ID 段自造，不依赖业务种子脚本执行状态。
  */
@@ -57,7 +57,7 @@ class BookingFlowTest {
     private static final long CATEGORY_ID = 910000000000000301L;
     private static final long MODEL_ID = 910000000000000201L;
     private static final long ASSET_NORMAL = 910000000000000101L;
-    private static final long ASSET_VALUABLE = 910000000000000102L;
+    private static final long ASSET_OTHER = 910000000000000102L;
 
     /** 演示账号（sql/add_equipment_booking_permission.sql 预置，id=10/11） */
     private static final long TEACHER_ID = 10L;
@@ -83,7 +83,7 @@ class BookingFlowTest {
 
     /** 流程中产生的申请单 ID（用例间传递） */
     private String normalBookingId;
-    private String valuableBookingId;
+    private String otherBookingId;
 
     @BeforeAll
     void prepare() {
@@ -143,16 +143,16 @@ class BookingFlowTest {
 
     @Test
     @Order(4)
-    void shouldApplyNormalAndValuableBooking() throws Exception {
-        // 学生申请普通设备（指定审批教师）→ 待教师初审
+    void shouldApplyBooking() throws Exception {
+        // 学生申请设备（指定审批教师）→ 待教师初审
         assertOk(post(studentToken, BOOKINGS, applyBody(ASSET_NORMAL)));
         normalBookingId = findMyBookingIdByAsset(String.valueOf(ASSET_NORMAL));
         assertEquals("PENDING_TEACHER", bookingStatus(normalBookingId));
 
-        // 学生申请贵重设备 → 待教师初审（初审通过后转管理员终审）
-        assertOk(post(studentToken, BOOKINGS, applyBody(ASSET_VALUABLE)));
-        valuableBookingId = findMyBookingIdByAsset(String.valueOf(ASSET_VALUABLE));
-        assertEquals("PENDING_TEACHER", bookingStatus(valuableBookingId));
+        // 错开时段再申请一台设备 → 待教师初审（供后续损坏归还用例）
+        assertOk(post(studentToken, BOOKINGS, applyBodyOffset(ASSET_OTHER, 3600 * 24)));
+        otherBookingId = findMyBookingIdByAsset(String.valueOf(ASSET_OTHER));
+        assertEquals("PENDING_TEACHER", bookingStatus(otherBookingId));
     }
 
     @Test
@@ -174,26 +174,26 @@ class BookingFlowTest {
 
     @Test
     @Order(6)
-    void shouldTeacherReviewNormalAndValuable() throws Exception {
+    void shouldTeacherReviewAndApprove() throws Exception {
         // 待审单不占时段：同设备同槽可再提交一张并存待审单
         assertOk(post(studentToken, BOOKINGS, applyBody(ASSET_NORMAL)));
         String duplicateId = findMyBookingIdByAsset(String.valueOf(ASSET_NORMAL));
 
-        // 教师待办含三张学生单（普通/贵重/同槽并存）
+        // 教师待办含三张学生单（普通/错时段/同槽并存）
         JsonNode pending = json(get(teacherToken, BOOKINGS + "/teacher_pending")).path("data").path("records");
         assertTrue(pending.size() >= 3, "教师待办应至少 3 条，实际：" + pending);
 
-        // 初审通过普通单 → 直接 APPROVED
+        // 初审通过 → 直接 APPROVED
         assertOk(put(teacherToken, BOOKINGS + "/" + normalBookingId + "/teacher_review",
                 Map.of("action", "approve")));
         assertEquals("APPROVED", bookingStatus(normalBookingId));
 
-        // 初审通过贵重单 → 转管理员终审
-        assertOk(put(teacherToken, BOOKINGS + "/" + valuableBookingId + "/teacher_review",
+        // 错时段单初审通过 → APPROVED
+        assertOk(put(teacherToken, BOOKINGS + "/" + otherBookingId + "/teacher_review",
                 Map.of("action", "approve")));
-        assertEquals("PENDING_ADMIN", bookingStatus(valuableBookingId));
+        assertEquals("APPROVED", bookingStatus(otherBookingId));
 
-        // 普通单已 APPROVED → 同槽新申请提交时被拒（提交校验只看 APPROVED/CHECKED_OUT）
+        // 已 APPROVED → 同槽新申请提交时被拒（提交校验只看 APPROVED/CHECKED_OUT）
         assertError(post(studentToken, BOOKINGS, applyBody(ASSET_NORMAL)), 409, 40900);
 
         // 同槽并存单后批准 → 最后批准者冲突被拒，单据保持待审
@@ -219,11 +219,7 @@ class BookingFlowTest {
 
     @Test
     @Order(8)
-    void shouldAdminReviewValuableBooking() throws Exception {
-        // 贵重单：管理员终审通过
-        assertOk(put(adminToken, BOOKINGS + "/" + valuableBookingId + "/admin_review",
-                Map.of("action", "approve")));
-        assertEquals("APPROVED", bookingStatus(valuableBookingId));
+    void shouldAdminActOnOverdueBooking() throws Exception {
         // 学生单未超 24h 不可代批（新造一张待审单验证）
         Map<String, Object> body = applyBodyOffset(ASSET_NORMAL, 3600 * 48);
         assertOk(post(studentToken, BOOKINGS, body));
@@ -257,9 +253,9 @@ class BookingFlowTest {
         // 同设备同时段再申请 → 被 CHECKED_OUT 单占位拒绝
         assertError(post(studentToken, BOOKINGS, applyBody(ASSET_NORMAL)), 409, 40900);
         // 非本人教师初审 → 禁止
-        Map<String, Object> other = applyBodyOffset(ASSET_VALUABLE, 3600 * 24);
+        Map<String, Object> other = applyBodyOffset(ASSET_OTHER, 3600 * 48);
         assertOk(post(studentToken, BOOKINGS, other));
-        String otherId = findMyBookingIdByAsset(String.valueOf(ASSET_VALUABLE));
+        String otherId = findMyBookingIdByAsset(String.valueOf(ASSET_OTHER));
         // 该单指定审批教师是 teacher1，由学生本人无法初审（无权限）
         assertError(put(studentToken, BOOKINGS + "/" + otherId + "/teacher_review",
                 Map.of("action", "approve")), 403, 40300);
@@ -277,17 +273,17 @@ class BookingFlowTest {
         assertEquals("IDLE", assetStatus(ASSET_NORMAL));
         assertEquals("RETURNED", usageStatus(normalBookingId));
 
-        // 贵重单借出后损坏归还：备注必填 → 校验 400；带备注后设备转 MAINTAINING
-        assertOk(put(adminToken, BOOKINGS + "/" + valuableBookingId + "/checkout", null));
-        assertError(put(adminToken, BOOKINGS + "/" + valuableBookingId + "/return",
+        // 第二台设备借出后损坏归还：备注必填 → 校验 400；带备注后设备转 MAINTAINING
+        assertOk(put(adminToken, BOOKINGS + "/" + otherBookingId + "/checkout", null));
+        assertError(put(adminToken, BOOKINGS + "/" + otherBookingId + "/return",
                 Map.of("condition", "DAMAGED")), 400, 40000);
-        assertOk(put(adminToken, BOOKINGS + "/" + valuableBookingId + "/return",
+        assertOk(put(adminToken, BOOKINGS + "/" + otherBookingId + "/return",
                 Map.of("condition", "DAMAGED", "note", "归还时屏幕碎裂")));
-        assertEquals("RETURNED", bookingStatus(valuableBookingId));
-        assertEquals("MAINTAINING", assetStatus(ASSET_VALUABLE), "损坏归还后设备应为 MAINTAINING");
+        assertEquals("RETURNED", bookingStatus(otherBookingId));
+        assertEquals("MAINTAINING", assetStatus(ASSET_OTHER), "损坏归还后设备应为 MAINTAINING");
 
         // 已结束单不可再次归还
-        assertError(put(adminToken, BOOKINGS + "/" + valuableBookingId + "/return",
+        assertError(put(adminToken, BOOKINGS + "/" + otherBookingId + "/return",
                 Map.of("condition", "NORMAL")), 409, 40900);
     }
 
@@ -389,8 +385,8 @@ class BookingFlowTest {
                 INSERT INTO equipment_model (id, category_id, model_code, equipment_name, specification, unit_name)
                 VALUES (?, ?, 'IT_BOOKING_MODEL', '集成测试设备', '测试规格', '台')
                 """, MODEL_ID, CATEGORY_ID);
-        insertTestAsset(ASSET_NORMAL, "IT-BK-001", "NORMAL");
-        insertTestAsset(ASSET_VALUABLE, "IT-BK-002", "VALUABLE");
+        insertTestAsset(ASSET_NORMAL, "IT-BK-001");
+        insertTestAsset(ASSET_OTHER, "IT-BK-002");
 
         // 演示账号兜底：test 库未执行过账号脚本时自建（role 2=TEACHER / 3=STUDENT）
         jdbcTemplate.update("INSERT INTO sys_person_roster (id, person_no, person_type, real_name, phone, department_id)"
@@ -421,12 +417,12 @@ class BookingFlowTest {
                 STUDENT_ID, STUDENT_ID, STUDENT_ID);
     }
 
-    private void insertTestAsset(long assetId, String assetCode, String valueLevel) {
+    private void insertTestAsset(long assetId, String assetCode) {
         // test 库 equipment_asset.lab_id 为 NOT NULL（表结构保留空间模块时期定义），给种子实验室 1
         jdbcTemplate.update("""
-                INSERT INTO equipment_asset (id, model_id, asset_code, lab_id, department_id, value_level, status, enabled)
-                VALUES (?, ?, ?, 1, 1, ?, 'IDLE', 1)
-                """, assetId, MODEL_ID, assetCode, valueLevel);
+                INSERT INTO equipment_asset (id, model_id, asset_code, lab_id, department_id, status, enabled)
+                VALUES (?, ?, ?, 1, 1, 'IDLE', 1)
+                """, assetId, MODEL_ID, assetCode);
     }
 
     /** 清理本测试产生的申请链数据（事件→流水→申请→单据，FK 顺序） */

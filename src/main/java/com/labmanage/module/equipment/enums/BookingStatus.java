@@ -8,7 +8,7 @@ public enum BookingStatus {
     /** 学生单待教师初审 */
     PENDING_TEACHER,
 
-    /** 贵重设备待管理员终审 */
+    /** 历史遗留：待管理员终审（价值分级已移除，新单不再产生该状态） */
     PENDING_ADMIN,
 
     /** 审批通过（可登记借出发放） */

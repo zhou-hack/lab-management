@@ -3,14 +3,13 @@ package com.labmanage.module.equipment.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.labmanage.common.core.BaseEntity;
 import com.labmanage.module.equipment.enums.EquipmentStatus;
-import com.labmanage.module.equipment.enums.ValueLevel;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 
 /**
- * 设备台账实体（资产编号唯一，每台/每套一行；value_level 为空=待分类禁止借用）
+ * 设备台账实体（资产编号唯一，每台/每套一行）
  */
 @TableName("equipment_asset")
 public class EquipmentAsset extends BaseEntity {
@@ -41,18 +40,6 @@ public class EquipmentAsset extends BaseEntity {
 
     /** 保修截止（纯日期） */
     private LocalDate warrantyUntil;
-
-    /** 价值分级（NULL=待分类，禁止借用） */
-    private ValueLevel valueLevel;
-
-    /** 定级理由 */
-    private String classificationReason;
-
-    /** 定级人（→ sys_user.id） */
-    private Long classifiedBy;
-
-    /** 定级时间（UTC） */
-    private Instant classifiedAt;
 
     /** 设备状态（报废为最终态） */
     private EquipmentStatus status;
@@ -130,38 +117,6 @@ public class EquipmentAsset extends BaseEntity {
 
     public void setWarrantyUntil(LocalDate warrantyUntil) {
         this.warrantyUntil = warrantyUntil;
-    }
-
-    public ValueLevel getValueLevel() {
-        return valueLevel;
-    }
-
-    public void setValueLevel(ValueLevel valueLevel) {
-        this.valueLevel = valueLevel;
-    }
-
-    public String getClassificationReason() {
-        return classificationReason;
-    }
-
-    public void setClassificationReason(String classificationReason) {
-        this.classificationReason = classificationReason;
-    }
-
-    public Long getClassifiedBy() {
-        return classifiedBy;
-    }
-
-    public void setClassifiedBy(Long classifiedBy) {
-        this.classifiedBy = classifiedBy;
-    }
-
-    public Instant getClassifiedAt() {
-        return classifiedAt;
-    }
-
-    public void setClassifiedAt(Instant classifiedAt) {
-        this.classifiedAt = classifiedAt;
     }
 
     public EquipmentStatus getStatus() {

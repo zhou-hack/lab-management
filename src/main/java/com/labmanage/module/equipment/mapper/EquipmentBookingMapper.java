@@ -20,9 +20,10 @@ import java.util.List;
 public interface EquipmentBookingMapper extends BaseMapper<EquipmentBooking> {
 
     /**
-     * 申请单分页联查（单据号/设备/型号/申请人/审批教师）。
+     * 申请单分页联查（单据号/设备/型号/申请人/审批教师/驳回信息）。
      * 数据范围由 service 层填充：applicantId=本人申请、teacherId=教师待办、
      * 两者皆空=管理员全量。
+     * 驳回原因/时间取 document_event 最新 REJECT 事件（REJECTED 为终态，至多一条）。
      */
     @Select("""
             <script>
@@ -30,14 +31,21 @@ public interface EquipmentBookingMapper extends BaseMapper<EquipmentBooking> {
                    m.equipment_name, m.model_code, m.brand,
                    b.applicant_id, u.real_name AS applicant_name,
                    b.approval_teacher_id, t.real_name AS approval_teacher_name,
-                   b.purpose, b.start_at, b.end_at, b.value_level_snapshot, b.status,
-                   b.cancel_reason, b.cancelled_at, b.create_time
+                   b.purpose, b.start_at, b.end_at, b.status,
+                   b.cancel_reason, b.cancelled_at,
+                   re.reason AS reject_reason, re.occurred_at AS rejected_at,
+                   b.create_time
             FROM equipment_booking b
             JOIN biz_document d ON d.id = b.document_id AND d.deleted = 0
             JOIN equipment_asset a ON a.id = b.asset_id
             JOIN equipment_model m ON m.id = a.model_id
             JOIN sys_user u ON u.id = b.applicant_id
             LEFT JOIN sys_user t ON t.id = b.approval_teacher_id
+            LEFT JOIN (
+                SELECT document_id, reason, occurred_at
+                FROM document_event
+                WHERE event_type = 'REJECT' AND deleted = 0
+            ) re ON re.document_id = d.id
             WHERE b.deleted = 0
             <if test="q.applicantId != null">AND b.applicant_id = #{q.applicantId}</if>
             <if test="q.teacherId != null">AND b.approval_teacher_id = #{q.teacherId}</if>
