@@ -1,4 +1,4 @@
-﻿-- ============================================================================
+-- ============================================================================
 -- 场地预约「节次时间轴 + 批量周期预约」增量部署脚本（幂等，可重复执行）
 -- 版本：2026-10-20
 --
@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS class_period (
     id          BIGINT      NOT NULL                COMMENT '主键（固定小 ID，与节次号一致）',
     period_no   INT         NOT NULL                COMMENT '节次号（全局唯一，升序）',
     period_name VARCHAR(32) NOT NULL                COMMENT '显示名（如 第1节）',
-    start_clock TIME(0)     NOT NULL                COMMENT '开始时刻（上海本地时间）',
-    end_clock   TIME(0)     NOT NULL                COMMENT '结束时刻（上海本地时间，须晚于 start_clock）',
+    start_clock TIME(0)     NOT NULL                COMMENT '开始时刻（上海时间）',
+    end_clock   TIME(0)     NOT NULL                COMMENT '结束时刻（上海时间，须晚于 start_clock）',
     enabled     TINYINT     NOT NULL DEFAULT 1      COMMENT '启用：1启用 0停用',
     create_time DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)) COMMENT '创建时间（UTC）',
     update_time DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间（UTC）',
@@ -36,18 +36,22 @@ CREATE TABLE IF NOT EXISTS class_period (
     CONSTRAINT chk_class_period_clock CHECK (start_clock < end_clock),
     CONSTRAINT chk_class_period_enabled CHECK (enabled IN (0, 1)),
     CONSTRAINT chk_class_period_deleted CHECK (deleted IN (0, 1))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='节次定义表（预约按日期+节次选择，CLOCK 为上海本地时刻）';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='节次定义表（预约按日期+节次选择，CLOCK 为上海时刻）';
 
--- 节次种子（示例作息，部署前由运维按学校实际作息调整）
+-- 节次种子（按《福州软件职业技术学院教学作息时间表》2026-10-08 起执行）
 INSERT IGNORE INTO class_period (id, period_no, period_name, start_clock, end_clock) VALUES
-(1, 1, '第1节', '08:00:00', '08:45:00'),
-(2, 2, '第2节', '08:55:00', '09:40:00'),
-(3, 3, '第3节', '10:00:00', '10:45:00'),
-(4, 4, '第4节', '10:55:00', '11:40:00'),
-(5, 5, '第5节', '14:00:00', '14:45:00'),
-(6, 6, '第6节', '14:55:00', '15:40:00'),
-(7, 7, '第7节', '16:00:00', '16:45:00'),
-(8, 8, '第8节', '16:55:00', '17:40:00');
+(1, 1, '第1节', '08:25:00', '09:10:00'),
+(2, 2, '第2节', '09:15:00', '10:00:00'),
+(3, 3, '第3节', '10:10:00', '10:55:00'),
+(4, 4, '第4节', '11:00:00', '11:45:00'),
+(5, 5, '第5节', '13:50:00', '14:35:00'),
+(6, 6, '第6节', '14:40:00', '15:25:00'),
+(7, 7, '第7节', '15:35:00', '16:20:00'),
+(8, 8, '第8节', '16:25:00', '17:10:00'),
+(9, 9, '第9节', '18:30:00', '19:15:00'),
+(10, 10, '第10节', '19:20:00', '20:05:00'),
+(11, 11, '第11节', '20:10:00', '20:55:00'),
+(12, 12, '第12节', '21:00:00', '21:45:00');
 
 -- 2) 周期预约规则表（一次审批，批量生成各周预约单与占用槽）---------------------
 CREATE TABLE IF NOT EXISTS lab_booking_series (
@@ -62,7 +66,7 @@ CREATE TABLE IF NOT EXISTS lab_booking_series (
     weekday           TINYINT      NOT NULL                COMMENT '星期：1周一 … 7周日（ISO 8601）',
     start_period_id   BIGINT       NOT NULL                COMMENT '起始节次（→ class_period.id）',
     end_period_id     BIGINT       NOT NULL                COMMENT '结束节次（→ class_period.id）',
-    cycle_start_date  DATE         NOT NULL                COMMENT '周期开始日期（纯日期，上海本地）',
+    cycle_start_date  DATE         NOT NULL                COMMENT '周期开始日期（纯日期，上海）',
     cycle_end_date    DATE         NOT NULL                COMMENT '周期结束日期（纯日期，须不早于开始日期）',
     status            VARCHAR(32)  NOT NULL                COMMENT '状态：PENDING待审批/APPROVED已批准/REJECTED已驳回/CANCELLED已取消',
     reject_reason     VARCHAR(512) NULL                    COMMENT '驳回原因',
@@ -96,7 +100,7 @@ CREATE TABLE IF NOT EXISTS lab_booking_series (
 SET @dp = DATABASE();
 SET @ddl_col = (
     SELECT IF(COUNT(*) = 0,
-        'ALTER TABLE lab_booking ADD COLUMN booking_date DATE NULL COMMENT ''预约日期（纯日期，上海本地日界）''',
+        'ALTER TABLE lab_booking ADD COLUMN booking_date DATE NULL COMMENT ''预约日期（纯日期，上海日界）''',
         'DO 0')
     FROM information_schema.columns
     WHERE table_schema = @dp AND table_name = 'lab_booking' AND column_name = 'booking_date');

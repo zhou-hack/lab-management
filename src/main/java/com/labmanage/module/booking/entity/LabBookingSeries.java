@@ -48,7 +48,7 @@ public class LabBookingSeries extends BaseEntity {
     /** 结束节次（→ class_period.id） */
     private Long endPeriodId;
 
-    /** 周期开始日期（纯日期，上海本地） */
+    /** 周期开始日期（纯日期，上海） */
     private LocalDate cycleStartDate;
 
     /** 周期结束日期（纯日期，须不早于开始日期） */

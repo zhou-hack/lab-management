@@ -28,7 +28,7 @@ public class LabBooking extends BaseEntity {
     /** 申请人（→ sys_user.id） */
     private Long applicantId;
 
-    /** 预约日期（纯日期，上海本地日界；周期/节次预约必填） */
+    /** 预约日期（纯日期，上海日界；周期/节次预约必填） */
     private LocalDate bookingDate;
 
     /** 起始节次（→ class_period.id；节次预约必填） */

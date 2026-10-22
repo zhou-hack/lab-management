@@ -4,7 +4,7 @@ import java.time.LocalTime;
 
 /**
  * 节次选项（时间轴节次卡片数据）。
- * id 为固定小 ID（与节次号一致），startClock/endClock 为上海本地 HH:mm。
+ * id 为固定小 ID（与节次号一致），startClock/endClock 为上海 HH:mm。
  */
 public record PeriodVO(
         String id,

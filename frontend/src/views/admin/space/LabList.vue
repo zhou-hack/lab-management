@@ -448,7 +448,7 @@
             </div>
             <div class="is_span2">
               <dt>开放时段</dt>
-              <dd>{{ previewDetail.openStart }} - {{ previewDetail.openEnd }}（上海本地）</dd>
+              <dd>{{ previewDetail.openStart }} - {{ previewDetail.openEnd }}</dd>
             </div>
             <div class="is_span2">
               <dt>设备配置</dt>

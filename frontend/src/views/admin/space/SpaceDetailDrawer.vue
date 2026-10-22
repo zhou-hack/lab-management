@@ -93,7 +93,7 @@
           </el-descriptions-item>
         </el-descriptions>
         <p class="t-hint space_detail__tz">
-          开放时段为上海本地时间；时间点为 UTC 存储，此处按上海时区展示
+          时间点为 UTC 存储，此处按上海时区展示
         </p>
       </div>
 
@@ -264,7 +264,7 @@ const usage = computed(() => {
     return {
       label: '非开放时段',
       pill: 'pill--muted',
-      hint: `开放时间 ${space.openStart}-${space.openEnd}（上海本地）`
+      hint: `开放时间 ${space.openStart}-${space.openEnd}`
     }
   }
   return { label: '空闲可用', pill: 'pill--ok', hint: '当前无进行中的预约，可在开放时段内预约' }
@@ -331,7 +331,7 @@ function dateLabel(dateStr) {
   return `${m}月${d}日 ${weekday}`
 }
 
-/** 节次区间 + 上海本地时分 */
+/** 节次区间 + 上海时分 */
 function periodText(booking) {
   const start = booking.startPeriodName
   const end = booking.endPeriodName

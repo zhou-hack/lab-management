@@ -72,12 +72,12 @@ public class SpaceServiceImpl implements SpaceService {
             "updateTime", "update_time"
     );
 
-    /** 开放时段缺省值与 HH:mm 输入/输出格式（上海本地时间，无时区换算） */
+    /** 开放时段缺省值与 HH:mm 输入/输出格式（上海时间，无时区换算） */
     private static final LocalTime DEFAULT_OPEN_START = LocalTime.of(8, 0);
     private static final LocalTime DEFAULT_OPEN_END = LocalTime.of(21, 0);
     private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
 
-    /** 导出与展示用业务时区（AGENTS：页面展示按上海本地日历） */
+    /** 导出与展示用业务时区（AGENTS：页面展示按上海日历） */
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
     private static final DateTimeFormatter EXPORT_TIME = DateTimeFormatter
             .ofPattern("yyyy-MM-dd HH:mm").withZone(SHANGHAI);

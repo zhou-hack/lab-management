@@ -36,7 +36,7 @@
           </el-select>
         </el-form-item>
         <el-form-item
-          label="日期（上海本地）"
+          label="日期"
           prop="date"
         >
           <el-date-picker
@@ -107,7 +107,7 @@
           v-if="openWindow"
           class="t-sub"
         >
-          开放时段 {{ openWindow }}（上海本地时间）
+          开放时段 {{ openWindow }}
         </p>
         <div
           v-if="occupiedSegments.length"

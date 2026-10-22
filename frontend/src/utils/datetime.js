@@ -25,7 +25,7 @@ function toShanghaiMs(value) {
 }
 
 /**
- * UTC 时间点 → 上海本地显示串。
+ * UTC 时间点 → 上海显示串。
  * @param {string} value ISO 8601（Z 或带偏移）
  * @param {{ withDate?: boolean, withSeconds?: boolean }} opts 默认 'YYYY-MM-DD HH:mm'
  */
@@ -41,7 +41,7 @@ export function formatInstant(value, opts = {}) {
   return withDate ? `${date} ${time}` : time
 }
 
-/** 起止时间点 → 上海本地展示区间（同日省略第二个日期，如「10-14 08:00 ~ 10:00」） */
+/** 起止时间点 → 上海展示区间（同日省略第二个日期，如「10-14 08:00 ~ 10:00」） */
 export function formatRange(startAt, endAt) {
   const s = formatInstant(startAt)
   const e = formatInstant(endAt)
@@ -53,7 +53,7 @@ export function formatRange(startAt, endAt) {
 }
 
 /**
- * 上海本地日期（YYYY-MM-DD）+ 时间（HH:mm）→ 带偏移 ISO 8601 提交后端。
+ * 上海日期（YYYY-MM-DD）+ 时间（HH:mm）→ 带偏移 ISO 8601 提交后端。
  * 固定 +08:00 偏移，后端 OffsetDateTime 解析后转 UTC 存储。
  */
 export function shanghaiLocalToIso(date, time) {
@@ -64,14 +64,14 @@ export function shanghaiLocalToIso(date, time) {
   return `${y}-${pad(mo)}-${pad(d)}T${pad(h)}:${pad(mi)}:00+08:00`
 }
 
-/** 当前上海本地日期（YYYY-MM-DD） */
+/** 当前上海日期（YYYY-MM-DD） */
 export function todayShanghai() {
   const d = new Date(Date.now() + SHANGHAI_OFFSET_MIN * 60_000)
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`
 }
 
 /**
- * 上海本地「现在时刻」（HH:mm）。供节次三色小卡片前端派生使用
+ * 上海「现在时刻」（HH:mm）。供节次三色小卡片前端派生使用
  * （当前时间只做展示层计算，不落库、不提交后端）。
  */
 export function nowShanghaiClock() {
@@ -80,7 +80,7 @@ export function nowShanghaiClock() {
 }
 
 /**
- * 上海本地时刻（YYYY-MM-DD HH:mm）→ 从当日 00:00 起的分钟数（0-1439）。
+ * 上海时刻（YYYY-MM-DD HH:mm）→ 从当日 00:00 起的分钟数（0-1439）。
  * 非法输入返回 null；用于节次卡片的「已过去/进行中」判定。
  */
 export function shanghaiMinutesOf(date, time) {
@@ -92,7 +92,7 @@ export function shanghaiMinutesOf(date, time) {
 }
 
 /**
- * UTC 时间点 → 上海本地当日 HH:mm（节次占用段与当前时刻比较用）。
+ * UTC 时间点 → 上海当日 HH:mm（节次占用段与当前时刻比较用）。
  */
 export function shanghaiClockOf(instantValue) {
   const ms = toShanghaiMs(instantValue)
@@ -101,7 +101,7 @@ export function shanghaiClockOf(instantValue) {
   return `${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}`
 }
 
-/** 上海本地日期加减天数（YYYY-MM-DD），n 可为负 */
+/** 上海日期加减天数（YYYY-MM-DD），n 可为负 */
 export function addDaysShanghai(dateStr, n) {
   const [y, mo, d] = String(dateStr).split('-').map(Number)
   const ms = Date.UTC(y, mo - 1, d) + n * 86_400_000
@@ -110,7 +110,7 @@ export function addDaysShanghai(dateStr, n) {
 }
 
 /**
- * 两个上海本地 HH:mm 的分钟差（b - a），跨零点按负值处理（仅当日场景）。
+ * 两个上海 HH:mm 的分钟差（b - a），跨零点按负值处理（仅当日场景）。
  */
 export function minutesBetween(timeA, timeB) {
   const toMin = (t) => {

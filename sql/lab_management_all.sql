@@ -1,4 +1,4 @@
--- ============================================================================
+﻿-- ============================================================================
 -- 实验室设备管理系统 · 各模块数据库整合脚本（除 sys_rbac.sql 、sys_policy.sql 、assistant_grant.sql 外的全部建表）
 -- ============================================================================
 -- 执行前提（顺序固定）：
@@ -77,8 +77,8 @@ CREATE TABLE lab (
     location_detail VARCHAR(128) NULL                   COMMENT '位置（自由文本，如 A 楼七层 A703）',
     capacity       INT          NOT NULL                COMMENT '容纳人数（>0）',
     facilities     TEXT         NULL                    COMMENT '配套设备清单（自由文本）',
-    open_start     TIME(0)      NOT NULL DEFAULT '08:00:00' COMMENT '每日开放开始（上海本地时间）',
-    open_end       TIME(0)      NOT NULL DEFAULT '21:00:00' COMMENT '每日开放结束（上海本地时间，须晚于 open_start）',
+    open_start     TIME(0)      NOT NULL DEFAULT '08:00:00' COMMENT '每日开放开始（上海时间）',
+    open_end       TIME(0)      NOT NULL DEFAULT '21:45:00' COMMENT '每日开放结束（上海时间，须晚于 open_start）',
     status         VARCHAR(32)  NOT NULL DEFAULT 'AVAILABLE' COMMENT '状态：AVAILABLE可用/MAINTAINING维护中/CLOSED关闭',
     visible        TINYINT      NOT NULL DEFAULT 1 COMMENT '可见性：1可见 2不可见（停用；预约/查询列表只出 1，2026-10-19 需求定稿新增）',
     create_time    DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)) COMMENT '创建时间（UTC）',
@@ -119,13 +119,13 @@ INSERT INTO lab (id, lab_name, lab_type, location_detail, capacity, facilities,
 VALUES
 (1, 'A703 网络实训室', 'TRAINING_ROOM', 'A 楼七层 A703', 50,
     '网络综合布线实训环境：56 口配线架 12 组、路由交换设备 12 套、实训工位 50 个',
-    '08:00', '21:00', 'AVAILABLE', 1, 1),
+    '08:00', '21:45', 'AVAILABLE', 1, 1),
 (2, 'C703 电子电工实训室', 'TRAINING_ROOM', 'C 楼七层 C703', 45,
     '示波器 20 台、直流稳压电源 20 台、电工电子实训台 12 位',
-    '08:00', '21:00', 'AVAILABLE', 1, 1),
+    '08:00', '21:45', 'AVAILABLE', 1, 1),
 (3, '教学楼201多媒体教室', 'CLASSROOM', '教学楼二层 201', 60,
     '投影仪 1 台、音响系统 1 套、中控讲台 1 位',
-    '08:00', '21:00', 'AVAILABLE', 1, 1);
+    '08:00', '21:45', 'AVAILABLE', 1, 1);
 
 -- ----------------------------------------------------------------------------
 -- 1.4 场地权限（155-159，标识规范 模块:资源:操作，module_code='space'）
@@ -1225,14 +1225,14 @@ INSERT INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
 -- ############################################################################
 
 -- ----------------------------------------------------------------------------
--- 6.1 class_period 节次定义表（预约按"日期+节次"选择；CLOCK=TIME(0) 上海本地）
+-- 6.1 class_period 节次定义表（预约按"日期+节次"选择；CLOCK=TIME(0) 上海）
 -- ----------------------------------------------------------------------------
 CREATE TABLE class_period (
     id          BIGINT      NOT NULL                COMMENT '主键（固定小 ID，与节次号一致）',
     period_no   INT         NOT NULL                COMMENT '节次号（全局唯一，升序）',
     period_name VARCHAR(32) NOT NULL                COMMENT '显示名（如 第1节）',
-    start_clock TIME(0)     NOT NULL                COMMENT '开始时刻（上海本地时间）',
-    end_clock   TIME(0)     NOT NULL                COMMENT '结束时刻（上海本地时间，须晚于 start_clock）',
+    start_clock TIME(0)     NOT NULL                COMMENT '开始时刻（上海时间）',
+    end_clock   TIME(0)     NOT NULL                COMMENT '结束时刻（上海时间，须晚于 start_clock）',
     enabled     TINYINT     NOT NULL DEFAULT 1      COMMENT '启用：1启用 0停用',
     create_time DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)) COMMENT '创建时间（UTC）',
     update_time DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间（UTC）',
@@ -1246,16 +1246,20 @@ CREATE TABLE class_period (
     CONSTRAINT chk_class_period_deleted CHECK (deleted IN (0, 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='节次定义表';
 
--- 节次种子（示例作息，部署前由运维按学校实际作息调整）
+-- 节次种子（按《福州软件职业技术学院教学作息时间表》2026-10-08 起执行）
 INSERT INTO class_period (id, period_no, period_name, start_clock, end_clock) VALUES
-(1, 1, '第1节', '08:00:00', '08:45:00'),
-(2, 2, '第2节', '08:55:00', '09:40:00'),
-(3, 3, '第3节', '10:00:00', '10:45:00'),
-(4, 4, '第4节', '10:55:00', '11:40:00'),
-(5, 5, '第5节', '14:00:00', '14:45:00'),
-(6, 6, '第6节', '14:55:00', '15:40:00'),
-(7, 7, '第7节', '16:00:00', '16:45:00'),
-(8, 8, '第8节', '16:55:00', '17:40:00');
+(1, 1, '第1节', '08:25:00', '09:10:00'),
+(2, 2, '第2节', '09:15:00', '10:00:00'),
+(3, 3, '第3节', '10:10:00', '10:55:00'),
+(4, 4, '第4节', '11:00:00', '11:45:00'),
+(5, 5, '第5节', '13:50:00', '14:35:00'),
+(6, 6, '第6节', '14:40:00', '15:25:00'),
+(7, 7, '第7节', '15:35:00', '16:20:00'),
+(8, 8, '第8节', '16:25:00', '17:10:00'),
+(9, 9, '第9节', '18:30:00', '19:15:00'),
+(10, 10, '第10节', '19:20:00', '20:05:00'),
+(11, 11, '第11节', '20:10:00', '20:55:00'),
+(12, 12, '第12节', '21:00:00', '21:45:00');
 
 -- ----------------------------------------------------------------------------
 -- 6.2 lab_booking_series 周期预约规则（2026-10-19 需求定稿：
@@ -1274,7 +1278,7 @@ CREATE TABLE lab_booking_series (
     weekday           TINYINT      NOT NULL                COMMENT '星期：1周一 … 7周日（ISO 8601）',
     start_period_id   BIGINT       NOT NULL                COMMENT '起始节次（→ class_period.id）',
     end_period_id     BIGINT       NOT NULL                COMMENT '结束节次（→ class_period.id）',
-    cycle_start_date  DATE         NOT NULL                COMMENT '周期开始日期（纯日期，上海本地）',
+    cycle_start_date  DATE         NOT NULL                COMMENT '周期开始日期（纯日期，上海）',
     cycle_end_date    DATE         NOT NULL                COMMENT '周期结束日期（纯日期，须不早于开始日期）',
     status            VARCHAR(32)  NOT NULL                COMMENT '状态：PENDING待审批/APPROVED已批准/REJECTED已驳回/CANCELLED已取消',
     reject_reason     VARCHAR(512) NULL                    COMMENT '驳回原因',
@@ -1315,7 +1319,7 @@ CREATE TABLE lab_booking (
     teacher_id         BIGINT       NULL                    COMMENT '上课老师（→ sys_user.id，跨模块只建列不建外键）',
     purpose            VARCHAR(512) NOT NULL                COMMENT '用途说明',
     participant_count  INT          NOT NULL                COMMENT '参与人数（>0，且不超过场地容量）',
-    booking_date       DATE         NULL                    COMMENT '预约日期（纯日期，上海本地日界；新单必填，旧单兼容 NULL）',
+    booking_date       DATE         NULL                    COMMENT '预约日期（纯日期，上海日界；新单必填，旧单兼容 NULL）',
     start_period_id    BIGINT       NULL                    COMMENT '起始节次（→ class_period.id；新单必填，旧单兼容 NULL，只建列不建外键）',
     end_period_id      BIGINT       NULL                    COMMENT '结束节次（→ class_period.id；新单必填，旧单兼容 NULL，只建列不建外键）',
     start_at           DATETIME(3)  NOT NULL                COMMENT '预约开始（UTC，由日期+起始节次推导）',

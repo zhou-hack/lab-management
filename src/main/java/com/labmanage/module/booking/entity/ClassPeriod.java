@@ -8,8 +8,8 @@ import java.time.LocalTime;
 /**
  * 节次定义实体（class_period）。
  * <p>
- * 预约按「日期 + 节次」选择，start_at/end_at 由日期的上海本地节次时刻推导为
- * UTC 存贮；start_clock/end_clock 为上海本地日历时间（TIME(0)，无时区语义），
+ * 预约按「日期 + 节次」选择，start_at/end_at 由日期的上海节次时刻推导为
+ * UTC 存贮；start_clock/end_clock 为上海日历时间（TIME(0)，无时区语义），
  * 不做 UTC 换算（与场地开放时段 open_start/open_end 同规则）。
  */
 @TableName("class_period")
@@ -21,10 +21,10 @@ public class ClassPeriod extends BaseEntity {
     /** 显示名（如 第1节） */
     private String periodName;
 
-    /** 开始时刻（上海本地时间） */
+    /** 开始时刻（上海时间） */
     private LocalTime startClock;
 
-    /** 结束时刻（上海本地时间，须晚于 startClock） */
+    /** 结束时刻（上海时间，须晚于 startClock） */
     private LocalTime endClock;
 
     /** 启用：1启用 0停用 */

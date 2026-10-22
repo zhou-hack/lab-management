@@ -32,6 +32,7 @@ import com.labmanage.module.booking.vo.AvailabilityVO;
 import com.labmanage.module.booking.vo.BookingDetailVO;
 import com.labmanage.module.booking.vo.BookingStatsVO;
 import com.labmanage.module.booking.vo.BookingVO;
+import com.labmanage.module.booking.vo.LabOccupancyVO;
 import com.labmanage.module.space.entity.BizSpace;
 import com.labmanage.module.space.enums.SpaceStatus;
 import com.labmanage.module.space.mapper.BizSpaceMapper;
@@ -66,7 +67,7 @@ public class BookingServiceImpl implements BookingService {
 
     private static final Logger log = LoggerFactory.getLogger(BookingServiceImpl.class);
 
-    /** 业务时区：页面展示与开放窗口按上海本地日历，时间点统一 UTC 传输存储 */
+    /** 业务时区：页面展示与开放窗口按上海日历，时间点统一 UTC 传输存储 */
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
 
     private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
@@ -400,7 +401,7 @@ public class BookingServiceImpl implements BookingService {
         Long operatorId = SecurityUtils.currentUserId();
         BizSpace space = requireSpace(spaceId);
 
-        // 上海本地当天 [零点, 次日零点) 转 UTC 后查询未释放占用
+        // 上海当天 [零点, 次日零点) 转 UTC 后查询未释放占用
         Instant dayStart = date.atStartOfDay(SHANGHAI).toInstant();
         Instant dayEnd = date.plusDays(1).atStartOfDay(SHANGHAI).toInstant();
         List<AvailabilityVO.OccupiedSegment> occupied = slotMapper
@@ -420,6 +421,114 @@ public class BookingServiceImpl implements BookingService {
                 date.toString(),
                 occupied
         );
+    }
+
+    @Override
+    public List<LabOccupancyVO> occupancy(LocalDate date, Long startPeriodId, Long endPeriodId) {
+        Long operatorId = SecurityUtils.currentUserId();
+        long begin = System.nanoTime();
+
+        // 窗口推导：起止节次齐传按上海节次时刻，均缺省为全天 [00:00, 次日00:00)
+        boolean wholeDay = startPeriodId == null && endPeriodId == null;
+        Instant winStart;
+        Instant winEnd;
+        if (wholeDay) {
+            winStart = date.atStartOfDay(SHANGHAI).toInstant();
+            winEnd = date.plusDays(1).atStartOfDay(SHANGHAI).toInstant();
+        } else {
+            if (startPeriodId == null || endPeriodId == null) {
+                throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "起始节次与结束节次须同时指定");
+            }
+            ClassPeriod startPeriod = periodMapper.selectById(startPeriodId);
+            ClassPeriod endPeriod = periodMapper.selectById(endPeriodId);
+            if (startPeriod == null || endPeriod == null) {
+                throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "节次不存在或已停用");
+            }
+            if (startPeriod.getPeriodNo() > endPeriod.getPeriodNo()) {
+                throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "起始节次不能晚于结束节次");
+            }
+            winStart = date.atTime(startPeriod.getStartClock()).atZone(SHANGHAI).toInstant();
+            winEnd = date.atTime(endPeriod.getEndClock()).atZone(SHANGHAI).toInstant();
+        }
+
+        List<BizSpace> spaces = spaceMapper.selectList(
+                new LambdaQueryWrapper<BizSpace>().orderByAsc(BizSpace::getId));
+        List<LabSlot> slots = slotMapper.listOccupiedInRangeAll(winStart, winEnd);
+        // 窗口内全部占用段按场地分组（保持开始时间升序），供前端四态派生
+        Map<Long, List<LabSlot>> slotsByLab = new HashMap<>();
+        for (LabSlot slot : slots) {
+            slotsByLab.computeIfAbsent(slot.getLabId(), k -> new java.util.ArrayList<>()).add(slot);
+        }
+        List<Long> bookingIds = slots.stream().map(LabSlot::getBookingId).distinct().toList();
+        Map<Long, LabBooking> bookingMap = new HashMap<>();
+        if (!bookingIds.isEmpty()) {
+            for (LabBooking b : bookingMapper.selectBatchIds(bookingIds)) {
+                bookingMap.put(b.getId(), b);
+            }
+        }
+        // 占用单的老师与申请人姓名（teacherId 为空时前端回退展示申请人）
+        List<Long> userIds = bookingMap.values().stream()
+                .flatMap(b -> java.util.stream.Stream.of(b.getTeacherId(), b.getApplicantId()))
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        Map<Long, SysUser> userMap = new HashMap<>();
+        if (!userIds.isEmpty()) {
+            for (SysUser user : userMapper.selectBatchIds(userIds)) {
+                userMap.put(user.getId(), user);
+            }
+        }
+
+        List<LabOccupancyVO> result = spaces.stream()
+                .map(space -> {
+                    List<LabSlot> labSlots = slotsByLab.getOrDefault(space.getId(), List.of());
+                    LabSlot first = labSlots.isEmpty() ? null : labSlots.get(0);
+                    LabBooking booking = first == null ? null : bookingMap.get(first.getBookingId());
+                    SysUser teacher = booking != null && booking.getTeacherId() != null
+                            ? userMap.get(booking.getTeacherId()) : null;
+                    SysUser applicant = booking == null ? null : userMap.get(booking.getApplicantId());
+                    boolean occupied = first != null && space.getStatus() == SpaceStatus.AVAILABLE;
+                    List<LabOccupancyVO.OccupiedSlot> slotInfos = labSlots.stream()
+                            .map(slot -> {
+                                LabBooking b = bookingMap.get(slot.getBookingId());
+                                SysUser slotTeacher = b != null && b.getTeacherId() != null
+                                        ? userMap.get(b.getTeacherId()) : null;
+                                SysUser slotApplicant = b == null ? null : userMap.get(b.getApplicantId());
+                                return new LabOccupancyVO.OccupiedSlot(
+                                        String.valueOf(slot.getBookingId()),
+                                        slot.getStartAt(),
+                                        slot.getEndAt(),
+                                        b == null ? null : b.getCourseName(),
+                                        slotTeacher == null ? null : slotTeacher.getRealName(),
+                                        slotApplicant == null ? null : slotApplicant.getRealName()
+                                );
+                            })
+                            .toList();
+                    return new LabOccupancyVO(
+                            String.valueOf(space.getId()),
+                            space.getLabName(),
+                            space.getLabType() == null ? null : space.getLabType().getCode(),
+                            space.getLabType() == null ? null : space.getLabType().getDisplayName(),
+                            space.getLocationDetail(),
+                            space.getCapacity(),
+                            formatTime(space.getOpenStart()),
+                            formatTime(space.getOpenEnd()),
+                            space.getStatus() == null ? null : space.getStatus().getCode(),
+                            space.getStatus() == null ? null : space.getStatus().getDisplayName(),
+                            occupied,
+                            booking == null ? null : String.valueOf(booking.getId()),
+                            booking == null ? null : booking.getCourseName(),
+                            teacher == null ? null : teacher.getRealName(),
+                            applicant == null ? null : applicant.getRealName(),
+                            occupied ? first.getStartAt() : null,
+                            occupied ? first.getEndAt() : null,
+                            occupied ? slotInfos : List.of()
+                    );
+                })
+                .toList();
+        long occupiedCount = result.stream().filter(LabOccupancyVO::occupied).count();
+        log.info("[场地占用总览] 完成：操作人={}, 日期={}, 节次=[{}~{}], 窗口=[{} ~ {}], 场地数={}, 占用数={}, 耗时={}ms",
+                operatorId, date, startPeriodId, endPeriodId, winStart, winEnd,
+                result.size(), occupiedCount, (System.nanoTime() - begin) / 1_000_000);
+        return result;
     }
 
     @Override
@@ -758,7 +867,7 @@ public class BookingServiceImpl implements BookingService {
 
     /**
      * 节次口径一致性校验：携带 bookingDate/节次时，须与 startAt/endAt 推导一致
-     * （上海本地节次时刻 → UTC），保证时间轴三色小卡片与占用时段口径统一。
+     * （上海节次时刻 → UTC），保证时间轴三色小卡片与占用时段口径统一。
      */
     private void validatePeriodConsistency(BookingCreateDTO dto) {
         boolean hasPeriod = dto.bookingDate() != null || dto.startPeriodId() != null || dto.endPeriodId() != null;

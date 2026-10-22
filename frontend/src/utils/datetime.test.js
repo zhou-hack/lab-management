@@ -42,7 +42,7 @@ describe('formatRange 区间展示', () => {
   })
 })
 
-describe('shanghaiLocalToIso 上海本地→偏移 ISO', () => {
+describe('shanghaiLocalToIso 上海→偏移 ISO', () => {
   it('生成固定 +08:00 偏移', () => {
     expect(shanghaiLocalToIso('2026-12-01', '08:30')).toBe('2026-12-01T08:30:00+08:00')
   })

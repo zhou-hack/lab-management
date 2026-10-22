@@ -12,7 +12,7 @@ import java.time.LocalTime;
  * <p>
  * 场地名称 lab_name 全局唯一（含逻辑删除记录，删除后不复用，由
  * UNIQUE 索引兜底 + 服务层含删除记录的重复校验保证）；
- * open_start/open_end 为上海本地日历时间（TIME(0)，无时区语义），
+ * open_start/open_end 为上海日历时间（TIME(0)，无时区语义），
  * create_time/update_time 为 UTC 时间点（Instant，公共序列化器输出）。
  */
 @TableName("lab")
@@ -33,10 +33,10 @@ public class BizSpace extends BaseEntity {
     /** 配套设备清单（自由文本） */
     private String facilities;
 
-    /** 每日开放开始（上海本地时间，默认 08:00） */
+    /** 每日开放开始（上海时间，默认 08:00） */
     private LocalTime openStart;
 
-    /** 每日开放结束（上海本地时间，默认 21:00，须晚于 openStart） */
+    /** 每日开放结束（上海时间，默认 21:00，须晚于 openStart） */
     private LocalTime openEnd;
 
     /** 状态：AVAILABLE/MAINTAINING/CLOSED（落库） */

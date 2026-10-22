@@ -106,7 +106,7 @@
             全部预约
           </h2>
           <p class="t-sub">
-            时段按上海本地时间展示 · 管理员仅查看与审批：待审批项可批准/驳回，批准即时占用时段
+            管理员仅查看与审批：待审批项可批准/驳回，批准即时占用时段
           </p>
         </div>
       </div>
@@ -134,7 +134,7 @@
           </template>
         </el-table-column>
         <el-table-column
-          label="使用时段（上海）"
+          label="使用时段"
           min-width="180"
         >
           <template #default="{ row }">

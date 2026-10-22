@@ -620,7 +620,7 @@ public class BookingSeriesServiceImpl implements BookingSeriesService {
         return count;
     }
 
-    /** 周期内匹配星期的日期与推导时段片段（上海本地节次时刻 → UTC） */
+    /** 周期内匹配星期的日期与推导时段片段（上海节次时刻 → UTC） */
     private List<Segment> buildSegments(LocalDate start, LocalDate end, int weekday,
                                         ClassPeriod startPeriod, ClassPeriod endPeriod, BizSpace space) {
         List<Segment> result = new ArrayList<>();

@@ -13,6 +13,7 @@ import com.labmanage.module.booking.vo.AvailabilityVO;
 import com.labmanage.module.booking.vo.BookingDetailVO;
 import com.labmanage.module.booking.vo.BookingStatsVO;
 import com.labmanage.module.booking.vo.BookingVO;
+import com.labmanage.module.booking.vo.LabOccupancyVO;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -83,6 +84,20 @@ public class BookingController {
             @RequestParam Long spaceId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         return Result.success(bookingService.availability(spaceId, date));
+    }
+
+    /**
+     * 场地占用总览：按日期 + 可选节次窗口返回全部场地的空闲/占用分档，
+     * 占用附老师与课程信息（任意预约权限可读，学生看板同样可用）。
+     */
+    @GetMapping("/occupancy")
+    @SaCheckPermission(value = {"booking:lab:view", "booking:lab:list",
+            "booking:lab:create", "booking:lab:approve"}, mode = cn.dev33.satoken.annotation.SaMode.OR)
+    public Result<java.util.List<LabOccupancyVO>> occupancy(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) Long startPeriodId,
+            @RequestParam(required = false) Long endPeriodId) {
+        return Result.success(bookingService.occupancy(date, startPeriodId, endPeriodId));
     }
 
     /**

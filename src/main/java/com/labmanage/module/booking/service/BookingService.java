@@ -54,8 +54,16 @@ public interface BookingService {
     /** 预约详情（申请人本人或持有审批权限，附流程时间线） */
     BookingDetailVO detail(Long id);
 
-    /** 场地某日可用时段（上海本地日期，返回未释放占用） */
+    /** 场地某日可用时段（上海日期，返回未释放占用） */
     AvailabilityVO availability(Long spaceId, LocalDate date);
+
+    /**
+     * 场地占用总览：按日期 + 可选节次窗口筛选全部场地，
+     * 空闲/占用分档展示，占用附老师与课程信息（任意预约权限可读）。
+     * startPeriodId/endPeriodId 同时为空表示全天窗口，只传其一按 40000 处理。
+     */
+    java.util.List<com.labmanage.module.booking.vo.LabOccupancyVO> occupancy(
+            LocalDate date, Long startPeriodId, Long endPeriodId);
 
     /** 场地近期预约（重叠 [now, now+24h) 窗口的待审批/已批准单，时间轴「24h 近期」卡片） */
     java.util.List<com.labmanage.module.booking.vo.BookingVO> recent(Long spaceId);

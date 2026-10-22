@@ -8,7 +8,7 @@ import java.time.Instant;
 /**
  * 场地详情视图。
  * id 为雪花 ID，以字符串承载避免 JavaScript 精度损失；
- * openStart/openEnd 为上海本地时间，HH:mm 字符串。
+ * openStart/openEnd 为上海时间，HH:mm 字符串。
  */
 public record SpaceDetailVO(
         String id,

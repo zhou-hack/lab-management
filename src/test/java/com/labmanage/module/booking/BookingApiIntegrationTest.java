@@ -467,6 +467,80 @@ class BookingApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("场地占用总览（全天窗口）：全部场地分档返回，占用附申请人信息")
+    void occupancy_wholeDay() throws Exception {
+        JsonNode created = createBookingOn("2026-12-20", teacherToken);
+        assertThat(post("/api/v1/booking/labs/" + created.path("data").path("id").asText() + "/approve",
+                null, adminToken).path("code").asInt()).isZero();
+
+        JsonNode body = get("/api/v1/booking/labs/occupancy?date=2026-12-20", teacherToken);
+        assertThat(body.path("code").asInt()).isZero();
+        assertThat(body.path("data")).hasSize(3);
+
+        JsonNode lab1 = null;
+        JsonNode lab2 = null;
+        JsonNode lab3 = null;
+        for (JsonNode row : body.path("data")) {
+            switch (row.path("spaceId").asText()) {
+                case "1" -> lab1 = row;
+                case "2" -> lab2 = row;
+                case "3" -> lab3 = row;
+                default -> throw new AssertionError("未知场地ID：" + row.path("spaceId").asText());
+            }
+        }
+        // 场地 1：已批准占用命中，附申请人与占用时段（UTC 三位毫秒）
+        assertThat(lab1.path("occupied").asBoolean()).isTrue();
+        assertThat(lab1.path("applicantName").asText()).isEqualTo("王建国");
+        assertThat(lab1.path("occupyStartAt").asText()).isEqualTo("2026-12-20T02:00:00.000Z");
+        assertThat(lab1.path("occupyEndAt").asText()).isEqualTo("2026-12-20T04:00:00.000Z");
+        assertThat(lab1.path("status").asText()).isEqualTo("AVAILABLE");
+        // slots 明细：四态派生数据源（单段，含老师/课程/起止）
+        assertThat(lab1.path("slots")).hasSize(1);
+        assertThat(lab1.path("slots").get(0).path("startAt").asText()).isEqualTo("2026-12-20T02:00:00.000Z");
+        assertThat(lab1.path("slots").get(0).path("endAt").asText()).isEqualTo("2026-12-20T04:00:00.000Z");
+        assertThat(lab1.path("slots").get(0).path("applicantName").asText()).isEqualTo("王建国");
+        // 维护中/停用场地不参与占用，仅展示状态
+        assertThat(lab2.path("occupied").asBoolean()).isFalse();
+        assertThat(lab2.path("slots")).isEmpty();
+        assertThat(lab2.path("status").asText()).isEqualTo("MAINTAINING");
+        assertThat(lab3.path("occupied").asBoolean()).isFalse();
+        assertThat(lab3.path("status").asText()).isEqualTo("CLOSED");
+    }
+
+    @Test
+    @DisplayName("场地占用总览（节次窗口）：重叠判定与参数校验")
+    void occupancy_periodWindow() throws Exception {
+        // 已批准占用 10:00-12:00（上海）：节次 3-4（10:00-11:40）重叠，节次 1（08:00-08:45）不重叠
+        JsonNode created = createBookingOn("2026-12-21", teacherToken);
+        assertThat(post("/api/v1/booking/labs/" + created.path("data").path("id").asText() + "/approve",
+                null, adminToken).path("code").asInt()).isZero();
+
+        JsonNode hit = get("/api/v1/booking/labs/occupancy?date=2026-12-21&startPeriodId=3&endPeriodId=4",
+                teacherToken);
+        assertThat(hit.path("code").asInt()).isZero();
+        for (JsonNode row : hit.path("data")) {
+            if ("1".equals(row.path("spaceId").asText())) {
+                assertThat(row.path("occupied").asBoolean()).isTrue();
+            }
+        }
+
+        JsonNode miss = get("/api/v1/booking/labs/occupancy?date=2026-12-21&startPeriodId=1&endPeriodId=1",
+                teacherToken);
+        assertThat(miss.path("code").asInt()).isZero();
+        for (JsonNode row : miss.path("data")) {
+            assertThat(row.path("occupied").asBoolean()).isFalse();
+        }
+
+        // 只传起始/结束其一：40000；起始节次晚于结束节次：40000；节次不存在：40000
+        assertThat(get("/api/v1/booking/labs/occupancy?date=2026-12-21&startPeriodId=3", teacherToken)
+                .path("code").asInt()).isEqualTo(40000);
+        assertThat(get("/api/v1/booking/labs/occupancy?date=2026-12-21&startPeriodId=4&endPeriodId=3", teacherToken)
+                .path("code").asInt()).isEqualTo(40000);
+        assertThat(get("/api/v1/booking/labs/occupancy?date=2026-12-21&startPeriodId=99&endPeriodId=99", teacherToken)
+                .path("code").asInt()).isEqualTo(40000);
+    }
+
+    @Test
     @DisplayName("未登录访问：HTTP 401")
     void withoutToken_shouldReturn401() throws Exception {
         assertThat(getRaw("/api/v1/booking/labs")).isEqualTo(401);

@@ -166,7 +166,7 @@
             class="space_form__select"
           />
         </div>
-        <span class="t-hint space_form__hint">上海本地时间，预约模块按此时段做可用性校验</span>
+        <span class="t-hint space_form__hint">预约模块按此时段做可用性校验</span>
       </el-form-item>
       <el-form-item
         label="设备清单"

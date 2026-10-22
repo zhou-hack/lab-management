@@ -41,9 +41,17 @@ export function getBookingStats() {
   return request.get('/booking/labs/stats')
 }
 
-/** 场地某日可用时段（booking:lab:create），date 为上海本地 YYYY-MM-DD */
+/** 场地某日可用时段（booking:lab:create），date 为上海 YYYY-MM-DD */
 export function getAvailability(spaceId, date) {
   return request.get('/booking/labs/availability', { params: { spaceId, date } })
+}
+
+/**
+ * 场地占用总览（任意预约权限可读）：按日期 + 可选起止节次返回全部场地
+ * 空闲/占用分档，占用附 teacherName/applicantName/courseName 与占用时段。
+ */
+export function getLabOccupancy(params) {
+  return request.get('/booking/labs/occupancy', { params })
 }
 
 /** 预约详情（本人或审批权限） */

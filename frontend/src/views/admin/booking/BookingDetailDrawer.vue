@@ -31,7 +31,7 @@
           </span>
         </div>
         <p class="t-sub">
-          {{ formatRange(booking.startAt, booking.endAt) }}（上海本地时间）
+          {{ formatRange(booking.startAt, booking.endAt) }}
         </p>
       </div>
 
@@ -69,7 +69,7 @@
             label="使用时段"
             :span="2"
           >
-            {{ formatRange(booking.startAt, booking.endAt) }}（上海本地时间）
+            {{ formatRange(booking.startAt, booking.endAt) }}
           </el-descriptions-item>
           <el-descriptions-item
             v-if="booking.startPeriodName || booking.bookingDate"

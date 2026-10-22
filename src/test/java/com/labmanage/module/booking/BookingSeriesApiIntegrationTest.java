@@ -24,6 +24,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -86,6 +87,9 @@ class BookingSeriesApiIntegrationTest {
     private ObjectMapper objectMapper;
 
     private static final HttpClient HTTP = HttpClient.newHttpClient();
+
+    /** 业务时区：开放窗口与 24h 近端时段推导按上海日历 */
+    private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
 
     private String adminToken;
     private String teacherToken;
@@ -154,14 +158,15 @@ class BookingSeriesApiIntegrationTest {
     // ------------------------------------------------------------------ 节次
 
     @Test
-    @DisplayName("节次列表：返回 8 个启用节次，含节次号/名称/起止时刻")
+    @DisplayName("节次列表：返回 12 个启用节次，含节次号/名称/起止时刻")
     void periods_list() throws Exception {
         JsonNode body = get("/api/v1/booking/periods", studentToken);
         assertThat(body.path("code").asInt()).isZero();
-        assertThat(body.path("data")).hasSize(8);
+        assertThat(body.path("data")).hasSize(12);
         assertThat(body.path("data").get(0).path("periodNo").asInt()).isEqualTo(1);
-        assertThat(body.path("data").get(0).path("startClock").asText()).isEqualTo("08:00");
-        assertThat(body.path("data").get(7).path("endClock").asText()).isEqualTo("17:40");
+        assertThat(body.path("data").get(0).path("startClock").asText()).isEqualTo("08:25");
+        assertThat(body.path("data").get(7).path("endClock").asText()).isEqualTo("17:10");
+        assertThat(body.path("data").get(11).path("endClock").asText()).isEqualTo("21:45");
     }
 
     // ------------------------------------------------------------------ 周期创建
@@ -241,11 +246,11 @@ class BookingSeriesApiIntegrationTest {
         JsonNode approved = post("/api/v1/booking/series/" + id + "/approve", null, adminToken);
         assertThat(approved.path("code").asInt()).isZero();
 
-        // 首周日期占用可见
+        // 首周日期占用可见（第5节 13:50 上海 = 05:50 UTC）
         JsonNode availability = get("/api/v1/booking/labs/availability?spaceId=1&date=2026-11-06", teacherToken);
         assertThat(availability.path("data").path("occupied")).hasSize(1);
         assertThat(availability.path("data").path("occupied").get(0).path("startAt").asText())
-                .isEqualTo("2026-11-06T06:00:00.000Z");
+                .isEqualTo("2026-11-06T05:50:00.000Z");
 
         // 列表可见已生成 4 张预约单
         JsonNode list = get("/api/v1/booking/series/all?pageNum=1&pageSize=20&status=APPROVED", adminToken);
@@ -306,11 +311,31 @@ class BookingSeriesApiIntegrationTest {
     @Test
     @DisplayName("场地近期预约：未来 24h 内预约可见，远端未来预约为空")
     void recent_booking_within_24h() throws Exception {
-        // 近端：now+1h 起 1 小时
-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'");
+        // 近端时段：优先 now+1h 起 1 小时；若超出当日开放窗口（08:00-21:00 上海），
+        // 改用最近的下一个 09:00-10:00（仍在 24h 窗口内），保证任意时刻可重复执行
+        java.time.ZonedDateTime nowSh = Instant.now().atZone(SHANGHAI);
         Instant base = Instant.now().plusSeconds(3600);
-        String start = base.atZone(ZoneOffset.UTC).format(fmt);
-        String end = base.plusSeconds(3600).atZone(ZoneOffset.UTC).format(fmt);
+        java.time.ZonedDateTime startSh = base.atZone(SHANGHAI);
+        java.time.ZonedDateTime endSh = base.plusSeconds(3600).atZone(SHANGHAI);
+        boolean inWindow = !startSh.toLocalTime().isBefore(java.time.LocalTime.of(8, 0))
+                && !endSh.toLocalTime().isAfter(java.time.LocalTime.of(21, 0))
+                && startSh.toLocalDate().equals(endSh.toLocalDate());
+        Instant startAt;
+        Instant endAt;
+        if (inWindow) {
+            startAt = base;
+            endAt = base.plusSeconds(3600);
+        } else {
+            java.time.LocalDate day = nowSh.toLocalDate();
+            if (!nowSh.toLocalTime().isBefore(java.time.LocalTime.of(9, 0))) {
+                day = day.plusDays(1);
+            }
+            startAt = day.atTime(9, 0).atZone(SHANGHAI).toInstant();
+            endAt = day.atTime(10, 0).atZone(SHANGHAI).toInstant();
+        }
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'");
+        String start = startAt.atZone(ZoneOffset.UTC).format(fmt);
+        String end = endAt.atZone(ZoneOffset.UTC).format(fmt);
         JsonNode body = post("/api/v1/booking/labs", """
                 {"spaceId": 1, "purpose": "24h 近期测试", "participantCount": 30,
                  "startAt": "%s", "endAt": "%s"}
