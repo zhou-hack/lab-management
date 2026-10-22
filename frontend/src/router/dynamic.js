@@ -12,11 +12,9 @@ const viewModules = {
   // 白名单占位保证菜单命中；实际注册时改写为重定向 /admin/equipment/model，
   // 两个区块页面由下方 EQUIPMENT_SECTION_ROUTES 显式追加。
   '/admin/equipment': () => import('@/views/admin/equipment/ModelPage.vue'),
-  // 三权级设备使用申请（2026-10-19）：用户端三页 + 管理端审批页；
-  // 2026-10-22 新增学生端「查看驳回申请」独立页
+  // 三权级设备使用申请（2026-10-19）：用户端页面 + 管理端审批页
   '/equipment/directory': () => import('@/views/equipment/EquipmentDirectory.vue'),
   '/equipment/bookings/my': () => import('@/views/equipment/MyEquipmentBookings.vue'),
-  '/equipment/bookings/rejected': () => import('@/views/equipment/RejectedBookings.vue'),
   '/equipment/bookings/teacher': () => import('@/views/equipment/EquipmentTeacherApprove.vue'),
   '/admin/equipment/bookings': () => import('@/views/admin/equipment/EquipmentBookingManage.vue')
 }

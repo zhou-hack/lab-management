@@ -132,6 +132,19 @@
             </template>
           </el-table-column>
           <el-table-column
+            label="查看申请结果"
+            width="110"
+          >
+            <template #default="{ row }">
+              <span
+                class="pill"
+                :class="bookingResultMeta(row.status).pill"
+              >
+                {{ bookingResultMeta(row.status).label }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column
             label="提交时间"
             width="140"
           >
@@ -218,6 +231,21 @@ const loading = ref(false)
 /** 借出前（待审/已批准）可撤销 */
 function isCancellable(row) {
   return ['PENDING_TEACHER', 'PENDING_ADMIN', 'APPROVED'].includes(row.status)
+}
+
+/** 申请结果展示映射：审批通过→已同意，驳回→已驳回申请，待审批→审批中，已撤销→已撤销 */
+const BOOKING_RESULT = {
+  PENDING_TEACHER: { label: '审批中', pill: 'pill--warn' },
+  PENDING_ADMIN: { label: '审批中', pill: 'pill--warn' },
+  APPROVED: { label: '已同意', pill: 'pill--ok' },
+  CHECKED_OUT: { label: '已同意', pill: 'pill--ok' },
+  RETURNED: { label: '已同意', pill: 'pill--ok' },
+  REJECTED: { label: '已驳回申请', pill: 'pill--danger' },
+  CANCELLED: { label: '已撤销', pill: 'pill--muted' }
+}
+
+function bookingResultMeta(status) {
+  return BOOKING_RESULT[status] || { label: '—', pill: 'pill--muted' }
 }
 
 async function load() {
