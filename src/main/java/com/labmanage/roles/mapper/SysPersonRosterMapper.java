@@ -135,6 +135,9 @@ public interface SysPersonRosterMapper extends BaseMapper<SysPersonRoster> {
                 <if test="query.status != null and query.status == 'DISABLED'">
                     AND t.status IN ('ROSTER_DISABLED', 'USER_DISABLED')
                 </if>
+                <if test="query.roleCode != null and query.roleCode != ''">
+                    AND FIND_IN_SET(#{query.roleCode}, t.roles) > 0
+                </if>
             </where>
             ORDER BY t.createTime DESC, t.userId DESC
             </script>

@@ -24,6 +24,10 @@ public class PersonPageQueryDTO extends BasePageQuery {
     @Pattern(regexp = "UNFILED|NORMAL|DISABLED", message = "状态无效")
     private String status;
 
+    /** 角色筛选：按持有的持久化角色过滤；ASSISTANT 由授权动态计算、不在 roles 列，筛选结果恒为空 */
+    @Pattern(regexp = "ADMIN|TEACHER|STUDENT|ASSISTANT|OPS_ADMIN", message = "角色编码无效")
+    private String roleCode;
+
     public String getKeyword() {
         return keyword;
     }
@@ -54,5 +58,13 @@ public class PersonPageQueryDTO extends BasePageQuery {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getRoleCode() {
+        return roleCode;
+    }
+
+    public void setRoleCode(String roleCode) {
+        this.roleCode = roleCode;
     }
 }
