@@ -1,6 +1,5 @@
 package com.labmanage.module.item.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.labmanage.common.exception.BusinessException;
@@ -90,13 +89,10 @@ public class MaterialSettlementServiceImpl implements MaterialSettlementService 
 
     @Override
     public PageResult<MaterialSettlementVO> page(MaterialSettlementQuery query) {
-        LambdaQueryWrapper<MaterialSettlement> wrapper = new LambdaQueryWrapper<>();
-        if (query.getIssueLineId() != null && !query.getIssueLineId().isBlank()) {
-            wrapper.eq(MaterialSettlement::getIssueLineId,
-                    IdUtils.requireId(query.getIssueLineId(), "原出库行 ID"));
-        }
-        wrapper.orderByDesc(MaterialSettlement::getId);
-        IPage<MaterialSettlement> page = settlementMapper.selectPage(PageUtils.toPage(query), wrapper);
+        Long issueLineId = query.getIssueLineId() == null || query.getIssueLineId().isBlank()
+                ? null : IdUtils.requireId(query.getIssueLineId(), "原出库行 ID");
+        IPage<MaterialSettlementMapper.SettlementRow> page =
+                settlementMapper.selectSettlementPage(PageUtils.toPage(query), issueLineId);
         List<MaterialSettlementVO> records = page.getRecords().stream()
                 .map(MaterialSettlementVO::from).toList();
         return PageResult.of(records, page.getTotal(), query.getPageNum(), query.getPageSize());

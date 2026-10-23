@@ -147,20 +147,36 @@ class MaterialSettlementServiceImplTest {
     // ------------------------------------------------------------------- page
 
     @Test
-    void pageFiltersNothingWhenEmptyQuery() {
-        when(settlementMapper.selectPage(any(com.baomidou.mybatisplus.extension.plugins.pagination
-                .Page.class), any())).thenAnswer(inv -> {
-            com.baomidou.mybatisplus.extension.plugins.pagination.Page<MaterialSettlement> page =
-                    new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(1, 20);
-            page.setRecords(List.of());
-            page.setTotal(0);
-            return page;
-        });
+    void pageMapsRowsWithMovementDetails() {
+        when(settlementMapper.selectSettlementPage(any(), org.mockito.ArgumentMatchers.isNull()))
+                .thenAnswer(inv -> {
+                    com.baomidou.mybatisplus.extension.plugins.pagination
+                            .Page<MaterialSettlementMapper.SettlementRow> page =
+                            new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(1, 20);
+                    page.setRecords(List.of(new MaterialSettlementMapper.SettlementRow(
+                            888L, 21L, "CONSUMED", new BigDecimal("2"), null,
+                            java.time.Instant.parse("2026-10-23T02:00:00.000Z"), null, 999L,
+                            "实验消耗完毕", 777L, "PE-CAP-470UF50V", "电解电容 470μF/50V", "个",
+                            "一号实验室 A 区元件柜",
+                            java.time.Instant.parse("2026-10-23T01:00:00.000Z"), "电子电工实训")));
+                    page.setTotal(1L);
+                    return page;
+                });
 
         var result = service.page(new com.labmanage.module.item.dto.MaterialSettlementQuery());
 
-        assertEquals(0, result.records().size());
-        assertEquals(0L, result.total());
+        assertEquals(1, result.records().size());
+        var vo = result.records().get(0);
+        assertEquals("888", vo.id());
+        assertEquals("21", vo.issueLineId());
+        assertEquals(SettlementType.CONSUMED, vo.settlementType());
+        assertEquals(new BigDecimal("2"), vo.quantity());
+        // 关联出库流水详情（issue_line_id → stock_movement.document_line_id）
+        assertEquals("777", vo.movementId());
+        assertEquals("PE-CAP-470UF50V", vo.skuCode());
+        assertEquals("电解电容 470μF/50V", vo.materialName());
+        assertEquals("一号实验室 A 区元件柜", vo.locationName());
+        assertEquals("电子电工实训", vo.courseName());
     }
 
     // ---------------------------------------------------------- issueOptions
@@ -176,7 +192,8 @@ class MaterialSettlementServiceImplTest {
                             21L, 1L, "PE-DIO-1N4007", "整流二极管 1N4007", "个",
                             new BigDecimal("10"), new BigDecimal("8"), new BigDecimal("2"),
                             java.time.Instant.parse("2026-10-23T01:00:00.000Z"), 300L,
-                            "电力电子技术")));
+                            "电力电子技术", 777L, "一号实验室 A 区元件柜",
+                            null, "张老师", "电力电子实验课耗材")));
                     page.setTotal(1L);
                     return page;
                 });
@@ -195,5 +212,10 @@ class MaterialSettlementServiceImplTest {
         assertEquals("300", vo.materialRequestId());
         // 课程名称（出库单 → 物料预约 → 场地预约链路解析）
         assertEquals("电力电子技术", vo.courseName());
+        // 关联流水与出库详情
+        assertEquals("777", vo.movementId());
+        assertEquals("一号实验室 A 区元件柜", vo.locationName());
+        assertEquals("张老师", vo.operatorName());
+        assertEquals("电力电子实验课耗材", vo.requestPurpose());
     }
 }

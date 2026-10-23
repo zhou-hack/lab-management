@@ -32,6 +32,31 @@
         show-overflow-tooltip
       />
       <el-table-column
+        label="物料"
+        min-width="170"
+        show-overflow-tooltip
+      >
+        <template #default="{ row }">
+          <template v-if="row.skuCode">
+            <div>{{ row.skuCode }}</div>
+            <div class="muted small">
+              {{ row.materialName }}
+            </div>
+          </template>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
+      <el-table-column
+        prop="locationName"
+        label="库位"
+        width="150"
+        show-overflow-tooltip
+      >
+        <template #default="{ row }">
+          {{ row.locationName || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column
         label="类型"
         width="100"
         align="center"
@@ -59,6 +84,14 @@
         show-overflow-tooltip
       />
       <el-table-column
+        label="出库时间"
+        width="170"
+      >
+        <template #default="{ row }">
+          {{ row.occurredAt ? fmtShanghai(row.occurredAt) : '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column
         label="结算时间"
         width="170"
       >
@@ -74,7 +107,7 @@
     <el-dialog
       v-model="createVisible"
       title="核销登记（消耗 / 丢失 / 损坏）"
-      width="560px"
+      width="680px"
     >
       <el-form label-width="110px">
         <el-form-item
@@ -111,17 +144,32 @@
           <el-descriptions-item label="课程名称">
             {{ selectedIssue.courseName || '-' }}
           </el-descriptions-item>
+          <el-descriptions-item label="库位">
+            {{ selectedIssue.locationName || '-' }}
+          </el-descriptions-item>
           <el-descriptions-item label="物料">
             {{ selectedIssue.skuCode }} · {{ selectedIssue.materialName }}
           </el-descriptions-item>
+          <el-descriptions-item label="出库人">
+            {{ selectedIssue.operatorName || '-' }}
+          </el-descriptions-item>
           <el-descriptions-item label="出库时间">
             {{ fmtShanghai(selectedIssue.occurredAt) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="关联流水 ID">
+            {{ selectedIssue.movementId || '-' }}
           </el-descriptions-item>
           <el-descriptions-item label="原出库量">
             {{ formatQty(selectedIssue.quantity) }} {{ selectedIssue.baseUnit }}
           </el-descriptions-item>
           <el-descriptions-item label="已结算">
             {{ formatQty(selectedIssue.settledQty) }} {{ selectedIssue.baseUnit }}
+          </el-descriptions-item>
+          <el-descriptions-item
+            label="申领用途"
+            :span="2"
+          >
+            {{ selectedIssue.requestPurpose || '-' }}
           </el-descriptions-item>
         </el-descriptions>
         <el-form-item

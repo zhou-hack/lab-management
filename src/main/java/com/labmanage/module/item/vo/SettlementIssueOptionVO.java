@@ -42,7 +42,19 @@ public record SettlementIssueOptionVO(
         String materialRequestId,
 
         @Schema(description = "课程名称（经物料预约关联场地预约解析，未关联为空）", example = "电力电子技术")
-        String courseName
+        String courseName,
+
+        @Schema(description = "关联出库流水 ID（→ stock_movement.id）", example = "1234567890123456789")
+        String movementId,
+
+        @Schema(description = "库位名称（出库流水发生库位）", example = "一号实验室 A 区元件柜")
+        String locationName,
+
+        @Schema(description = "出库人姓名（优先台账登记姓名，缺失按单据经办人解析）", example = "张老师")
+        String operatorName,
+
+        @Schema(description = "申领用途（关联物料预约单，直发为空）", example = "电力电子实验课耗材")
+        String requestPurpose
 ) {
 
     public static SettlementIssueOptionVO from(MaterialSettlementMapper.IssueOptionRow row) {
@@ -57,7 +69,11 @@ public record SettlementIssueOptionVO(
                 row.remainQty(),
                 row.occurredAt(),
                 row.materialRequestId() == null ? null : String.valueOf(row.materialRequestId()),
-                row.courseName()
+                row.courseName(),
+                row.movementId() == null ? null : String.valueOf(row.movementId()),
+                row.locationName(),
+                row.regOperatorName() != null ? row.regOperatorName() : row.operatorName(),
+                row.requestPurpose()
         );
     }
 }
