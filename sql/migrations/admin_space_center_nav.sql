@@ -1,23 +1,19 @@
 -- ============================================================================
--- 管理员端统一导航整合（2026-10-23）：
--- 「场地预约」管理组（3000）下的预约管理/预约审批并入「空间管理」组（1001），
--- 1001 更名「空间场地管理」；新增「综合管理」聚合视图入口（页签同屏切换）；
--- 空目录 3000 停用保留（回滚：enabled 改回 1 并还原 parent_id/sort_order 即可）。
--- 幂等：可重复执行；UPDATE 自然幂等，INSERT IGNORE 跳过已存在主键。
+-- 管理员端导航整合（2026-10-23 定稿）：
+-- 一级目录 1001 更名「场地中心」，下辖三个页面：
+--   场地管理(1002) / 预约管理(3001) / 预约审批(3002)
+-- 原「场地预约」空目录(3000)停用保留；聚合页「综合管理」(1010) 废弃，
+-- 菜单与角色绑定逻辑删除（前端组件与路由白名单同步移除）。
+-- 幂等：可重复执行；UPDATE 自然幂等，不依赖插入顺序。
 -- ============================================================================
 USE lab_management;
 
-UPDATE sys_menu SET menu_name = '空间场地管理' WHERE id = 1001;
-UPDATE sys_menu SET parent_id = 1001, sort_order = 3 WHERE id = 3001;
-UPDATE sys_menu SET parent_id = 1001, sort_order = 4 WHERE id = 3002;
-UPDATE sys_menu SET sort_order = 2 WHERE id = 1002;
+UPDATE sys_menu SET menu_name = '场地中心' WHERE id = 1001;
+UPDATE sys_menu SET parent_id = 1001, sort_order = 1 WHERE id = 1002;
+UPDATE sys_menu SET parent_id = 1001, sort_order = 2 WHERE id = 3001;
+UPDATE sys_menu SET parent_id = 1001, sort_order = 3 WHERE id = 3002;
 UPDATE sys_menu SET enabled = 0 WHERE id = 3000;
 
-INSERT IGNORE INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key,
-                      permission_id, menu_type, sort_order, enabled, create_user_id, update_user_id)
-VALUES (1010, 1001, 'space_center', '综合管理', '/admin/space/center', 'admin/space/SpaceCenter',
-        NULL, 'PAGE', 1, 1, 1, 1);
-
--- sys_role_menu.id 无自增无默认值，必须显式给 id（1010 未被占用）
-INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, enabled, create_user_id, update_user_id)
-VALUES (1010, 1, 1010, 1, 1, 1);
+-- 废弃聚合页「综合管理」：逻辑删除菜单及角色绑定
+UPDATE sys_role_menu SET deleted = 1, enabled = 0 WHERE menu_id = 1010;
+UPDATE sys_menu SET deleted = 1, enabled = 0 WHERE id = 1010;
