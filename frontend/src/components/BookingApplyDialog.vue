@@ -7,7 +7,7 @@
   >
     <el-alert
       class="booking_apply__alert"
-      title="申请提交后由指定教师初审，通过即生效；超 24 小时未处理管理员可代批；提交与审批均校验时段占用"
+      title="申请提交后由指定教师初审，通过即生效；学生/教师可同时段申请同一设备，借出登记时按先到先得校验占用"
       type="info"
       :closable="false"
     />
