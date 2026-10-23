@@ -77,4 +77,46 @@ describe('设备台账区搜索关键字联想', () => {
     )
     wrapper.unmount()
   })
+
+  it('型号分组默认折叠，且每页仅渲染 10 组', async () => {
+    // 注入 12 个型号（每型号 1 条台账）：第 1 页渲染 10 组、第 2 页 2 组
+    const many = Array.from({ length: 12 }, (_, i) => ({
+      id: String(i),
+      assetCode: `A${i}`,
+      serialNo: null,
+      equipmentName: `设备${i}`,
+      modelId: String(300 + i),
+      modelCode: `M${i}`,
+      categoryId: null,
+      categoryName: null,
+      departmentId: null,
+      departmentName: null,
+      locationDetail: null,
+      custodianId: null,
+      custodianName: null,
+      purchaseDate: null,
+      purchasePrice: null,
+      warrantyUntil: null,
+      status: 'IDLE',
+      enabled: 1
+    }))
+    pageAssets.mockResolvedValue({ records: many, total: many.length })
+    const wrapper = mountSection()
+    await flushPromises()
+    expect(wrapper.vm.groups.length).toBe(12)
+    // 默认折叠：所有分组带 collapsed 样式
+    for (const group of wrapper.findAll('.equip_group')) {
+      expect(group.classes()).toContain('equip_group--collapsed')
+    }
+    // 第 1 页仅 10 组
+    expect(wrapper.vm.pagedGroups.length).toBe(10)
+    expect(wrapper.findAll('.equip_group').length).toBe(10)
+    // 翻到第 2 页剩 2 组
+    wrapper.vm.groupPageNum = 2
+    await flushPromises()
+    expect(wrapper.vm.pagedGroups.length).toBe(2)
+    const renderedCount = wrapper.findAll('.equip_group').length
+    expect(renderedCount, `page2 rendered ${renderedCount}`).toBe(2)
+    wrapper.unmount()
+  })
 })

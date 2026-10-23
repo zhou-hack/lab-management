@@ -92,7 +92,7 @@
       </div>
       <template v-else-if="groups.length">
         <div
-          v-for="group in groups"
+          v-for="group in pagedGroups"
           :key="group.modelId"
           class="equip_group"
           :class="{ 'equip_group--collapsed': !expanded[group.modelId] }"
@@ -229,6 +229,13 @@
             </div>
           </div>
         </div>
+        <el-pagination
+          v-model:current-page="groupPageNum"
+          class="asset_manage__pager"
+          :page-size="groupPageSize"
+          :total="totalGroups"
+          layout="total, prev, pager, next"
+        />
       </template>
       <div
         v-else
@@ -612,7 +619,7 @@ const groups = computed(() => {
   return order.map((key) => map.get(key))
 })
 
-/* 分组折叠状态：新分组默认展开 */
+/* 分组折叠状态：新分组默认折叠 */
 const expanded = reactive({})
 
 watch(
@@ -620,7 +627,7 @@ watch(
   (list) => {
     for (const group of list) {
       if (!(group.modelId in expanded)) {
-        expanded[group.modelId] = true
+        expanded[group.modelId] = false
       }
     }
   },
@@ -630,6 +637,28 @@ watch(
 function toggleGroup(key) {
   expanded[key] = !expanded[key]
 }
+
+/* ---------------- 型号分组分页（每页 10 组，客户端切片） ---------------- */
+
+const groupPageSize = 10
+const groupPageNum = ref(1)
+
+/** 当前页型号分组 */
+const pagedGroups = computed(() => {
+  const start = (groupPageNum.value - 1) * groupPageSize
+  return groups.value.slice(start, start + groupPageSize)
+})
+
+/** 型号分组总数 */
+const totalGroups = computed(() => groups.value.length)
+
+/* 筛选/删除后当前页可能越界：自动回退到末页 */
+watch(totalGroups, () => {
+  const maxPage = Math.max(1, Math.ceil(totalGroups.value / groupPageSize))
+  if (groupPageNum.value > maxPage) {
+    groupPageNum.value = maxPage
+  }
+})
 
 /** 全量拉取：后端 pageSize 上限 100，循环翻页直至收齐 total 条 */
 async function fetchAllAssets(params = {}) {
@@ -672,6 +701,7 @@ async function load() {
 }
 
 function search() {
+  groupPageNum.value = 1
   load()
 }
 
@@ -1068,5 +1098,10 @@ watch(
 .asset_manage__sk_row--indent {
   width: 86%;
   margin-left: 38px;
+}
+
+.asset_manage__pager {
+  margin-top: 14px;
+  justify-content: flex-end;
 }
 </style>
