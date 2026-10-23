@@ -3,14 +3,18 @@ package com.labmanage.module.item.service.impl;
 import com.labmanage.common.exception.BusinessException;
 import com.labmanage.module.item.dto.MaterialSettlementCreateDTO;
 import com.labmanage.module.item.entity.MaterialSettlement;
+import com.labmanage.module.item.entity.MaterialSku;
 import com.labmanage.module.item.entity.StockDocument;
 import com.labmanage.module.item.entity.StockDocumentLine;
+import com.labmanage.module.item.entity.StockLocation;
 import com.labmanage.module.item.enums.MovementType;
 import com.labmanage.module.item.enums.SettlementType;
 import com.labmanage.module.item.enums.StockDocumentStatus;
 import com.labmanage.module.item.mapper.MaterialSettlementMapper;
+import com.labmanage.module.item.mapper.MaterialSkuMapper;
 import com.labmanage.module.item.mapper.StockDocumentLineMapper;
 import com.labmanage.module.item.mapper.StockDocumentMapper;
+import com.labmanage.module.item.mapper.StockLocationMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -46,6 +50,12 @@ class MaterialSettlementServiceImplTest {
 
     @Mock
     private StockDocumentMapper documentMapper;
+
+    @Mock
+    private MaterialSkuMapper skuMapper;
+
+    @Mock
+    private StockLocationMapper locationMapper;
 
     @InjectMocks
     private MaterialSettlementServiceImpl service;
@@ -147,36 +157,105 @@ class MaterialSettlementServiceImplTest {
     // ------------------------------------------------------------------- page
 
     @Test
-    void pageMapsRowsWithMovementDetails() {
-        when(settlementMapper.selectSettlementPage(any(), org.mockito.ArgumentMatchers.isNull()))
-                .thenAnswer(inv -> {
-                    com.baomidou.mybatisplus.extension.plugins.pagination
-                            .Page<MaterialSettlementMapper.SettlementRow> page =
-                            new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(1, 20);
-                    page.setRecords(List.of(new MaterialSettlementMapper.SettlementRow(
-                            888L, 21L, "CONSUMED", new BigDecimal("2"), null,
-                            java.time.Instant.parse("2026-10-23T02:00:00.000Z"), null, 999L,
-                            "实验消耗完毕", 777L, "PE-CAP-470UF50V", "电解电容 470μF/50V", "个",
-                            "一号实验室 A 区元件柜",
-                            java.time.Instant.parse("2026-10-23T01:00:00.000Z"), "电子电工实训")));
-                    page.setTotal(1L);
-                    return page;
-                });
+    void pageFiltersNothingWhenEmptyQuery() {
+        when(settlementMapper.selectPage(any(com.baomidou.mybatisplus.extension.plugins.pagination
+                .Page.class), any())).thenAnswer(inv -> {
+            com.baomidou.mybatisplus.extension.plugins.pagination.Page<MaterialSettlement> page =
+                    new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(1, 20);
+            page.setRecords(List.of());
+            page.setTotal(0);
+            return page;
+        });
+
+        var result = service.page(new com.labmanage.module.item.dto.MaterialSettlementQuery());
+
+        assertEquals(0, result.records().size());
+        assertEquals(0L, result.total());
+    }
+
+    @Test
+    void pageEnrichesMaterialAndLocationFromIssueLine() {
+        MaterialSettlement settlement = new MaterialSettlement();
+        settlement.setId(9L);
+        settlement.setIssueLineId(21L);
+        settlement.setSettlementType(SettlementType.CONSUMED);
+        settlement.setQuantity(new BigDecimal("2"));
+        when(settlementMapper.selectPage(any(com.baomidou.mybatisplus.extension.plugins.pagination
+                .Page.class), any())).thenAnswer(inv -> {
+            com.baomidou.mybatisplus.extension.plugins.pagination.Page<MaterialSettlement> page =
+                    new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(1, 20);
+            page.setRecords(List.of(settlement));
+            page.setTotal(1L);
+            return page;
+        });
+        StockDocumentLine line = issueLine(21L, 5L, "8");
+        line.setFromLocationId(3L);
+        when(documentLineMapper.selectByIds(any(java.util.Collection.class))).thenReturn(List.of(line));
+        MaterialSku sku = new MaterialSku();
+        sku.setId(1L);
+        sku.setSkuCode("PE-DIO-1N4007");
+        sku.setMaterialName("整流二极管 1N4007");
+        when(skuMapper.selectByIds(any(java.util.Collection.class))).thenReturn(List.of(sku));
+        StockLocation location = new StockLocation();
+        location.setId(3L);
+        location.setLocationName("实训楼 A301 柜 1");
+        when(locationMapper.selectByIds(any(java.util.Collection.class))).thenReturn(List.of(location));
 
         var result = service.page(new com.labmanage.module.item.dto.MaterialSettlementQuery());
 
         assertEquals(1, result.records().size());
         var vo = result.records().get(0);
-        assertEquals("888", vo.id());
-        assertEquals("21", vo.issueLineId());
-        assertEquals(SettlementType.CONSUMED, vo.settlementType());
-        assertEquals(new BigDecimal("2"), vo.quantity());
-        // 关联出库流水详情（issue_line_id → stock_movement.document_line_id）
-        assertEquals("777", vo.movementId());
-        assertEquals("PE-CAP-470UF50V", vo.skuCode());
-        assertEquals("电解电容 470μF/50V", vo.materialName());
-        assertEquals("一号实验室 A 区元件柜", vo.locationName());
-        assertEquals("电子电工实训", vo.courseName());
+        assertEquals("PE-DIO-1N4007", vo.skuCode());
+        assertEquals("整流二极管 1N4007", vo.materialName());
+        assertEquals("实训楼 A301 柜 1", vo.locationName());
+    }
+
+    @Test
+    void pageResolvesReturnedLocationFromReturnLineTarget() {
+        MaterialSettlement settlement = new MaterialSettlement();
+        settlement.setId(10L);
+        settlement.setIssueLineId(21L);
+        settlement.setReturnLineId(35L);
+        settlement.setSettlementType(SettlementType.RETURNED);
+        settlement.setQuantity(new BigDecimal("2"));
+        when(settlementMapper.selectPage(any(com.baomidou.mybatisplus.extension.plugins.pagination
+                .Page.class), any())).thenAnswer(inv -> {
+            com.baomidou.mybatisplus.extension.plugins.pagination.Page<MaterialSettlement> page =
+                    new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(1, 20);
+            page.setRecords(List.of(settlement));
+            page.setTotal(1L);
+            return page;
+        });
+        StockDocumentLine line = issueLine(21L, 5L, "8");
+        line.setFromLocationId(3L);
+        StockDocumentLine returnLine = new StockDocumentLine();
+        returnLine.setId(35L);
+        returnLine.setSkuId(1L);
+        returnLine.setToLocationId(7L);
+        when(documentLineMapper.selectByIds(any(java.util.Collection.class)))
+                .thenReturn(List.of(line, returnLine));
+        MaterialSku sku = new MaterialSku();
+        sku.setId(1L);
+        sku.setSkuCode("PE-DIO-1N4007");
+        sku.setMaterialName("整流二极管 1N4007");
+        when(skuMapper.selectByIds(any(java.util.Collection.class))).thenReturn(List.of(sku));
+        StockLocation fromLocation = new StockLocation();
+        fromLocation.setId(3L);
+        fromLocation.setLocationName("实训楼 A301 柜 1");
+        StockLocation toLocation = new StockLocation();
+        toLocation.setId(7L);
+        toLocation.setLocationName("实训楼 B102 柜 2");
+        when(locationMapper.selectByIds(any(java.util.Collection.class)))
+                .thenReturn(List.of(fromLocation, toLocation));
+
+        var result = service.page(new com.labmanage.module.item.dto.MaterialSettlementQuery());
+
+        assertEquals(1, result.records().size());
+        var vo = result.records().get(0);
+        // 物料仍按原出库行解析，库位按归还行的归还入库目标库位（toLocationId）解析
+        assertEquals("PE-DIO-1N4007", vo.skuCode());
+        assertEquals("整流二极管 1N4007", vo.materialName());
+        assertEquals("实训楼 B102 柜 2", vo.locationName());
     }
 
     // ---------------------------------------------------------- issueOptions
@@ -192,8 +271,7 @@ class MaterialSettlementServiceImplTest {
                             21L, 1L, "PE-DIO-1N4007", "整流二极管 1N4007", "个",
                             new BigDecimal("10"), new BigDecimal("8"), new BigDecimal("2"),
                             java.time.Instant.parse("2026-10-23T01:00:00.000Z"), 300L,
-                            "电力电子技术", 777L, "一号实验室 A 区元件柜",
-                            null, "张老师", "电力电子实验课耗材")));
+                            "电力电子技术")));
                     page.setTotal(1L);
                     return page;
                 });
@@ -212,10 +290,5 @@ class MaterialSettlementServiceImplTest {
         assertEquals("300", vo.materialRequestId());
         // 课程名称（出库单 → 物料预约 → 场地预约链路解析）
         assertEquals("电力电子技术", vo.courseName());
-        // 关联流水与出库详情
-        assertEquals("777", vo.movementId());
-        assertEquals("一号实验室 A 区元件柜", vo.locationName());
-        assertEquals("张老师", vo.operatorName());
-        assertEquals("电力电子实验课耗材", vo.requestPurpose());
     }
 }

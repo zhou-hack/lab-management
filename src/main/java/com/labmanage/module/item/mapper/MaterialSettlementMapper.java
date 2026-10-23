@@ -19,49 +19,12 @@ import java.util.List;
 public interface MaterialSettlementMapper extends BaseMapper<MaterialSettlement> {
 
     /**
-     * 结算记录行（核销列表：关联出库流水补物料/库位/出库时间/课程等详情）
-     */
-    record SettlementRow(Long id, Long issueLineId, String settlementType, BigDecimal quantity,
-                         Long operatorId, Instant settledAt, Long returnLineId, Long documentId,
-                         String reason, Long movementId, String skuCode, String materialName,
-                         String baseUnit, String locationName, Instant occurredAt, String courseName) {
-    }
-
-    /**
-     * 结算记录分页（经 issue_line_id 关联出库流水 stock_movement，含物料/库位/课程）
-     */
-    @Select("""
-            <script>
-            SELECT ms.id, ms.issue_line_id, ms.settlement_type, ms.quantity, ms.operator_id,
-                   ms.settled_at, ms.return_line_id, ms.document_id, ms.reason,
-                   sm.id AS movement_id, s.sku_code, s.material_name, s.base_unit,
-                   loc.location_name, sm.occurred_at, lb.course_name
-              FROM material_settlement ms
-              LEFT JOIN stock_movement sm ON sm.document_line_id = ms.issue_line_id AND sm.deleted = 0
-              LEFT JOIN material_sku s ON s.id = sm.sku_id AND s.deleted = 0
-              LEFT JOIN stock_location loc ON loc.id = sm.location_id AND loc.deleted = 0
-              LEFT JOIN stock_document_line dl ON dl.id = ms.issue_line_id AND dl.deleted = 0
-              LEFT JOIN stock_document d ON d.id = dl.stock_document_id AND d.deleted = 0
-              LEFT JOIN material_request mr ON mr.id = d.material_request_id AND mr.deleted = 0
-              LEFT JOIN lab_booking lb ON lb.id = mr.lab_booking_id AND lb.deleted = 0
-             WHERE ms.deleted = 0
-             <if test="issueLineId != null">
-               AND ms.issue_line_id = #{issueLineId}
-             </if>
-             ORDER BY ms.id DESC
-            </script>
-            """)
-    IPage<SettlementRow> selectSettlementPage(IPage<SettlementRow> page,
-                                              @Param("issueLineId") Long issueLineId);
-
-    /**
      * 可核销出库行选项行（核销登记下拉：已过账领用出库单的行，含已结算/剩余可核销量与课程名称）
      */
     record IssueOptionRow(Long issueLineId, Long skuId, String skuCode, String materialName,
                           String baseUnit, BigDecimal quantity, BigDecimal settledQty,
                           BigDecimal remainQty, Instant occurredAt, Long materialRequestId,
-                          String courseName, Long movementId, String locationName,
-                          String regOperatorName, String operatorName, String requestPurpose) {
+                          String courseName) {
     }
 
     /**
@@ -72,15 +35,10 @@ public interface MaterialSettlementMapper extends BaseMapper<MaterialSettlement>
             SELECT l.id AS issue_line_id, l.sku_id, s.sku_code, s.material_name, s.base_unit,
                    l.quantity AS quantity, COALESCE(st.settled_qty, 0) AS settled_qty,
                    (l.quantity - COALESCE(st.settled_qty, 0)) AS remain_qty,
-                   d.occurred_at AS occurred_at, d.material_request_id, lb.course_name,
-                   sm.id AS movement_id, loc.location_name, sm.operator_name AS reg_operator_name,
-                   u.real_name AS operator_name, mr.purpose AS request_purpose
+                   d.occurred_at AS occurred_at, d.material_request_id, lb.course_name
               FROM stock_document_line l
               JOIN stock_document d ON d.id = l.stock_document_id AND d.deleted = 0
               JOIN material_sku s ON s.id = l.sku_id AND s.deleted = 0
-              LEFT JOIN stock_movement sm ON sm.document_line_id = l.id AND sm.deleted = 0
-              LEFT JOIN stock_location loc ON loc.id = sm.location_id AND loc.deleted = 0
-              LEFT JOIN sys_user u ON u.id = d.operator_id AND u.deleted = 0
               LEFT JOIN material_request mr ON mr.id = d.material_request_id AND mr.deleted = 0
               LEFT JOIN lab_booking lb ON lb.id = mr.lab_booking_id AND lb.deleted = 0
               LEFT JOIN (SELECT issue_line_id, SUM(quantity) AS settled_qty
