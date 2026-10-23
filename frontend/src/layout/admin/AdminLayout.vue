@@ -10,6 +10,7 @@
       <el-menu
         class="admin_layout__menu"
         :default-active="route.path"
+        :default-openeds="openedMenus"
         :collapse="collapsed"
         router
       >
@@ -38,7 +39,12 @@
             <el-icon><Fold v-if="!collapsed" /><Expand v-else /></el-icon>
           </el-button>
           <el-breadcrumb separator="/">
-            <el-breadcrumb-item>{{ route.meta.title || '首页' }}</el-breadcrumb-item>
+            <el-breadcrumb-item
+              v-for="(crumb, idx) in breadcrumbs"
+              :key="idx"
+            >
+              {{ crumb }}
+            </el-breadcrumb-item>
           </el-breadcrumb>
         </div>
         <div class="admin_layout__header_right">
@@ -82,15 +88,53 @@ const store = useUserStore()
 // 窄屏（<1024）默认收起侧边栏，移动自适应（规范第 10 节）
 const collapsed = ref(window.innerWidth < 1024)
 
-// 后台菜单：取菜单树中 path 以 /admin 开头的子树（目录 M / 页面 C）
+// 后台菜单：按菜单树原样渲染（保留一级目录层级，如「场地中心」折叠大类）
 const adminMenus = computed(() => {
   const filterTree = (nodes) =>
     (nodes || [])
       .filter((n) => n.menuType !== 'F' && n.visible !== '1')
       .map((n) => ({ ...n, children: filterTree(n.children) }))
       .filter((n) => n.menuType === 'C' || n.children.length)
-  const adminRoot = (store.menus || []).find((m) => (m.path || '').startsWith('/admin'))
-  return adminRoot ? filterTree(adminRoot.children) : filterTree(store.menus)
+  return filterTree(store.menus || [])
+})
+
+/** 当前激活页面所在的父级目录（刷新后父级保持展开，如「场地中心」） */
+const openedMenus = computed(() => {
+  const opened = []
+  const walk = (nodes) => {
+    for (const n of nodes || []) {
+      if ((n.children || []).some((c) => c.path === route.path)) {
+        opened.push(n.path || String(n.menuId))
+        return true
+      }
+      if (n.children?.length && walk(n.children)) return true
+    }
+    return false
+  }
+  walk(store.menus || [])
+  return opened
+})
+
+/** 面包屑：按菜单树父链展示（如「场地中心 / 场地管理」），未命中回退路由标题 */
+const breadcrumbs = computed(() => {
+  const chain = []
+  const walk = (nodes) => {
+    for (const n of nodes || []) {
+      if (n.menuType === 'C' && n.path === route.path) {
+        chain.push(n)
+        return true
+      }
+      if (n.children?.length && walk(n.children)) {
+        chain.unshift(n)
+        return true
+      }
+    }
+    return false
+  }
+  if (walk(store.menus || [])) {
+    return chain.map((n) => n.menuName)
+  }
+  return [route.meta.title || '首页']
 })
 
 async function onUserCommand(command) {
