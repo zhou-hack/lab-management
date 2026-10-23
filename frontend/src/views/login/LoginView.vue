@@ -62,6 +62,27 @@
           登 录
         </el-button>
       </el-form>
+
+      <!-- 开发调试快捷登录：import.meta.env.DEV 条件渲染，生产构建整体剔除 -->
+      <div
+        v-if="isDev"
+        class="login_quick"
+      >
+        <el-divider class="login_quick__divider">
+          开发快捷登录
+        </el-divider>
+        <div class="login_quick__row">
+          <el-button
+            v-for="acc in quickAccounts"
+            :key="acc.account"
+            size="small"
+            :disabled="loading"
+            @click="quickLogin(acc)"
+          >
+            {{ acc.label }}
+          </el-button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -95,6 +116,31 @@ async function submit() {
   loading.value = true
   try {
     await store.login({ accountName: form.accountName, password: form.password })
+    router.push(route.query.redirect || '/')
+  } catch {
+    // 登录失败提示由请求拦截器统一处理
+  } finally {
+    loading.value = false
+  }
+}
+
+/* ---------------- 开发快捷登录（仅 DEV，生产构建剔除） ---------------- */
+
+const isDev = import.meta.env.DEV
+const quickAccounts = import.meta.env.DEV
+  ? [
+      { label: '管理员', account: 'admin', password: 'Admin123456' },
+      { label: '运维管理员', account: 'opsadmin', password: 'Admin123456' },
+      { label: '老师', account: 'teacher1', password: 'Admin123456' },
+      { label: '学生', account: 'student1', password: 'admin123' },
+      { label: '学生代理', account: 'student2', password: 'admin123' }
+    ]
+  : []
+
+async function quickLogin(acc) {
+  loading.value = true
+  try {
+    await store.login({ accountName: acc.account, password: acc.password })
     router.push(route.query.redirect || '/')
   } catch {
     // 登录失败提示由请求拦截器统一处理
@@ -182,5 +228,26 @@ async function submit() {
 
 .login_submit:active {
   transform: scale(.985);
+}
+
+/* 开发快捷登录：低调的调试区块，不参与正式视觉层级 */
+.login_quick__divider {
+  margin: 20px 0 12px;
+}
+
+.login_quick__divider :deep(.el-divider__text) {
+  font-size: 12px;
+  color: var(--g4);
+}
+
+.login_quick__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.login_quick__row .el-button {
+  flex: 1 1 30%;
+  margin: 0;
 }
 </style>

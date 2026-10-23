@@ -525,8 +525,10 @@ public class AssetServiceImpl implements AssetService {
         return assets.stream()
                 .map(asset -> {
                     EquipmentModel model = models.get(asset.getModelId());
-                    SysDepartment department = departments.get(asset.getDepartmentId());
-                    SysUser custodian = custodians.get(asset.getCustodianId());
+                    SysDepartment department = asset.getDepartmentId() == null ? null
+                            : departments.get(asset.getDepartmentId());
+                    SysUser custodian = asset.getCustodianId() == null ? null
+                            : custodians.get(asset.getCustodianId());
                     return new AssetVO(
                             asset.getId().toString(),
                             asset.getAssetCode(),

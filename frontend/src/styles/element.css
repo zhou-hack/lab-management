@@ -124,9 +124,18 @@
   box-shadow: var(--brand-shadow);
 }
 
-/* ---------- 菜单：无右边线；选中项浅蓝底 ---------- */
+/* ---------- 菜单：无右边线；菜单项 44px 紧凑高度 + 内缩 8px + 圆角，选中项浅蓝底（参考 Element Plus 官网侧栏选中样式） ---------- */
 .el-menu {
+  /* EP 官方变量：菜单项/子菜单项高度（默认 56px），目录标题同源生效 */
+  --el-menu-item-height: 44px;
+  --el-menu-sub-item-height: 44px;
   border-right: none;
+}
+/* 菜单项与目录标题统一内缩圆角：未选中项 hover 浅蓝底同为圆角，选中项浅蓝底圆角浮起 */
+.el-menu-item,
+.el-sub-menu__title {
+  margin: 0 8px;
+  border-radius: var(--r-xs);
 }
 .el-menu-item.is-active {
   background: var(--brand-100);

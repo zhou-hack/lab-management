@@ -62,7 +62,8 @@ INSERT IGNORE INTO sys_role_permission (id, role_id, permission_id, enabled) VAL
 INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
 (350, 1, 200, 1), (351, 1, 201, 1), (352, 1, 202, 1);
 
--- 3) 物料代领菜单 205 + 学生代理绑定（与正本 5.8/5.9 一致）-------------------
+-- 3) 物料代领菜单 205 + 学生代理绑定（与正本 5.8/5.9 一致；
+--    2026-10-22 菜单改绑 ASSISTANT：未授权学生不显示，动态角色随授权并入）---
 INSERT IGNORE INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component_key, permission_id, menu_type, sort_order, enabled) VALUES
 (205, 151, 'ITEM_ASSISTANT_PICKUP', '物料代领', '/admin/item/assistant_pickup', 'ItemAssistantPickup', 122, 'PAGE', 2, 1);
 
@@ -70,7 +71,7 @@ INSERT IGNORE INTO sys_role_permission (id, role_id, permission_id, enabled) VAL
 (249, 3, 122, 1), (250, 3, 126, 1);
 
 INSERT IGNORE INTO sys_role_menu (id, role_id, menu_id, enabled) VALUES
-(361, 3, 205, 1);
+(361, 4, 205, 1);
 
 -- 4) system 权限补齐 27-30 及 ADMIN 绑定（与 sys_rbac.sql 一致；
 --    28 system:role:assign 不绑 ADMIN，仅 OPS_ADMIN 动态绑定）---------------

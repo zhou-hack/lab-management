@@ -85,6 +85,9 @@ $RECYCLE.BIN/
 # ---------- 本地工具链（便携版 JDK/Node/Git，勿提交） ----------
 tools/
 
+# 本地汇报文件（勿提交）
+*.pptx
+
 # 本地下载的脚本副本（勿提交）
 lab_management_all(*).sql
 

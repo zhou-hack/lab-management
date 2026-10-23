@@ -31,6 +31,7 @@ import com.labmanage.module.equipment.service.EquipmentBookingService;
 import com.labmanage.module.equipment.vo.BookingVO;
 import com.labmanage.module.equipment.vo.TeacherOptionVO;
 import com.labmanage.roles.entity.SysUser;
+import com.labmanage.roles.mapper.AssistantGrantMapper;
 import com.labmanage.roles.mapper.SysUserMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +47,9 @@ import java.util.UUID;
  * <p>
  * 冲突协议：申请/审批/借出统一「先锁 equipment_asset 行再校验时段」；
  * 时段重叠以 [start_at, end_at) 与 APPROVED/CHECKED_OUT 单相交判定。
+ * <p>
+ * 学生代理（assistant_grant 有效授权）与老师同级别：申请跳过教师初审直接
+ * 交设备管理员终审（贵重设备）或直接通过（普通设备），见 2026-10-22 产品定稿。
  */
 @Service
 public class EquipmentBookingServiceImpl implements EquipmentBookingService {
@@ -62,19 +66,22 @@ public class EquipmentBookingServiceImpl implements EquipmentBookingService {
     private final BizDocumentMapper documentMapper;
     private final DocumentEventMapper eventMapper;
     private final SysUserMapper userMapper;
+    private final AssistantGrantMapper grantMapper;
 
     public EquipmentBookingServiceImpl(EquipmentAssetMapper assetMapper,
                                EquipmentBookingMapper bookingMapper,
                                EquipmentUsageMapper usageMapper,
                                BizDocumentMapper documentMapper,
                                DocumentEventMapper eventMapper,
-                               SysUserMapper userMapper) {
+                               SysUserMapper userMapper,
+                               AssistantGrantMapper grantMapper) {
         this.assetMapper = assetMapper;
         this.bookingMapper = bookingMapper;
         this.usageMapper = usageMapper;
         this.documentMapper = documentMapper;
         this.eventMapper = eventMapper;
         this.userMapper = userMapper;
+        this.grantMapper = grantMapper;
     }
 
     @Override
@@ -89,19 +96,26 @@ public class EquipmentBookingServiceImpl implements EquipmentBookingService {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "仅学生/教师可提交设备使用申请");
         }
         boolean isStudent = "STUDENT".equals(userType);
+        // 学生代理（assistant_grant 有效授权）与老师同级别：申请直接交设备管理员，
+        // 跳过教师初审、无需指定审批教师
+        boolean isAssistant = isStudent && grantMapper.countValidGrant(userId, Instant.now()) > 0;
 
         Instant startAt = request.startAt();
         Instant endAt = request.endAt();
         if (!startAt.isBefore(endAt)) {
             throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "结束时间必须晚于开始时间");
         }
+        // 开始时间不得早于当前时间（5 分钟宽限，吸收填表耗时与整分钟取整）
+        if (startAt.isBefore(Instant.now().minus(Duration.ofMinutes(5)))) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "开始时间不能早于当前时间");
+        }
         if (!endAt.isAfter(Instant.now())) {
             throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "结束时间必须晚于当前时间");
         }
 
-        // 学生单必须指定审批教师（须为启用且有 TEACHER 角色的用户）
+        // 学生单（非代理）必须指定审批教师（须为启用且有 TEACHER 角色的用户）
         Long teacherId = null;
-        if (isStudent) {
+        if (isStudent && !isAssistant) {
             if (request.approvalTeacherId() == null || request.approvalTeacherId().isBlank()) {
                 throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "学生申请必须指定审批教师");
             }
@@ -123,9 +137,8 @@ public class EquipmentBookingServiceImpl implements EquipmentBookingService {
         if (asset.getStatus() != EquipmentStatus.IDLE) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "设备当前不在架，不可申请");
         }
-        if (asset.getValueLevel() == null) {
-            throw new BusinessException(ResultCode.CONFLICT.getCode(), "设备待价值定级，禁止申请使用");
-        }
+        // 本地临时（2026-10-22 用户指示）：取消价值分级门槛与贵重终审分流，
+        // 未定级设备可申请、所有批准直接 APPROVED；恢复时还原本段及 teacherReview 分流
         if (bookingMapper.countOverlap(asset.getId(), startAt, endAt, -1L) > 0) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "该时段设备已被其他申请占用");
         }
@@ -140,11 +153,12 @@ public class EquipmentBookingServiceImpl implements EquipmentBookingService {
         document.setIdempotencyKey(UUID.randomUUID().toString());
         documentMapper.insert(document);
 
-        // 状态分流：学生单待教师初审；教师普通单直接通过；教师贵重单待管理员终审
-        ValueLevel snapshot = asset.getValueLevel();
-        BookingStatus status = isStudent
+        // 状态分流：学生单（非代理）待教师初审；教师/学生代理单直接通过
+        // 本地临时：价值分级已取消，快照缺级按 NORMAL 落库（列 NOT NULL）
+        ValueLevel snapshot = asset.getValueLevel() == null ? ValueLevel.NORMAL : asset.getValueLevel();
+        BookingStatus status = (isStudent && !isAssistant)
                 ? BookingStatus.PENDING_TEACHER
-                : (snapshot == ValueLevel.VALUABLE ? BookingStatus.PENDING_ADMIN : BookingStatus.APPROVED);
+                : BookingStatus.APPROVED;
 
         EquipmentBooking booking = new EquipmentBooking();
         booking.setDocumentId(document.getId());
@@ -161,7 +175,7 @@ public class EquipmentBookingServiceImpl implements EquipmentBookingService {
         writeEvent(document.getId(), "SUBMIT", null, status.name(), userId, "USER", null);
         if (status == BookingStatus.APPROVED) {
             writeEvent(document.getId(), "APPROVE", status.name(), status.name(), null, "SYSTEM",
-                    "教师本人申请普通设备，免初审直接通过");
+                    isAssistant ? "学生代理本人申请，免初审直接通过" : "教师本人申请，免初审直接通过");
         }
     }
 
@@ -223,13 +237,11 @@ public class EquipmentBookingServiceImpl implements EquipmentBookingService {
         BookingStatus from = booking.getStatus();
         if (approve) {
             requireNoOverlap(booking);
-            BookingStatus to = booking.getValueLevelSnapshot() == ValueLevel.VALUABLE
-                    ? BookingStatus.PENDING_ADMIN
-                    : BookingStatus.APPROVED;
-            booking.setStatus(to);
+            // 本地临时：价值分级已取消，初审通过即 APPROVED（原贵重转 PENDING_ADMIN 终审）
+            booking.setStatus(BookingStatus.APPROVED);
             bookingMapper.updateById(booking);
-            writeEvent(booking.getDocumentId(), "APPROVE", from.name(), to.name(), reviewerId, "USER",
-                    to == BookingStatus.PENDING_ADMIN ? "教师初审通过，转管理员终审（贵重设备）" : request.comment());
+            writeEvent(booking.getDocumentId(), "APPROVE", from.name(), BookingStatus.APPROVED.name(),
+                    reviewerId, "USER", request.comment());
         } else {
             booking.setStatus(BookingStatus.REJECTED);
             bookingMapper.updateById(booking);

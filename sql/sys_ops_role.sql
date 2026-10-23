@@ -28,9 +28,13 @@ VALUES (2, NULL, 'ADMIN', '运维管理员', 'opsadmin', NULL, NULL,
 -- 账号角色绑定
 INSERT IGNORE INTO sys_user_role (id, user_id, role_id, enabled) VALUES (2, 2, 5, 1);
 
--- 角色权限/菜单绑定：库内全部启用项（动态 ID 段 5000+）。
--- 先删后插而非 INSERT IGNORE：ROW_NUMBER 随权限集合变化，中途新增权限后
--- IGNORE 会因 ID 撞车跳过新权限；整组重建保证每次执行结果一致，
+-- 角色权限/菜单绑定：权限为库内全部启用项（OPS_ADMIN 兜底运维，权限不受影响）；
+-- 菜单仅系统管理子树（目录 1 及其子页：人员/组织/角色/数据范围/操作日志/参数配置/授权审计），
+-- 业务页面（场地、设备、物料、预约、助理管理等）对 OPS_ADMIN 隐藏——功能归属业务角色，
+-- 运维不操作业务（2026-10-22 产品定稿）。
+-- 动态 ID 段 5000+ 避免与模块脚本固定小 ID 冲突。
+-- 先删后插而非 INSERT IGNORE：ROW_NUMBER 随集合变化，中途新增项后
+-- IGNORE 会因 ID 撞车跳过新项；整组重建保证每次执行结果一致，
 -- 后续模块新增权限后重跑本脚本即可同步绑定。
 DELETE FROM sys_role_permission WHERE role_id = 5;
 DELETE FROM sys_role_menu WHERE role_id = 5;
@@ -43,4 +47,5 @@ WHERE enabled = 1 AND deleted = 0;
 INSERT INTO sys_role_menu (id, role_id, menu_id, enabled)
 SELECT 5000 + ROW_NUMBER() OVER (ORDER BY id), 5, id, 1
 FROM sys_menu
-WHERE enabled = 1 AND deleted = 0;
+WHERE enabled = 1 AND deleted = 0
+  AND (id = 1 OR parent_id = 1);
