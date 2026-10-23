@@ -1,8 +1,10 @@
 package com.labmanage.module.booking.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import com.labmanage.common.exception.BusinessException;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
+import com.labmanage.module.booking.dto.BatchApproveDTO;
 import com.labmanage.module.booking.dto.BookingCancelDTO;
 import com.labmanage.module.booking.dto.BookingCheckoutDTO;
 import com.labmanage.module.booking.dto.BookingCreateDTO;
@@ -10,12 +12,16 @@ import com.labmanage.module.booking.dto.BookingPageQuery;
 import com.labmanage.module.booking.dto.BookingRejectDTO;
 import com.labmanage.module.booking.service.BookingService;
 import com.labmanage.module.booking.vo.AvailabilityVO;
+import com.labmanage.module.booking.vo.BatchApproveResultVO;
 import com.labmanage.module.booking.vo.BookingDetailVO;
 import com.labmanage.module.booking.vo.BookingStatsVO;
 import com.labmanage.module.booking.vo.BookingVO;
 import com.labmanage.module.booking.vo.LabOccupancyVO;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -133,6 +139,38 @@ public class BookingController {
     public Result<Void> approve(@PathVariable Long id) {
         bookingService.approve(id);
         return Result.success();
+    }
+
+    /**
+     * 批量批准（单次预约，≤100 条）：逐单独立审批，互不影响；
+     * 成功入 approvedIds，失败附原因入 failedItems（状态已变更/时段冲突等）。
+     */
+    @PostMapping("/batch_approve")
+    @SaCheckPermission("booking:lab:approve")
+    public Result<BatchApproveResultVO> batchApprove(@Valid @RequestBody BatchApproveDTO dto) {
+        java.util.List<String> approvedIds = new java.util.ArrayList<>();
+        java.util.List<BatchApproveResultVO.FailedItem> failedItems = new java.util.ArrayList<>();
+        for (Long id : dto.ids()) {
+            try {
+                bookingService.approve(id);
+                approvedIds.add(String.valueOf(id));
+            } catch (BusinessException ex) {
+                failedItems.add(new BatchApproveResultVO.FailedItem(String.valueOf(id), ex.getMessage()));
+            }
+        }
+        return Result.success(new BatchApproveResultVO(approvedIds, failedItems));
+    }
+
+    /** 预约记录 CSV 导出（与「全部预约」同条件过滤，UTF-8 BOM，上限 10000 条） */
+    @GetMapping("/all/export")
+    @SaCheckPermission("booking:lab:approve")
+    public ResponseEntity<byte[]> exportAll(@Valid @ModelAttribute BookingPageQuery query) {
+        byte[] csv = bookingService.exportBookings(query);
+        String filename = "bookings_" + LocalDate.now() + ".csv";
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
+                .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                .body(csv);
     }
 
     @PostMapping("/{id}/reject")

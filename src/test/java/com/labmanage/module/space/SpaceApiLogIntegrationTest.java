@@ -288,4 +288,20 @@ class SpaceApiLogIntegrationTest {
                 "A703 网络实训室",
                 "教学楼201多媒体教室");
     }
+
+    @Test
+    @DisplayName("停用影响评估：仅统计未来未释放占用槽与涉及单数（2 槽 2 单）")
+    void pendingImpact_shouldCountFutureUnreleasedOnly() throws Exception {
+        JsonNode body = get("/api/v1/space/spaces/1/pending_impact");
+
+        assertThat(body.path("code").asInt()).isZero();
+        assertThat(body.path("data").path("futureSlots").asLong()).isEqualTo(2);
+        assertThat(body.path("data").path("futureBookings").asLong()).isEqualTo(2);
+
+        // 无占用场地：双零
+        JsonNode empty = get("/api/v1/space/spaces/3/pending_impact");
+        assertThat(empty.path("code").asInt()).isZero();
+        assertThat(empty.path("data").path("futureSlots").asLong()).isZero();
+        assertThat(empty.path("data").path("futureBookings").asLong()).isZero();
+    }
 }

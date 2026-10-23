@@ -541,6 +541,62 @@ class BookingApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("批量审批：逐单独立，冲突单失败附原因，成功单时段占用")
+    void batchApprove_partialSuccess() throws Exception {
+        JsonNode first = createBookingOn("2026-12-22", teacherToken);
+        JsonNode second = createBookingOn("2026-12-22", teacherToken);
+        JsonNode third = createBookingOn("2026-12-23", teacherToken);
+        String id1 = first.path("data").path("id").asText();
+        String id2 = second.path("data").path("id").asText();
+        String id3 = third.path("data").path("id").asText();
+
+        JsonNode body = post("/api/v1/booking/labs/batch_approve",
+                "{\"ids\": [%s, %s, %s]}".formatted(id1, id2, id3), adminToken);
+        assertThat(body.path("code").asInt()).isZero();
+        assertThat(body.path("data").path("approvedIds")).hasSize(2);
+        assertThat(body.path("data").path("failedItems")).hasSize(1);
+        assertThat(body.path("data").path("failedItems").get(0).path("id").asText()).isEqualTo(id2);
+        assertThat(body.path("data").path("failedItems").get(0).path("msg").asText()).isNotBlank();
+
+        // 成功单占用时段（12-22 与 12-23 各一段）
+        assertThat(get("/api/v1/booking/labs/availability?spaceId=1&date=2026-12-22", teacherToken)
+                .path("data").path("occupied")).hasSize(1);
+        assertThat(get("/api/v1/booking/labs/availability?spaceId=1&date=2026-12-23", teacherToken)
+                .path("data").path("occupied")).hasSize(1);
+
+        // 空列表 40000；教师无审批权限 40300
+        assertThat(post("/api/v1/booking/labs/batch_approve", "{\"ids\": []}", adminToken)
+                .path("code").asInt()).isEqualTo(40000);
+        assertThat(post("/api/v1/booking/labs/batch_approve", "{\"ids\": [%s]}".formatted(id1), teacherToken)
+                .path("code").asInt()).isEqualTo(40300);
+    }
+
+    @Test
+    @DisplayName("预约导出 CSV：UTF-8 BOM + 中文表头 + 数据行；教师 40300")
+    void exportAll_csv() throws Exception {
+        JsonNode created = createBookingOn("2026-12-24", teacherToken);
+        assertThat(post("/api/v1/booking/labs/" + created.path("data").path("id").asText() + "/approve",
+                null, adminToken).path("code").asInt()).isZero();
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://127.0.0.1:" + port + "/api/v1/booking/labs/all/export"))
+                .header("Authorization", "Bearer " + adminToken)
+                .GET().build();
+        HttpResponse<byte[]> response = HTTP.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.headers().firstValue("Content-Type").orElse("")).contains("text/csv");
+
+        String csv = new String(response.body(), java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(csv).startsWith("\uFEFF");
+        assertThat(csv.lines().findFirst().orElse("")).contains("预约ID");
+        assertThat(csv).contains("A703 网络实训室");
+
+        // 教师无审批权限：40300
+        JsonNode forbidden = get("/api/v1/booking/labs/all/export", teacherToken);
+        assertThat(forbidden.path("code").asInt()).isEqualTo(40300);
+    }
+
+    @Test
     @DisplayName("未登录访问：HTTP 401")
     void withoutToken_shouldReturn401() throws Exception {
         assertThat(getRaw("/api/v1/booking/labs")).isEqualTo(401);

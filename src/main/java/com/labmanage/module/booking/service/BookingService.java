@@ -48,6 +48,9 @@ public interface BookingService {
     /** 全部预约分页（审批视角） */
     PageResult<BookingVO> pageAll(BookingPageQuery query);
 
+    /** 全部预约 CSV 导出（与分页同条件，UTF-8 BOM、上海时区，上限 10000 行） */
+    byte[] exportBookings(BookingPageQuery query);
+
     /** 预约情况只读分页（booking:lab:view，学生只读：看预约情况与批准/驳回结果） */
     PageResult<BookingVO> pageBoard(BookingPageQuery query);
 

@@ -495,6 +495,7 @@ import {
   updateSpace,
   enableSpace,
   disableSpace,
+  getPendingImpact,
   deleteSpace,
   exportSpaces,
   batchStatusSpaces
@@ -811,10 +812,24 @@ async function onSubmitForm({ id, payload }) {
 }
 
 async function onToggle(row, enabled) {
+  // 停用时前置查询联动影响：未来未完成预约与占用槽数，二次确认中明示
+  let impactTip = ''
+  if (!enabled) {
+    try {
+      const impact = await getPendingImpact(row.id)
+      const bookings = Number(impact?.futureBookings) || 0
+      const slots = Number(impact?.futureSlots) || 0
+      if (bookings > 0) {
+        impactTip = `该场地还有 ${bookings} 条未完成预约（未来占用 ${slots} 个时段），停用后新预约将被拦截，已有预约需人工跟进。`
+      }
+    } catch {
+      impactTip = ''
+    }
+  }
   try {
     await ElMessageBox.confirm(
       `确定${enabled ? '启用' : '停用'}场地「${row.labName}」吗？${
-        enabled ? '启用后可恢复预约与排课。' : '停用后不可新建预约。'
+        enabled ? '启用后可恢复预约与排课。' : impactTip || '停用后不可新建预约。'
       }`,
       '操作确认',
       { type: 'warning' }

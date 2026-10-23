@@ -69,6 +69,19 @@ export function approveBooking(id) {
   return request.post(`/booking/labs/${id}/approve`)
 }
 
+/**
+ * 批量批准（booking:lab:approve，≤100 条，逐单独立互不影响）。
+ * resolve BatchApproveResultVO：{ approvedIds:[], failedItems:[{id,msg}] }
+ */
+export function batchApproveBookings(ids) {
+  return request.post('/booking/labs/batch_approve', { ids })
+}
+
+/** 预约记录 CSV 导出（与全部预约同条件，UTF-8 BOM，上限 10000 条），返回 Blob */
+export function exportAllBookings(params) {
+  return request.get('/booking/labs/all/export', { params, responseType: 'blob' })
+}
+
 /** 驳回预约（booking:lab:approve，原因必填） */
 export function rejectBooking(id, reason) {
   return request.post(`/booking/labs/${id}/reject`, { reason })

@@ -29,12 +29,29 @@
         </div>
 
         <div class="card bk_approval__table_card">
+          <div class="bk_approval__toolbar">
+            <el-button
+              v-permission="'booking:lab:approve'"
+              type="success"
+              :disabled="!selectedRows.length"
+              :loading="batchApproving"
+              @click="onBatchApprove"
+            >
+              批量批准{{ selectedRows.length ? `（${selectedRows.length}）` : '' }}
+            </el-button>
+            <span class="t-hint">勾选多条待审批申请后可一次性批准，冲突单将逐条反馈原因</span>
+          </div>
           <el-table
             v-loading="loading"
             :data="records"
             class="table-scroll-x"
             row-key="id"
+            @selection-change="(rows) => (selectedRows = rows)"
           >
+            <el-table-column
+              type="selection"
+              width="46"
+            />
             <el-table-column
               label="申请人"
               min-width="100"
@@ -390,10 +407,12 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { pageAllBookings, approveBooking, rejectBooking } from '@/api/booking'
+import { pageAllBookings, approveBooking, batchApproveBookings, rejectBooking } from '@/api/booking'
 import { pageAllSeries, approveSeries, rejectSeries, getSeriesDetail } from '@/api/booking'
 import { BOOKING_STATUS_MAP, SERIES_STATUS_MAP } from '@/views/booking/booking.constants'
 import { formatRange } from '@/utils/datetime'
+
+const emit = defineEmits(['decided'])
 
 const activeTab = ref('single')
 
@@ -403,6 +422,8 @@ const records = ref([])
 const total = ref(0)
 const pendingCount = ref(0)
 const query = reactive({ pageNum: 1, pageSize: 10 })
+const selectedRows = ref([])
+const batchApproving = ref(false)
 
 // 周期预约
 const seriesLoading = ref(false)
@@ -457,6 +478,47 @@ async function onApprove(row) {
   ElMessage.success('已批准，时段已占用')
   if (records.value.length === 1 && query.pageNum > 1) query.pageNum -= 1
   loadData()
+  emit('decided')
+}
+
+/** 批量批准：逐单独立审批，成功/失败分档提示（冲突单附原因） */
+async function onBatchApprove() {
+  const rows = selectedRows.value
+  if (!rows.length) return
+  try {
+    await ElMessageBox.confirm(
+      `批量批准选中的 ${rows.length} 条预约申请吗？批准后对应时段立即占用，与其他申请互斥。`,
+      '批量批准确认',
+      { type: 'warning', confirmButtonText: `批准 ${rows.length} 条`, cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  batchApproving.value = true
+  try {
+    const data = await batchApproveBookings(rows.map((r) => r.id))
+    const okCount = (data.approvedIds || []).length
+    const failed = data.failedItems || []
+    if (!failed.length) {
+      ElMessage.success(`已批量批准 ${okCount} 条，时段已占用`)
+    } else {
+      const names = failed
+        .slice(0, 3)
+        .map((f) => {
+          const row = rows.find((r) => String(r.id) === String(f.id))
+          return `${row?.labName || f.id}：${f.msg}`
+        })
+        .join('；')
+      ElMessage.warning(
+        `批准 ${okCount} 条，${failed.length} 条未通过（${names}${failed.length > 3 ? ' 等' : ''}）`
+      )
+    }
+    query.pageNum = 1
+    loadData()
+    emit('decided')
+  } finally {
+    batchApproving.value = false
+  }
 }
 
 async function onReject(row) {
@@ -481,6 +543,7 @@ async function onReject(row) {
   ElMessage.success('已驳回')
   if (records.value.length === 1 && query.pageNum > 1) query.pageNum -= 1
   loadData()
+  emit('decided')
 }
 
 async function onApproveSeries(row) {
@@ -497,6 +560,7 @@ async function onApproveSeries(row) {
   ElMessage.success('已批准，已逐周生成占用')
   if (seriesList.value.length === 1 && seriesQuery.pageNum > 1) seriesQuery.pageNum -= 1
   loadSeries()
+  emit('decided')
 }
 
 async function onRejectSeries(row) {
@@ -521,6 +585,7 @@ async function onRejectSeries(row) {
   ElMessage.success('已驳回')
   if (seriesList.value.length === 1 && seriesQuery.pageNum > 1) seriesQuery.pageNum -= 1
   loadSeries()
+  emit('decided')
 }
 
 async function openSeriesDetail(row) {
@@ -591,6 +656,13 @@ onMounted(() => {
 
 .bk_approval__table_card {
   padding: 20px;
+}
+
+.bk_approval__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .bk_approval__space {

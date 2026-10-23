@@ -149,6 +149,16 @@ public class SpaceController {
         return Result.success();
     }
 
+    /**
+     * 停用影响评估（联动提醒）：返回该场地未来未释放占用槽数与涉及预约单数，
+     * 前端停用二次确认时前置查询；停用后新预约被拦截，已有预约需人工跟进。
+     */
+    @GetMapping("/{id}/pending_impact")
+    @SaCheckPermission("space:space:update")
+    public Result<com.labmanage.module.space.vo.SpacePendingImpactVO> pendingImpact(@PathVariable Long id) {
+        return Result.success(spaceService.pendingImpact(id));
+    }
+
     @DeleteMapping("/{id}")
     @SaCheckPermission("space:space:delete")
     public Result<Void> delete(@PathVariable Long id) {

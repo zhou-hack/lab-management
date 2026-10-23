@@ -109,6 +109,13 @@
             管理员仅查看与审批：待审批项可批准/驳回，批准即时占用时段
           </p>
         </div>
+        <el-button
+          v-permission="'booking:lab:approve'"
+          :loading="exporting"
+          @click="onExport"
+        >
+          导出 CSV
+        </el-button>
       </div>
 
       <el-table
@@ -273,7 +280,8 @@ import {
   approveBooking,
   rejectBooking,
   checkinBooking,
-  checkoutBooking
+  checkoutBooking,
+  exportAllBookings
 } from '@/api/booking'
 import { listSpaceOptions } from '@/api/space'
 import { formatInstant, formatRange, shanghaiLocalToIso } from '@/utils/datetime'
@@ -284,6 +292,7 @@ const total = ref(0)
 const spaceOptions = ref([])
 const detailVisible = ref(false)
 const detailId = ref('')
+const exporting = ref(false)
 const stats = reactive({ total: 0, pending: 0, approved: 0, rejected: 0, cancelled: 0 })
 
 const query = reactive({
@@ -332,6 +341,30 @@ async function loadData() {
 function onSearch() {
   query.pageNum = 1
   loadData()
+}
+
+/** 按当前筛选条件导出预约记录 CSV（UTF-8 BOM，上限 10000 条） */
+async function onExport() {
+  exporting.value = true
+  try {
+    const params = {
+      status: query.status || undefined,
+      spaceId: query.spaceId || undefined
+    }
+    const [from, to] = query.dateRange || []
+    if (from) params.startFrom = shanghaiLocalToIso(from, '00:00')
+    if (to) params.startTo = shanghaiLocalToIso(to, '23:59')
+    const blob = await exportAllBookings(params)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `bookings_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success('已按当前筛选条件导出预约记录')
+  } finally {
+    exporting.value = false
+  }
 }
 
 function onReset() {

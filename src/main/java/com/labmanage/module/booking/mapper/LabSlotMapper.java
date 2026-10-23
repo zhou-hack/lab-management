@@ -54,4 +54,20 @@ public interface LabSlotMapper extends BaseMapper<LabSlot> {
     @Select("SELECT COUNT(*) FROM lab_slot WHERE lab_id = #{labId} AND deleted = 0 "
             + "AND released_at IS NULL")
     long countUnreleasedByLabId(@Param("labId") Long labId);
+
+    /**
+     * 统计场地未来未释放占用槽数（停用影响评估：仅 end_at 晚于当前时间）。
+     */
+    @Select("SELECT COUNT(*) FROM lab_slot WHERE lab_id = #{labId} AND deleted = 0 "
+            + "AND released_at IS NULL AND end_at > #{now}")
+    long countFutureUnreleasedByLabId(@Param("labId") Long labId,
+                                      @Param("now") Instant now);
+
+    /**
+     * 统计场地未来未释放占用涉及的预约单数（停用影响评估）。
+     */
+    @Select("SELECT COUNT(DISTINCT booking_id) FROM lab_slot WHERE lab_id = #{labId} AND deleted = 0 "
+            + "AND released_at IS NULL AND end_at > #{now}")
+    long countFutureBookingsByLabId(@Param("labId") Long labId,
+                                    @Param("now") Instant now);
 }

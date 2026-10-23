@@ -567,6 +567,54 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
+    public byte[] exportBookings(BookingPageQuery query) {
+        Long operatorId = SecurityUtils.currentUserId();
+        long begin = System.nanoTime();
+        // 与分页同条件，去掉分页上限按导出上限 10000 行截断
+        List<LabBooking> records = bookingMapper.selectList(buildWrapper(query).last("LIMIT 10000"));
+        Map<Long, BizSpace> spaces = loadSpaces(records);
+        Map<Long, SysUser> users = loadUsers(records);
+        Map<Long, SysUser> teachers = loadTeachers(records);
+        StringBuilder sb = new StringBuilder("﻿");
+        sb.append("预约ID,场地,申请人,课程,班级,老师,事由,人数,预约日期,开始时间,结束时间,状态,驳回原因,提交时间\r\n");
+        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter
+                .ofPattern("yyyy-MM-dd HH:mm").withZone(SHANGHAI);
+        for (LabBooking b : records) {
+            BizSpace space = spaces.get(b.getLabId());
+            SysUser applicant = users.get(b.getApplicantId());
+            SysUser teacher = b.getTeacherId() == null ? null : teachers.get(b.getTeacherId());
+            sb.append(b.getId()).append(',')
+                    .append(csvCell(space == null ? null : space.getLabName())).append(',')
+                    .append(csvCell(applicant == null ? null : applicant.getRealName())).append(',')
+                    .append(csvCell(b.getCourseName())).append(',')
+                    .append(csvCell(b.getClassName())).append(',')
+                    .append(csvCell(teacher == null ? null : teacher.getRealName())).append(',')
+                    .append(csvCell(b.getPurpose())).append(',')
+                    .append(b.getParticipantCount()).append(',')
+                    .append(b.getBookingDate() == null ? "" : b.getBookingDate()).append(',')
+                    .append(fmt.format(b.getStartAt())).append(',')
+                    .append(fmt.format(b.getEndAt())).append(',')
+                    .append(b.getStatus() == null ? "" : b.getStatus().getDisplayName()).append(',')
+                    .append(csvCell(b.getRejectReason())).append(',')
+                    .append(fmt.format(b.getCreateTime())).append("\r\n");
+        }
+        log.info("[预约导出] 完成：操作人={}, 条件=[{}], 导出行数={}, 耗时={}ms",
+                operatorId, buildFilterSummary(query), records.size(), (System.nanoTime() - begin) / 1_000_000);
+        return sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /** CSV 单元格：含分隔符/引号/换行时按 RFC 4180 包裹转义 */
+    private String csvCell(String value) {
+        if (value == null) {
+            return "";
+        }
+        if (value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
+            return '"' + value.replace("\"", "\"\"") + '"';
+        }
+        return value;
+    }
+
+    @Override
     public BookingStatsVO stats() {
         Long operatorId = SecurityUtils.currentUserId();
         long pending = 0;

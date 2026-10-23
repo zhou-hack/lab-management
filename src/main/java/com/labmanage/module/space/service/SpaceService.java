@@ -89,6 +89,11 @@ public interface SpaceService {
     void disable(Long id);
 
     /**
+     * 场地停用影响评估（未来未释放占用槽与涉及预约单数，停用二次确认联动提醒）。
+     */
+    com.labmanage.module.space.vo.SpacePendingImpactVO pendingImpact(Long id);
+
+    /**
      * 删除场地（逻辑删除，名称不复用；删除前做业务引用检查）。
      */
     void delete(Long id);

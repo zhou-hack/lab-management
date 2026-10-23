@@ -584,6 +584,18 @@ public class SpaceServiceImpl implements SpaceService {
     }
 
     @Override
+    public com.labmanage.module.space.vo.SpacePendingImpactVO pendingImpact(Long id) {
+        Long operatorId = SecurityUtils.currentUserId();
+        BizSpace space = requireSpace(id);
+        java.time.Instant now = java.time.Instant.now();
+        long futureSlots = slotMapper.countFutureUnreleasedByLabId(id, now);
+        long futureBookings = slotMapper.countFutureBookingsByLabId(id, now);
+        log.info("[停用影响评估] 完成：操作人={}, 场地={}, 未来占用槽={}, 涉及预约单={}",
+                operatorId, space.getLabName(), futureSlots, futureBookings);
+        return new com.labmanage.module.space.vo.SpacePendingImpactVO(futureSlots, futureBookings);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         Long operatorId = SecurityUtils.currentUserId();

@@ -64,6 +64,11 @@ export function disableSpace(id) {
   return request.post(`/space/spaces/${id}/disable`)
 }
 
+/** 停用影响评估（联动提醒）：未来未释放占用槽数与涉及预约单数 */
+export function getPendingImpact(id) {
+  return request.get(`/space/spaces/${id}/pending_impact`)
+}
+
 export function deleteSpace(id) {
   return request.delete(`/space/spaces/${id}`)
 }

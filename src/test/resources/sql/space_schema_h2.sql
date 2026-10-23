@@ -33,3 +33,26 @@ CREATE TABLE lab (
 CREATE INDEX idx_lab_status ON lab (status);
 CREATE INDEX idx_lab_type ON lab (lab_type);
 CREATE INDEX idx_lab_capacity ON lab (capacity);
+
+-- 场地停用影响评估（pending_impact）引用预约占用槽表：与 booking_schema_h2.sql 同构
+DROP TABLE IF EXISTS lab_slot;
+
+CREATE TABLE lab_slot (
+    id              BIGINT       NOT NULL,
+    lab_id          BIGINT       NOT NULL,
+    booking_id      BIGINT       NOT NULL,
+    start_at        TIMESTAMP(3) NOT NULL,
+    end_at          TIMESTAMP(3) NOT NULL,
+    released_at     TIMESTAMP(3) NULL,
+    release_reason  VARCHAR(512) NULL,
+    create_time     TIMESTAMP(3) NOT NULL,
+    update_time     TIMESTAMP(3) NOT NULL,
+    deleted         TINYINT      NOT NULL DEFAULT 0,
+    create_user_id  BIGINT       NULL,
+    update_user_id  BIGINT       NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_lab_slot_booking UNIQUE (booking_id),
+    CONSTRAINT chk_lab_slot_window CHECK (start_at < end_at)
+);
+
+CREATE INDEX idx_lab_slot_conflict ON lab_slot (lab_id, released_at, start_at, end_at);
