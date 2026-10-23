@@ -33,10 +33,9 @@ CREATE TABLE business_policy (
 INSERT INTO business_policy (id, policy_code, policy_version, policy_name, effective_from, effective_to, config, enabled) VALUES
 (1, 'LOGIN_MAX_FAIL',                 1, '登录连续失败锁定阈值（次）',     '2026-10-14 00:00:00.000', NULL, JSON_OBJECT('maxFailCount', 5),     1),
 (2, 'LOGIN_LOCK_MINUTES',             1, '登录锁定时长（分钟）',           '2026-10-14 00:00:00.000', NULL, JSON_OBJECT('lockMinutes', 30),     1),
-(3, 'PASSWORD_EXPIRE_DAYS',           1, '密码有效期（天）',               '2026-10-14 00:00:00.000', NULL, JSON_OBJECT('expireDays', 90),      1),
 (4, 'SMS_CODE_TTL_SECONDS',           1, '短信验证码有效期（秒）',         '2026-10-14 00:00:00.000', NULL, JSON_OBJECT('ttlSeconds', 300),     1),
 (5, 'SMS_RESEND_INTERVAL_SECONDS',    1, '短信验证码重发间隔（秒）',       '2026-10-14 00:00:00.000', NULL, JSON_OBJECT('intervalSeconds', 60), 1),
 (6, 'SMS_DAILY_LIMIT',                1, '短信验证码日发送上限（条）',     '2026-10-14 00:00:00.000', NULL, JSON_OBJECT('dailyLimit', 10),      1),
 (7, 'SMS_CODE_MAX_FAIL',              1, '验证码错误作废次数（次）',       '2026-10-14 00:00:00.000', NULL, JSON_OBJECT('maxFailCount', 5),     1),
-(8, 'SESSION_TIMEOUT_STUDENT_TEACHER', 1, '学生/老师会话有效期（秒）',     '2026-10-14 00:00:00.000', NULL, JSON_OBJECT('timeoutSeconds', 7200),  1),
+(8, 'SESSION_TIMEOUT_STUDENT_TEACHER', 1, '学生/老师会话有效期（秒）',     '2026-10-14 00:00:00.000', NULL, JSON_OBJECT('timeoutSeconds', 28800), 1),
 (9, 'SESSION_TIMEOUT_ADMIN',          1, '管理员会话有效期（秒）',         '2026-10-14 00:00:00.000', NULL, JSON_OBJECT('timeoutSeconds', 28800), 1);
