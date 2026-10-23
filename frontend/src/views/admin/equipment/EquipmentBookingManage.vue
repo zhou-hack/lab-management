@@ -6,7 +6,7 @@
           设备使用审批
         </h2>
         <p class="t-sub">
-          学生单超 24h 代批 · 借出发放与归还登记 · 超期未还人工跟进
+          借出发放与归还登记 · 超期未还人工跟进
         </p>
       </div>
     </div>
@@ -121,14 +121,7 @@
           >
             <template #default="{ row }">
               <el-tooltip
-                v-if="row.status === 'PENDING_TEACHER' && isTeacherOvertime(row)"
-                content="学生单超 24 小时未初审，可代批"
-                placement="top"
-              >
-                <span class="pill pill--warn">可代批</span>
-              </el-tooltip>
-              <el-tooltip
-                v-else-if="row.status === 'CHECKED_OUT' && isOverdue(row)"
+                v-if="row.status === 'CHECKED_OUT' && isOverdue(row)"
                 content="已超过预约归还时段，请线下跟进归还"
                 placement="top"
               >
@@ -146,25 +139,8 @@
             fixed="right"
           >
             <template #default="{ row }">
-              <template v-if="row.status === 'PENDING_ADMIN' || row.status === 'PENDING_TEACHER'">
-                <el-tooltip
-                  v-if="row.status === 'PENDING_TEACHER' && !isTeacherOvertime(row)"
-                  content="学生单需超时 24 小时后管理员方可代批"
-                  placement="top"
-                >
-                  <span>
-                    <el-button
-                      v-permission="'equipment:booking:admin_review'"
-                      link
-                      type="primary"
-                      disabled
-                    >
-                      通过
-                    </el-button>
-                  </span>
-                </el-tooltip>
+              <template v-if="row.status === 'PENDING_ADMIN'">
                 <el-button
-                  v-else
                   v-permission="'equipment:booking:admin_review'"
                   link
                   type="primary"
@@ -176,7 +152,6 @@
                   v-permission="'equipment:booking:admin_review'"
                   link
                   type="danger"
-                  :disabled="row.status === 'PENDING_TEACHER' && !isTeacherOvertime(row)"
                   @click="openReject(row)"
                 >
                   驳回
@@ -349,12 +324,10 @@ import { formatSh } from '@/utils/datetime'
 
 /**
  * 设备使用审批（管理端）：全部申请分页 + 状态筛选。
- * 操作按状态收敛——PENDING_TEACHER 超 24h 代批；
- * APPROVED 借出登记；CHECKED_OUT 归还登记（损坏转维护中）。
- * （历史遗留 PENDING_ADMIN 单仍可终审/驳回，新单不再产生该状态）
+ * 操作按状态收敛——「待教师初审」单由教师初审，操作栏不显示通过/驳回；
+ * 历史遗留 PENDING_ADMIN 单仍可终审/驳回；APPROVED 借出登记；
+ * CHECKED_OUT 归还登记（损坏转维护中）。
  */
-const REVIEW_TIMEOUT_MS = 24 * 60 * 60 * 1000
-
 const query = reactive({
   pageNum: 1,
   pageSize: 10,
@@ -364,13 +337,8 @@ const records = ref([])
 const total = ref(0)
 const loading = ref(false)
 
-/** 加载时刻的当前时间：超时/超期标记按页面数据快照计算 */
+/** 加载时刻的当前时间：超期标记按页面数据快照计算 */
 let loadedAt = Date.now()
-
-function isTeacherOvertime(row) {
-  const time = new Date(row.createTime).getTime()
-  return Number.isFinite(time) && loadedAt - time > REVIEW_TIMEOUT_MS
-}
 
 function isOverdue(row) {
   const time = new Date(row.endAt).getTime()
