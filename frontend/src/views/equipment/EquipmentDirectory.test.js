@@ -24,7 +24,7 @@ const categories = [
   { id: '102', categoryName: '计算设备', categoryCode: 'COMP', children: [] }
 ]
 
-// 服务端按型号聚合的目录记录：在架台数 + 借出中资产编号（不暴露在架资产编号）
+// 服务端按型号聚合的目录记录：在架空闲台数 + 借出中资产编号（不暴露在架资产编号）
 const models = [
   {
     modelId: '201',
@@ -43,10 +43,10 @@ const models = [
     equipmentName: '服务器',
     categoryId: '102',
     categoryName: '计算设备',
-    idleCount: 1,
-    checkedOutCodes: [],
-    firstIdleAssetId: '2',
-    firstIdleAssetCode: 'ZC-002'
+    idleCount: 0,
+    checkedOutCodes: ['ZC-201', 'ZC-202'],
+    firstIdleAssetId: null,
+    firstIdleAssetCode: null
   }
 ]
 
@@ -73,14 +73,46 @@ describe('设备目录页（按型号合并分组）', () => {
     const groups = wrapper.findAll('.equip_group')
     expect(groups).toHaveLength(2)
     expect(groups[0].text()).toContain('网络设备')
-    expect(groups[0].text()).toContain('在架 3 台')
+    expect(groups[0].text()).toContain('在架 5 台')
     expect(groups[1].text()).toContain('计算设备')
     // 借出中的设备显示资产编号
     expect(wrapper.text()).toContain('ZC-101')
     expect(wrapper.text()).toContain('ZC-102')
+    expect(wrapper.text()).toContain('ZC-201')
     // 在架设备不暴露资产编号（仅首个在架资产用于申请预选）
     expect(wrapper.text()).not.toContain('ZC-001')
-    expect(wrapper.text()).not.toContain('ZC-002')
+    wrapper.unmount()
+  })
+
+  it('展示借出台数与申请使用次数，申请使用次数=0 时按钮置灰禁用', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    const groups = wrapper.findAll('.equip_group')
+    // 网络设备：空闲 3 + 借出 2 → 在架 5、借出 2、申请使用 3，按钮可用
+    expect(groups[0].text()).toContain('借出台数')
+    expect(groups[0].text()).toContain('在架 5 台')
+    expect(groups[0].text()).toContain('3 台')
+    expect(groups[0].find('.el-button').attributes('disabled')).toBeUndefined()
+    // 计算设备：空闲 0 + 借出 2 → 在架 2、借出 2、申请使用 0，按钮置灰禁用
+    expect(groups[1].text()).toContain('在架 2 台')
+    expect(groups[1].text()).toContain('0 台')
+    expect(groups[1].find('.el-button').attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
+
+  it('申请使用次数=在架台数-借出台数且不小于 0（归还一台借出-1、可用+1）', () => {
+    const wrapper = mountPage()
+    // 不依赖接口数据，直接验证口径与下限
+    // 归还一台：空闲+1、借出-1 → 在架台数不变、申请使用 +1（3→4）
+    expect(wrapper.vm.applyableCount({ idleCount: 3, checkedOutCodes: ['a', 'b'] })).toBe(3)
+    expect(wrapper.vm.applyableCount({ idleCount: 4, checkedOutCodes: ['a'] })).toBe(4)
+    // 全部借出时下限为 0
+    expect(wrapper.vm.applyableCount({ idleCount: 0, checkedOutCodes: ['a', 'b'] })).toBe(0)
+    expect(wrapper.vm.applyableCount({ idleCount: 2, checkedOutCodes: ['a', 'b', 'c'] })).toBe(2)
+    expect(wrapper.vm.applyableCount({ idleCount: 1, checkedOutCodes: null })).toBe(1)
+    // 在架台数 = 空闲 + 借出
+    expect(wrapper.vm.onShelfCount({ idleCount: 3, checkedOutCodes: ['a', 'b'] })).toBe(5)
+    expect(wrapper.vm.checkedOutCount({ idleCount: 3, checkedOutCodes: ['a', 'b'] })).toBe(2)
     wrapper.unmount()
   })
 

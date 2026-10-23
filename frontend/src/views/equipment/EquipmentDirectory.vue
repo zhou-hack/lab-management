@@ -73,7 +73,7 @@
               </el-icon>
             </span>
             <span class="equip_group__name">{{ group.categoryName }}</span>
-            <span class="equip_group__count">在架 {{ group.idleCount }} 台</span>
+            <span class="equip_group__count">在架 {{ group.onShelfCount }} 台</span>
           </div>
           <div
             v-show="expanded[group.categoryId]"
@@ -94,10 +94,10 @@
                 />
                 <el-table-column
                   label="在架台数"
-                  width="100"
+                  width="90"
                 >
                   <template #default="{ row }">
-                    {{ row.idleCount }} 台
+                    {{ onShelfCount(row) }} 台
                   </template>
                 </el-table-column>
                 <el-table-column
@@ -115,24 +115,36 @@
                   </template>
                 </el-table-column>
                 <el-table-column
+                  label="借出台数"
+                  width="90"
+                >
+                  <template #default="{ row }">
+                    {{ checkedOutCount(row) }} 台
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="申请使用次数"
+                  width="110"
+                >
+                  <template #default="{ row }">
+                    {{ applyableCount(row) }} 台
+                  </template>
+                </el-table-column>
+                <el-table-column
                   label="操作"
                   width="110"
                   fixed="right"
                 >
                   <template #default="{ row }">
                     <el-button
-                      v-if="row.idleCount > 0"
                       v-permission="'equipment:booking:apply'"
                       link
                       type="primary"
+                      :disabled="applyableCount(row) === 0"
                       @click="openApply(row)"
                     >
                       申请使用
                     </el-button>
-                    <span
-                      v-else
-                      class="t-hint"
-                    >—</span>
                   </template>
                 </el-table-column>
               </el-table>
@@ -172,6 +184,9 @@ import BookingApplyDialog from '@/components/BookingApplyDialog.vue'
  * 设备目录（学生/教师用户端）：服务端按型号聚合（相同型号设备合并展示），
  * 全量加载不分页，按设备分类分组折叠；
  * 不逐台暴露在架资产编号（仅显示在架台数），借出中的设备展示其资产编号；
+ * 另列借出台数（借出中台数）与申请使用次数：在架台数为该型号在库总台数（空闲+借出，
+ * 借出/归还不变），申请使用次数 = 在架台数 - 借出台数（不小于 0；为 0 时申请按钮置灰
+ * 禁用，不可再申请）；归还一台：借出台数 -1、申请使用次数 +1；
  * 搜索框带关键字联想（设备内已有的型号编码/设备名称，点击建议即查询）；
  * 「申请使用」打开共享申请弹窗（预选该型号首个在架资产）。
  */
@@ -211,7 +226,7 @@ const categoryFilterOptions = computed(() => cloneLabeled(categoryTreeData.value
 
 /* ---------------- 列表（按分类分组，组内为型号合并行） ---------------- */
 
-/** 型号聚合记录按所属分类分组（组内台数为在架合计） */
+/** 型号聚合记录按所属分类分组（组内台数为在架合计，含借出） */
 const groups = computed(() => {
   const order = []
   const map = new Map()
@@ -221,13 +236,13 @@ const groups = computed(() => {
       map.set(key, {
         categoryId: key,
         categoryName: row.categoryName || '未分类',
-        idleCount: 0,
+        onShelfCount: 0,
         models: []
       })
       order.push(key)
     }
     const group = map.get(key)
-    group.idleCount += Number(row.idleCount) || 0
+    group.onShelfCount += onShelfCount(row)
     group.models.push(row)
   }
   return order.map((key) => map.get(key))
@@ -336,6 +351,24 @@ watch(
 
 const applyDialogRef = ref()
 const applyPreset = ref(null)
+
+/** 借出台数（该型号借出中台数） */
+function checkedOutCount(row) {
+  return Array.isArray(row.checkedOutCodes) ? row.checkedOutCodes.length : 0
+}
+
+/** 在架台数 = 该型号在库台数（在架空闲 + 借出中）；借出/归还不改变总数 */
+function onShelfCount(row) {
+  return (Number(row.idleCount) || 0) + checkedOutCount(row)
+}
+
+/**
+ * 可申请台数 = 在架台数 - 借出台数（不小于 0；为 0 时按钮置灰禁用）。
+ * 归还一台设备：借出台数 -1 → 申请使用次数 +1；借出一台：借出台数 +1 → 申请使用次数 -1。
+ */
+function applyableCount(row) {
+  return Math.max(0, onShelfCount(row) - checkedOutCount(row))
+}
 
 function openApply(row) {
   applyPreset.value = {
