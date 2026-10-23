@@ -113,7 +113,9 @@ public class BookingServiceImpl implements BookingService {
             }
         }
 
-        // 冲突协议：先锁设备行，再校验在架与时段占用
+        // 冲突协议：先锁设备行，校验在架与启用状态；
+        // 申请期不校验时段互斥（学生/教师可同时段提交申请），
+        // 实际占用在教师初审/管理员终审（requireNoOverlap）与借出登记时按先到先得校验
         EquipmentAsset asset = assetMapper.selectByIdForUpdate(Ids.parse(request.assetId()));
         if (asset == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "设备不存在");
@@ -123,9 +125,6 @@ public class BookingServiceImpl implements BookingService {
         }
         if (asset.getStatus() != EquipmentStatus.IDLE) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "设备当前不在架，不可申请");
-        }
-        if (bookingMapper.countOverlap(asset.getId(), startAt, endAt, -1L) > 0) {
-            throw new BusinessException(ResultCode.CONFLICT.getCode(), "该时段设备已被其他申请占用");
         }
 
         // 单据底座：幂等键服务端生成，编号「前缀+雪花」
@@ -155,6 +154,12 @@ public class BookingServiceImpl implements BookingService {
         booking.setValueLevelSnapshot(ValueLevel.NORMAL);
         booking.setStatus(status);
         bookingMapper.insert(booking);
+
+        if (status == BookingStatus.APPROVED) {
+            // 教师免初审直接通过即生效占用：与其他已生效申请时段冲突则整单回滚，
+            // 避免产生重叠 APPROVED 单导致借出登记被占用拦截
+            requireNoOverlap(booking);
+        }
 
         writeEvent(document.getId(), "SUBMIT", null, status.name(), userId, "USER", null);
         if (status == BookingStatus.APPROVED) {
@@ -220,6 +225,8 @@ public class BookingServiceImpl implements BookingService {
 
         BookingStatus from = booking.getStatus();
         if (approve) {
+            // 锁设备行串行化同设备并发审批，避免两条同槽单同时通过产生重叠 APPROVED
+            assetMapper.selectByIdForUpdate(booking.getAssetId());
             requireNoOverlap(booking);
             booking.setStatus(BookingStatus.APPROVED);
             bookingMapper.updateById(booking);
@@ -267,6 +274,8 @@ public class BookingServiceImpl implements BookingService {
 
         BookingStatus from = booking.getStatus();
         if (approve) {
+            // 锁设备行串行化同设备并发终审/代批，避免两条同槽单同时通过
+            assetMapper.selectByIdForUpdate(booking.getAssetId());
             requireNoOverlap(booking);
             booking.setStatus(BookingStatus.APPROVED);
             bookingMapper.updateById(booking);

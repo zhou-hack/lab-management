@@ -158,7 +158,7 @@ class BookingFlowTest {
     @Test
     @Order(5)
     void shouldRejectInvalidApply() throws Exception {
-        // 注：同设备同时段的待审单允许并存（文档定稿：待审批不占时段，仅 APPROVED/CHECKED_OUT 占用）
+        // 注：申请期不校验时段互斥（学生/教师可同时段提交申请），占用在审批通过/借出登记时校验
         // 学生申请必须指定审批教师
         Map<String, Object> body = applyBody(ASSET_NORMAL);
         body.remove("approvalTeacherId");
@@ -193,8 +193,13 @@ class BookingFlowTest {
                 Map.of("action", "approve")));
         assertEquals("APPROVED", bookingStatus(otherBookingId));
 
-        // 已 APPROVED → 同槽新申请提交时被拒（提交校验只看 APPROVED/CHECKED_OUT）
-        assertError(post(studentToken, BOOKINGS, applyBody(ASSET_NORMAL)), 409, 40900);
+        // 教师免初审直接通过即占用：同槽教师申请被拒（不产生重叠 APPROVED 单）
+        assertError(post(teacherToken, BOOKINGS, applyBody(ASSET_NORMAL)), 409, 40900);
+
+        // 申请期放开互斥：已有 APPROVED 单的同槽新申请仍可提交（占用在借出登记时校验），随后撤销清理
+        assertOk(post(studentToken, BOOKINGS, applyBody(ASSET_NORMAL)));
+        String extraId = findMyBookingIdByAsset(String.valueOf(ASSET_NORMAL));
+        assertOk(put(studentToken, BOOKINGS + "/" + extraId + "/cancel", Map.of("reason", "测试清理")));
 
         // 同槽并存单后批准 → 最后批准者冲突被拒，单据保持待审
         assertError(put(teacherToken, BOOKINGS + "/" + duplicateId + "/teacher_review",
@@ -250,7 +255,7 @@ class BookingFlowTest {
         assertError(put(adminToken, BOOKINGS + "/" + normalBookingId + "/checkout", null), 409, 40900);
         // 借出中设备禁止删除
         assertError(delete(adminToken, ASSETS + "/" + ASSET_NORMAL), 409, 40900);
-        // 同设备同时段再申请 → 被 CHECKED_OUT 单占位拒绝
+        // 借出中设备不可再申请（设备不在架，409）
         assertError(post(studentToken, BOOKINGS, applyBody(ASSET_NORMAL)), 409, 40900);
         // 非本人教师初审 → 禁止
         Map<String, Object> other = applyBodyOffset(ASSET_OTHER, 3600 * 48);
