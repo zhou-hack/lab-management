@@ -2,13 +2,14 @@
   <div class="equip_section model_manage">
     <div class="card">
       <div class="model_manage__toolbar">
-        <el-input
+        <el-autocomplete
           v-model="query.keyword"
           class="model_manage__filter"
-          placeholder="型号码 / 名称 / 品牌"
+          :fetch-suggestions="querySuggestions"
+          placeholder="型号码 / 名称 / 品牌（输入显示可选关键字）"
           clearable
+          @select="onSuggestionSelect"
           @keyup.enter="search"
-          @clear="search"
         />
         <el-tree-select
           v-model="query.categoryId"
@@ -519,6 +520,76 @@ function search() {
   load()
 }
 
+/* ---------------- 关键字联想（型号库内已有的型号码/名称/品牌） ---------------- */
+
+/** 联想数据源：型号全量记录（无筛选），一次加载常驻用于联想 */
+const suggestionModels = ref([])
+
+async function loadSuggestionSource() {
+  try {
+    const all = []
+    let total = Infinity
+    let pageNum = 1
+    while (all.length < total) {
+      const data = await pageModels({ pageNum, pageSize: 100 })
+      const batch = data.records || []
+      all.push(...batch)
+      total = data.total || 0
+      pageNum += 1
+      if (!batch.length) {
+        break
+      }
+    }
+    suggestionModels.value = all
+  } catch {
+    // 失败提示由请求拦截器统一处理
+  }
+}
+
+/** 输入时按包含匹配型号库内已有的型号码/名称/品牌，最多返回 10 条 */
+function querySuggestions(text, cb) {
+  const keyword = (text || '').trim().toLowerCase()
+  if (!keyword) {
+    cb([])
+    return
+  }
+  const seen = new Set()
+  const items = []
+  for (const model of suggestionModels.value) {
+    for (const value of [model.modelCode, model.equipmentName, model.brand]) {
+      if (!value) {
+        continue
+      }
+      const key = value.toLowerCase()
+      if (key.includes(keyword) && !seen.has(key)) {
+        seen.add(key)
+        items.push({ value })
+        if (items.length >= 10) {
+          cb(items)
+          return
+        }
+      }
+    }
+  }
+  cb(items)
+}
+
+/** 点击建议项：回填关键字并触发查询 */
+function onSuggestionSelect(item) {
+  query.keyword = item.value
+  search()
+}
+
+/** 清空关键字（点击清除/退格删空）时恢复全量型号 */
+watch(
+  () => query.keyword,
+  (value) => {
+    if (!value) {
+      search()
+    }
+  }
+)
+
 /* ---------------- 分类抽屉 ---------------- */
 
 const categoryDrawerVisible = ref(false)
@@ -664,6 +735,7 @@ watch(
       loaded.value = true
       load()
       loadCategoryTree()
+      loadSuggestionSource()
     }
   },
   { immediate: true }

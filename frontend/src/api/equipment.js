@@ -51,6 +51,11 @@ export function pageAssets(params) {
   return request.get('/equipment/assets', { params })
 }
 
+/** 设备目录聚合（按型号合并：在架台数 + 借出中资产编号，全量不分页） */
+export function directoryAssets(params) {
+  return request.get('/equipment/assets/directory', { params })
+}
+
 /** 保管人下拉选项（全部启用用户） */
 export function custodianOptions() {
   return request.get('/equipment/assets/custodian-options')

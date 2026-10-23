@@ -2,13 +2,14 @@
   <div class="equip_section asset_manage">
     <div class="card">
       <div class="asset_manage__toolbar">
-        <el-input
+        <el-autocomplete
           v-model="query.keyword"
           class="asset_manage__filter"
-          placeholder="资产编号 / 序列号 / 名称"
+          :fetch-suggestions="querySuggestions"
+          placeholder="资产编号 / 序列号 / 名称（输入显示可选关键字）"
           clearable
+          @select="onSuggestionSelect"
           @keyup.enter="search"
-          @clear="search"
         />
         <el-tree-select
           v-model="query.departmentId"
@@ -630,11 +631,28 @@ function toggleGroup(key) {
   expanded[key] = !expanded[key]
 }
 
-/** 全量加载：后端 pageSize 上限 100，循环翻页直至收齐 total 条 */
+/** 全量拉取：后端 pageSize 上限 100，循环翻页直至收齐 total 条 */
+async function fetchAllAssets(params = {}) {
+  const all = []
+  let total = Infinity
+  let pageNum = 1
+  while (all.length < total) {
+    const data = await pageAssets({ ...params, pageSize: 100, pageNum })
+    const batch = data.records || []
+    all.push(...batch)
+    total = data.total || 0
+    pageNum += 1
+    if (!batch.length) {
+      break
+    }
+  }
+  return all
+}
+
 async function load() {
   loading.value = true
   try {
-    const base = { pageSize: 100 }
+    const base = {}
     if (query.keyword.trim()) {
       base.keyword = query.keyword.trim()
     }
@@ -644,21 +662,8 @@ async function load() {
     if (query.status) {
       base.status = query.status
     }
-    const all = []
-    let total = Infinity
-    let pageNum = 1
-    while (all.length < total) {
-      const data = await pageAssets({ ...base, pageNum })
-      const batch = data.records || []
-      all.push(...batch)
-      total = data.total || 0
-      pageNum += 1
-      if (!batch.length) {
-        break
-      }
-    }
-    records.value = all
-    emit('count', all.length)
+    records.value = await fetchAllAssets(base)
+    emit('count', records.value.length)
   } catch {
     // 失败提示由请求拦截器统一处理
   } finally {
@@ -669,6 +674,63 @@ async function load() {
 function search() {
   load()
 }
+
+/* ---------------- 关键字联想（台账内已有的资产编号/序列号/设备名称） ---------------- */
+
+/** 联想数据源：台账全量记录（无筛选），一次加载常驻用于联想 */
+const suggestionAssets = ref([])
+
+async function loadSuggestionSource() {
+  try {
+    suggestionAssets.value = await fetchAllAssets()
+  } catch {
+    // 失败提示由请求拦截器统一处理
+  }
+}
+
+/** 输入时按包含匹配台账内已有的资产编号/序列号/设备名称，最多返回 10 条 */
+function querySuggestions(text, cb) {
+  const keyword = (text || '').trim().toLowerCase()
+  if (!keyword) {
+    cb([])
+    return
+  }
+  const seen = new Set()
+  const items = []
+  for (const row of suggestionAssets.value) {
+    for (const value of [row.assetCode, row.serialNo, row.equipmentName]) {
+      if (!value) {
+        continue
+      }
+      const key = value.toLowerCase()
+      if (key.includes(keyword) && !seen.has(key)) {
+        seen.add(key)
+        items.push({ value })
+        if (items.length >= 10) {
+          cb(items)
+          return
+        }
+      }
+    }
+  }
+  cb(items)
+}
+
+/** 点击建议项：回填关键字并触发查询 */
+function onSuggestionSelect(item) {
+  query.keyword = item.value
+  search()
+}
+
+/** 清空关键字（点击清除/退格删空）时恢复全量台账 */
+watch(
+  () => query.keyword,
+  (value) => {
+    if (!value) {
+      search()
+    }
+  }
+)
 
 /* ---------------- 一键导入 / 导出 ---------------- */
 
@@ -952,6 +1014,7 @@ watch(
       loadModelOptions()
       loadCustodianList()
       loadDepartmentOptions()
+      loadSuggestionSource()
     }
   },
   { immediate: true }

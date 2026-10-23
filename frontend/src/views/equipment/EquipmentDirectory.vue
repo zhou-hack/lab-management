@@ -6,20 +6,21 @@
           设备目录
         </h2>
         <p class="t-sub">
-          在架可申请设备一览（按设备分类分组）· 学生单由指定教师初审，通过即生效
+          在架可申请设备一览（按型号合并，相同设备只显示一台及在架台数）· 学生单由指定教师初审，通过即生效
         </p>
       </div>
     </div>
 
     <div class="card">
       <div class="equipment_directory__toolbar">
-        <el-input
+        <el-autocomplete
           v-model="query.keyword"
           class="equipment_directory__filter equipment_directory__filter--keyword"
-          placeholder="资产编号 / 序列号 / 名称"
+          :fetch-suggestions="querySuggestions"
+          placeholder="型号 / 设备名称（输入显示可选关键字）"
           clearable
+          @select="onSuggestionSelect"
           @keyup.enter="search"
-          @clear="search"
         />
         <el-tree-select
           v-model="query.categoryId"
@@ -39,7 +40,7 @@
 
     <div class="card">
       <div
-        v-if="loading && !records.length"
+        v-if="loading && !groups.length"
         class="equipment_directory__skeleton"
       >
         <span class="skeleton equipment_directory__sk_row" />
@@ -72,23 +73,18 @@
               </el-icon>
             </span>
             <span class="equip_group__name">{{ group.categoryName }}</span>
-            <span class="equip_group__count">{{ group.assets.length }} 台设备</span>
+            <span class="equip_group__count">在架 {{ group.idleCount }} 台</span>
           </div>
           <div
             v-show="expanded[group.categoryId]"
             class="equip_group__body"
           >
             <div class="table-scroll-x">
-              <el-table :data="group.assets">
-                <el-table-column
-                  prop="assetCode"
-                  label="资产编号"
-                  min-width="110"
-                />
+              <el-table :data="group.models">
                 <el-table-column
                   prop="equipmentName"
                   label="设备名称"
-                  min-width="150"
+                  min-width="160"
                   show-overflow-tooltip
                 />
                 <el-table-column
@@ -97,25 +93,25 @@
                   min-width="110"
                 />
                 <el-table-column
-                  prop="departmentName"
-                  label="归口部门"
-                  min-width="110"
-                />
-                <el-table-column
-                  label="存放位置"
-                  min-width="140"
-                  show-overflow-tooltip
+                  label="在架台数"
+                  width="100"
                 >
                   <template #default="{ row }">
-                    {{ row.locationDetail || '—' }}
+                    {{ row.idleCount }} 台
                   </template>
                 </el-table-column>
                 <el-table-column
-                  label="保管人"
-                  width="90"
+                  label="借出中（资产编号）"
+                  min-width="200"
                 >
                   <template #default="{ row }">
-                    {{ row.custodianName || '—' }}
+                    <span v-if="row.checkedOutCodes && row.checkedOutCodes.length">
+                      {{ row.checkedOutCodes.join('、') }}
+                    </span>
+                    <span
+                      v-else
+                      class="t-hint"
+                    >—</span>
                   </template>
                 </el-table-column>
                 <el-table-column
@@ -125,6 +121,7 @@
                 >
                   <template #default="{ row }">
                     <el-button
+                      v-if="row.idleCount > 0"
                       v-permission="'equipment:booking:apply'"
                       link
                       type="primary"
@@ -132,6 +129,10 @@
                     >
                       申请使用
                     </el-button>
+                    <span
+                      v-else
+                      class="t-hint"
+                    >—</span>
                   </template>
                 </el-table-column>
               </el-table>
@@ -153,7 +154,7 @@
       </div>
     </div>
 
-    <!-- 申请使用（共享弹窗：目录行入口预选资产） -->
+    <!-- 申请使用（共享弹窗：目录行入口预选首个在架资产） -->
     <BookingApplyDialog
       ref="applyDialogRef"
       :preset="applyPreset"
@@ -164,13 +165,15 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ArrowDown, Collection, Monitor } from '@element-plus/icons-vue'
-import { categoryTree, pageAssets } from '@/api/equipment'
+import { categoryTree, directoryAssets } from '@/api/equipment'
 import BookingApplyDialog from '@/components/BookingApplyDialog.vue'
 
 /**
- * 设备目录（学生/教师用户端）：只读在架目录（服务端收敛为 IDLE 且启用视图），
- * 全量加载不分页，按设备分类分组折叠（借鉴管理员端设备管理：分类树筛选 + 分组展示）；
- * 「申请使用」打开共享申请弹窗（预选当前行设备）。
+ * 设备目录（学生/教师用户端）：服务端按型号聚合（相同型号设备合并展示），
+ * 全量加载不分页，按设备分类分组折叠；
+ * 不逐台暴露在架资产编号（仅显示在架台数），借出中的设备展示其资产编号；
+ * 搜索框带关键字联想（设备内已有的型号编码/设备名称，点击建议即查询）；
+ * 「申请使用」打开共享申请弹窗（预选该型号首个在架资产）。
  */
 const query = reactive({
   keyword: '',
@@ -206,9 +209,9 @@ function cloneLabeled(nodes) {
 
 const categoryFilterOptions = computed(() => cloneLabeled(categoryTreeData.value))
 
-/* ---------------- 列表（按分类分组） ---------------- */
+/* ---------------- 列表（按分类分组，组内为型号合并行） ---------------- */
 
-/** 当前页记录按所属分类分组（组名取行内一致的分类名） */
+/** 型号聚合记录按所属分类分组（组内台数为在架合计） */
 const groups = computed(() => {
   const order = []
   const map = new Map()
@@ -218,11 +221,14 @@ const groups = computed(() => {
       map.set(key, {
         categoryId: key,
         categoryName: row.categoryName || '未分类',
-        assets: []
+        idleCount: 0,
+        models: []
       })
       order.push(key)
     }
-    map.get(key).assets.push(row)
+    const group = map.get(key)
+    group.idleCount += Number(row.idleCount) || 0
+    group.models.push(row)
   }
   return order.map((key) => map.get(key))
 })
@@ -246,31 +252,18 @@ function toggleGroup(key) {
   expanded[key] = !expanded[key]
 }
 
-/** 全量加载：后端 pageSize 上限 100，循环翻页直至收齐 total 条（目录不分页） */
+/** 目录聚合：一次请求返回全量（服务端不分页） */
 async function load() {
   loading.value = true
   try {
-    const base = { pageSize: 100 }
+    const params = {}
     if (query.keyword.trim()) {
-      base.keyword = query.keyword.trim()
+      params.keyword = query.keyword.trim()
     }
     if (query.categoryId) {
-      base.categoryId = query.categoryId
+      params.categoryId = query.categoryId
     }
-    const all = []
-    let total = Infinity
-    let pageNum = 1
-    while (all.length < total) {
-      const data = await pageAssets({ ...base, pageNum })
-      const batch = data.records || []
-      all.push(...batch)
-      total = data.total || 0
-      pageNum += 1
-      if (!batch.length) {
-        break
-      }
-    }
-    records.value = all
+    records.value = (await directoryAssets(params)) || []
   } catch {
     // 失败提示由请求拦截器统一处理
   } finally {
@@ -282,6 +275,63 @@ function search() {
   load()
 }
 
+/* ---------------- 关键字联想（设备内已有的型号编码/设备名称） ---------------- */
+
+/** 联想数据源：设备内全量型号（无筛选），一次加载常驻用于联想 */
+const allModels = ref([])
+
+async function loadSuggestionSource() {
+  try {
+    allModels.value = (await directoryAssets({})) || []
+  } catch {
+    // 失败提示由请求拦截器统一处理
+  }
+}
+
+/** 输入时按前缀/包含匹配设备内已有的型号编码与设备名称，最多返回 10 条 */
+function querySuggestions(text, cb) {
+  const keyword = (text || '').trim().toLowerCase()
+  if (!keyword) {
+    cb([])
+    return
+  }
+  const seen = new Set()
+  const items = []
+  for (const model of allModels.value) {
+    for (const value of [model.modelCode, model.equipmentName]) {
+      if (!value) {
+        continue
+      }
+      const key = value.toLowerCase()
+      if (key.includes(keyword) && !seen.has(key)) {
+        seen.add(key)
+        items.push({ value })
+        if (items.length >= 10) {
+          cb(items)
+          return
+        }
+      }
+    }
+  }
+  cb(items)
+}
+
+/** 点击建议项：回填关键字并触发查询 */
+function onSuggestionSelect(item) {
+  query.keyword = item.value
+  search()
+}
+
+/** 清空关键字（点击清除/退格删空）时恢复全量目录 */
+watch(
+  () => query.keyword,
+  (value) => {
+    if (!value) {
+      search()
+    }
+  }
+)
+
 /* ---------------- 申请使用 ---------------- */
 
 const applyDialogRef = ref()
@@ -289,8 +339,8 @@ const applyPreset = ref(null)
 
 function openApply(row) {
   applyPreset.value = {
-    id: row.id,
-    assetCode: row.assetCode,
+    id: row.firstIdleAssetId,
+    assetCode: row.firstIdleAssetCode,
     equipmentName: row.equipmentName
   }
   applyDialogRef.value?.open()
@@ -299,6 +349,7 @@ function openApply(row) {
 onMounted(() => {
   load()
   loadCategoryTree()
+  loadSuggestionSource()
 })
 </script>
 
