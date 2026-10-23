@@ -25,6 +25,7 @@ import com.labmanage.module.equipment.service.AssetService;
 import com.labmanage.module.equipment.vo.AssetImportResultVO;
 import com.labmanage.module.equipment.vo.AssetVO;
 import com.labmanage.module.equipment.vo.CustodianOptionVO;
+import com.labmanage.module.equipment.vo.DirectoryModelVO;
 import com.labmanage.roles.department.entity.SysDepartment;
 import com.labmanage.roles.department.mapper.SysDepartmentMapper;
 import com.labmanage.roles.user.entity.SysUser;
@@ -53,6 +54,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -97,6 +99,67 @@ public class AssetServiceImpl implements AssetService {
         LambdaQueryWrapper<EquipmentAsset> wrapper = buildWrapper(query, StpUtil.hasPermission(PERM_ASSET_UPDATE));
         Page<EquipmentAsset> page = assetMapper.selectPage(PageUtils.toPage(query), wrapper);
         return PageResult.of(assemble(page.getRecords()), page.getTotal(), query.getPageNum(), query.getPageSize());
+    }
+
+    @Override
+    public List<DirectoryModelVO> directory(AssetPageQuery query) {
+        // 在架资产（IDLE 且启用）按型号统计台数并取首个在架资产作申请预选
+        List<EquipmentAsset> idle = assetMapper.selectList(new LambdaQueryWrapper<EquipmentAsset>()
+                .eq(EquipmentAsset::getStatus, EquipmentStatus.IDLE)
+                .eq(EquipmentAsset::getEnabled, 1));
+        // 借出中资产（IN_USE）按型号收集资产编号（占用可见，不逐台暴露在架编号）
+        List<EquipmentAsset> inUse = assetMapper.selectList(new LambdaQueryWrapper<EquipmentAsset>()
+                .eq(EquipmentAsset::getStatus, EquipmentStatus.IN_USE));
+
+        Map<Long, List<EquipmentAsset>> idleByModel = idle.stream()
+                .filter(a -> a.getModelId() != null)
+                .collect(Collectors.groupingBy(EquipmentAsset::getModelId));
+        Map<Long, List<String>> checkedOutByModel = inUse.stream()
+                .filter(a -> a.getModelId() != null)
+                .collect(Collectors.groupingBy(EquipmentAsset::getModelId,
+                        Collectors.mapping(EquipmentAsset::getAssetCode, Collectors.toList())));
+
+        // 型号集合 = 在架 ∪ 借出（全部借出的型号也展示，便于知悉占用）
+        Set<Long> modelIds = new HashSet<>();
+        modelIds.addAll(idleByModel.keySet());
+        modelIds.addAll(checkedOutByModel.keySet());
+        if (modelIds.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, EquipmentModel> models = loadMap(modelIds, modelMapper::selectBatchIds, EquipmentModel::getId);
+        Map<Long, EquipmentCategory> categories = loadMap(
+                models.values().stream().map(EquipmentModel::getCategoryId).filter(Objects::nonNull).collect(Collectors.toSet()),
+                categoryMapper::selectBatchIds,
+                EquipmentCategory::getId);
+
+        // 过滤：分类 + 关键字（型号编码/名称）
+        String keyword = query.getKeyword() == null ? null : query.getKeyword().trim();
+        return modelIds.stream()
+                .map(models::get)
+                .filter(Objects::nonNull)
+                .filter(m -> query.getCategoryId() == null
+                        || (m.getCategoryId() != null && m.getCategoryId().equals(query.getCategoryId())))
+                .filter(m -> !StringUtils.hasText(keyword)
+                        || m.getModelCode().toLowerCase().contains(keyword.toLowerCase())
+                        || m.getEquipmentName().toLowerCase().contains(keyword.toLowerCase()))
+                .sorted(Comparator.comparing(EquipmentModel::getId))
+                .map(m -> {
+                    List<EquipmentAsset> idleAssets = idleByModel.getOrDefault(m.getId(), List.of());
+                    EquipmentAsset first = idleAssets.isEmpty() ? null : idleAssets.get(0);
+                    return new DirectoryModelVO(
+                            m.getId().toString(),
+                            m.getModelCode(),
+                            m.getEquipmentName(),
+                            m.getCategoryId() == null ? null : m.getCategoryId().toString(),
+                            m.getCategoryId() == null ? null
+                                    : categories.containsKey(m.getCategoryId()) ? categories.get(m.getCategoryId()).getCategoryName() : null,
+                            idleAssets.size(),
+                            checkedOutByModel.getOrDefault(m.getId(), List.of()),
+                            first == null ? null : first.getId().toString(),
+                            first == null ? null : first.getAssetCode()
+                    );
+                })
+                .toList();
     }
 
     @Override

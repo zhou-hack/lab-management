@@ -11,6 +11,7 @@ import com.labmanage.module.equipment.service.AssetService;
 import com.labmanage.module.equipment.vo.AssetImportResultVO;
 import com.labmanage.module.equipment.vo.AssetVO;
 import com.labmanage.module.equipment.vo.CustodianOptionVO;
+import com.labmanage.module.equipment.vo.DirectoryModelVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -54,6 +55,13 @@ public class AssetController {
     @GetMapping
     public Result<PageResult<AssetVO>> page(AssetPageQuery query) {
         return Result.success(assetService.page(query));
+    }
+
+    @Operation(summary = "设备目录聚合（按型号合并：在架台数 + 借出中资产编号 + 首个在架资产预选）")
+    @SaCheckPermission("equipment:asset:list")
+    @GetMapping("/directory")
+    public Result<List<DirectoryModelVO>> directory(AssetPageQuery query) {
+        return Result.success(assetService.directory(query));
     }
 
     @Operation(summary = "保管人下拉选项（全部启用用户）")

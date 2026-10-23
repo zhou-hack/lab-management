@@ -8,6 +8,7 @@ import com.labmanage.module.equipment.dto.AssetUpdateRequest;
 import com.labmanage.module.equipment.vo.AssetImportResultVO;
 import com.labmanage.module.equipment.vo.AssetVO;
 import com.labmanage.module.equipment.vo.CustodianOptionVO;
+import com.labmanage.module.equipment.vo.DirectoryModelVO;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -22,6 +23,12 @@ public interface AssetService {
      * 「在架」目录视图（status = IDLE 且启用）
      */
     PageResult<AssetVO> page(AssetPageQuery query);
+
+    /**
+     * 设备目录聚合（按型号合并）：在架台数 + 借出中资产编号 + 首个在架资产预选；
+     * 支持 keyword（型号编码/名称）与 categoryId 过滤，全量返回不分页
+     */
+    List<DirectoryModelVO> directory(AssetPageQuery query);
 
     /**
      * 新增台账（初始状态 IDLE；价值分级由台账导入登记）
