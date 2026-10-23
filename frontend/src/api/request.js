@@ -49,6 +49,14 @@ service.interceptors.response.use(
       ElMessage.error('无权限')
       return Promise.reject(error)
     }
+    // 后端业务错误响应（400/409/500 等）携带 code/msg，直接展示真实原因，
+    // 避免把「学生申请必须指定审批教师」「该时段设备已被占用」等提示误报为网络异常
+    const body = error.response && error.response.data
+    const serverMsg = body && typeof body === 'object' && body.msg ? body.msg : null
+    if (serverMsg) {
+      ElMessage.error(serverMsg)
+      return Promise.reject(error)
+    }
     const isTimeout = error.code === 'ECONNABORTED' || (error.message || '').includes('timeout')
     ElMessage.error(isTimeout ? '请求超时，请重试' : '网络异常，请稍后重试')
     return Promise.reject(error)
