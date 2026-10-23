@@ -3,43 +3,29 @@
  * 取值与后端 com.labmanage.module.item.enums 保持一致，未知值原样灰色展示
  */
 
-/** 库存单据状态 */
-export const documentStatusMap = {
-  DRAFT: { label: '草稿', type: 'info' },
-  PENDING: { label: '待审批', type: 'warning' },
-  APPROVED: { label: '已批准', type: 'primary' },
-  POSTED: { label: '已过账', type: 'success' },
-  CANCELLED: { label: '已取消', type: 'info' }
-}
-
-/** 物料申领单状态（两级审核：SELF 经 草稿→老师已审核→已批准；PROXY 创建即老师已审核） */
+/** 物料预约单状态（单级审核：老师预约创建即「老师已审核」，由管理员终审；
+ *  部分实发不设派生态——实发进度看行明细，全部行发完才推进「全部实发」） */
 export const requestStatusMap = {
-  DRAFT: { label: '草稿', type: 'info' },
-  PENDING: { label: '待审批', type: 'warning' },
   TEACHER_APPROVED: { label: '老师已审核', type: 'primary' },
   APPROVED: { label: '已批准', type: 'primary' },
-  PARTIALLY_FULFILLED: { label: '部分实发', type: 'warning' },
   FULFILLED: { label: '全部实发', type: 'success' },
   REJECTED: { label: '已拒绝', type: 'danger' },
   CANCELLED: { label: '已取消', type: 'info' }
 }
 
-/** 申领类型 */
+/** 物料预约申领类型（TEACHER 老师预约 / PROXY 学生代理代领；
+ *  代领只能引用老师端已审核通过的老师预约单，免老师级审核、直接交管理员终审） */
 export const requestTypeMap = {
-  SELF: { label: '本人申领', type: 'primary' },
+  TEACHER: { label: '老师预约', type: 'primary' },
   PROXY: { label: '学生代理代领', type: 'warning' }
 }
 
-/** 库存流水业务类型 */
-export const movementTypeMap = {
-  OPENING: { label: '期初入库', type: 'success' },
-  PURCHASE_IN: { label: '采购入库', type: 'success' },
-  ISSUE: { label: '领用出库', type: 'warning' },
-  RETURN_IN: { label: '归还入库', type: 'success' },
-  TRANSFER: { label: '调拨', type: 'primary' },
-  ADJUST: { label: '调账', type: 'primary' },
-  SCRAP: { label: '报废', type: 'danger' },
-  REVERSAL: { label: '冲销', type: 'danger' }
+/** 场地预约单状态（新建物料预约选择关联预约时展示用；仅待审批/已批准可关联） */
+export const bookingStatusMap = {
+  PENDING: { label: '待审批', type: 'warning' },
+  APPROVED: { label: '已批准', type: 'primary' },
+  REJECTED: { label: '已驳回', type: 'danger' },
+  CANCELLED: { label: '已取消', type: 'info' }
 }
 
 /** 物料结算类型 */

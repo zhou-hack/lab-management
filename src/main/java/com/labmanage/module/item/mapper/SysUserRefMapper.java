@@ -49,6 +49,27 @@ public interface SysUserRefMapper {
     List<UserOption> searchOptionsByKeyword(@Param("keyword") String keyword);
 
     /**
+     * 老师候选搜索：启用 TEACHER 角色用户，按姓名前缀匹配（只读，最多 20 条）
+     */
+    @Select("""
+            <script>
+            SELECT DISTINCT u.id AS userId, u.real_name AS realName
+            FROM sys_user u
+            JOIN sys_user_role ur ON ur.user_id = u.id
+            JOIN sys_role r ON r.id = ur.role_id
+            WHERE u.enabled = 1 AND u.deleted = 0
+              AND ur.enabled = 1 AND ur.deleted = 0
+              AND r.enabled = 1 AND r.deleted = 0 AND r.role_code = 'TEACHER'
+            <if test="keyword != null and keyword != ''">
+              AND u.real_name LIKE CONCAT(#{keyword}, '%')
+            </if>
+            ORDER BY u.id
+            LIMIT 20
+            </script>
+            """)
+    List<UserRef> searchTeacherOptions(@Param("keyword") String keyword);
+
+    /**
      * 用户名称解析结果
      */
     record UserRef(Long userId, String realName) {

@@ -26,12 +26,6 @@
       border
     >
       <el-table-column
-        prop="id"
-        label="结算 ID"
-        width="190"
-        show-overflow-tooltip
-      />
-      <el-table-column
         prop="issueLineId"
         label="原出库行 ID"
         width="190"
@@ -59,12 +53,6 @@
         </template>
       </el-table-column>
       <el-table-column
-        prop="returnLineId"
-        label="关联归还行 ID"
-        width="190"
-        show-overflow-tooltip
-      />
-      <el-table-column
         prop="reason"
         label="原因"
         min-width="180"
@@ -90,14 +78,52 @@
     >
       <el-form label-width="110px">
         <el-form-item
-          label="原出库行 ID"
+          label="出库记录"
           required
         >
-          <el-input
+          <el-select
             v-model="form.issueLineId"
-            placeholder="从领用出库单详情复制行 ID"
-          />
+            v-loading="optionsLoading"
+            filterable
+            remote
+            clearable
+            :remote-method="searchIssueOptions"
+            placeholder="搜索课程名称或物料编码/名称，选择要核销的出库记录"
+            class="issue-option-select"
+            @change="onIssueChange"
+          >
+            <el-option
+              v-for="opt in issueOptions"
+              :key="opt.issueLineId"
+              :label="issueOptionLabel(opt)"
+              :value="opt.issueLineId"
+              :disabled="Number(opt.remainQty) <= 0"
+            />
+          </el-select>
         </el-form-item>
+        <el-descriptions
+          v-if="selectedIssue"
+          :column="2"
+          border
+          size="small"
+          class="issue-brief"
+        >
+          <el-descriptions-item label="课程名称">
+            {{ selectedIssue.courseName || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="物料">
+            {{ selectedIssue.skuCode }} · {{ selectedIssue.materialName }}
+          </el-descriptions-item>
+          <el-descriptions-item label="出库时间">
+            {{ fmtShanghai(selectedIssue.occurredAt) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="原出库量">
+            {{ formatQty(selectedIssue.quantity) }} {{ selectedIssue.baseUnit }}
+          </el-descriptions-item>
+          <el-descriptions-item label="已结算">
+            {{ formatQty(selectedIssue.settledQty) }} {{ selectedIssue.baseUnit }}
+          </el-descriptions-item>
+        </el-descriptions>
         <el-form-item
           label="核销类型"
           required
@@ -121,10 +147,15 @@
           <el-input-number
             v-model="form.quantity"
             :min="0"
+            :max="maxSettleQty"
             :step="1"
             :precision="3"
             controls-position="right"
           />
+          <span
+            v-if="selectedIssue"
+            class="muted small remain-hint"
+          >剩余可核销 {{ formatQty(selectedIssue.remainQty) }} {{ selectedIssue.baseUnit }}</span>
         </el-form-item>
         <el-form-item label="原因">
           <el-input
@@ -157,7 +188,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { createSettlement, pageSettlements } from '@/api/item'
+import { createSettlement, pageIssueOptions, pageSettlements } from '@/api/item'
 import { usePagedList } from '@/utils/usePagedList'
 import { settlementTypeMap } from '@/utils/statusMap'
 import { fmtShanghai, formatQty } from '@/utils/format'
@@ -182,21 +213,64 @@ const createVisible = ref(false)
 const submitting = ref(false)
 const form = reactive({ issueLineId: '', settlementType: 'CONSUMED', quantity: null, reason: '' })
 
+/** 可核销出库记录选项（对应库存流水中的出库；远程搜索物料编码/名称） */
+const issueOptions = ref([])
+const optionsLoading = ref(false)
+const selectedIssue = computed(() =>
+  issueOptions.value.find((o) => o.issueLineId === form.issueLineId) || null
+)
+const maxSettleQty = computed(() =>
+  selectedIssue.value ? Number(selectedIssue.value.remainQty) : undefined
+)
+
+function issueOptionLabel(opt) {
+  const remain = Number(opt.remainQty) <= 0 ? '已核销完' : `剩余 ${formatQty(opt.remainQty)}`
+  const course = opt.courseName ? `${opt.courseName} · ` : ''
+  return `${course}${opt.skuCode} · ${opt.materialName} · 出库 ${formatQty(opt.quantity)} · ${remain}`
+}
+
+async function searchIssueOptions(keyword) {
+  optionsLoading.value = true
+  try {
+    const res = await pageIssueOptions({ pageNum: 1, pageSize: 50, keyword: keyword || undefined })
+    issueOptions.value = res.records
+  } catch {
+    // 失败已由全局拦截器提示
+  } finally {
+    optionsLoading.value = false
+  }
+}
+
+function onIssueChange() {
+  form.quantity = null
+}
+
 function openCreate() {
   form.issueLineId = ''
   form.settlementType = 'CONSUMED'
   form.quantity = null
   form.reason = ''
   createVisible.value = true
+  if (!issueOptions.value.length) {
+    searchIssueOptions('')
+  }
 }
 
 async function submitCreate() {
-  if (!form.issueLineId || !/^\d{1,19}$/.test(form.issueLineId)) {
-    ElMessage.warning('原出库行 ID 必须为纯数字')
+  if (!form.issueLineId) {
+    ElMessage.warning('请选择要核销的出库记录')
+    return
+  }
+  if (!selectedIssue.value || Number(selectedIssue.value.remainQty) <= 0) {
+    ElMessage.warning('该出库记录已核销完，请选择其他记录')
     return
   }
   if (form.quantity === null || form.quantity <= 0) {
     ElMessage.warning('核销数量必须大于 0')
+    return
+  }
+  if (form.quantity > Number(selectedIssue.value.remainQty)) {
+    ElMessage.warning('核销数量不能超过剩余可核销量')
     return
   }
   submitting.value = true
@@ -210,6 +284,8 @@ async function submitCreate() {
     ElMessage.success('核销成功')
     createVisible.value = false
     pager.load()
+    // 刷新选项的剩余可核销量（重新拉取当前关键词结果）
+    searchIssueOptions('')
   } catch {
     // 失败已由全局拦截器提示
   } finally {
@@ -221,3 +297,17 @@ onMounted(pager.load)
 
 defineExpose({ refresh: pager.load })
 </script>
+
+<style scoped>
+.issue-option-select {
+  width: 100%;
+}
+
+.issue-brief {
+  margin-bottom: 12px;
+}
+
+.remain-hint {
+  margin-left: 8px;
+}
+</style>

@@ -25,8 +25,17 @@ public record MaterialQuotaVO(
         @Schema(description = "物料名称", example = "无水乙醇 500mL")
         String skuName,
 
+        @Schema(description = "规格型号", example = "AR 级，500mL/瓶")
+        String specification,
+
         @Schema(description = "计量单位", example = "瓶")
         String baseUnit,
+
+        @Schema(description = "分类 ID", example = "1234567890123456789")
+        String categoryId,
+
+        @Schema(description = "分类名称", example = "化学试剂")
+        String categoryName,
 
         @Schema(description = "每人每课时定额", example = "0.05")
         BigDecimal qtyPerStudentPeriod,
@@ -35,14 +44,19 @@ public record MaterialQuotaVO(
         Integer enabled
 ) {
 
-    public static MaterialQuotaVO from(MaterialQuota e, String skuCode, String skuName, String baseUnit) {
+    public static MaterialQuotaVO from(MaterialQuota e, String skuCode, String skuName,
+                                       String specification, String baseUnit,
+                                       String categoryId, String categoryName) {
         return new MaterialQuotaVO(
                 String.valueOf(e.getId()),
                 String.valueOf(e.getOfferingId()),
                 String.valueOf(e.getSkuId()),
                 skuCode,
                 skuName,
+                specification,
                 baseUnit,
+                categoryId,
+                categoryName,
                 e.getQtyPerStudentPeriod(),
                 e.getEnabled()
         );

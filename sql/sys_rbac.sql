@@ -339,7 +339,8 @@ INSERT INTO sys_user_role (id, user_id, role_id, enabled) VALUES (1, 1, 1, 1);
 -- ID 段约定：system 模块 1-999，业务模块按 RBAC实施清单 第一节分段登记。
 -- ============================================================================
 
--- system 模块权限（27 项）
+-- system 模块权限（31 项；28-31 于 2026-10-20 收编自 dev/basic_model 与 dev/auth，
+-- 绑定按需求定稿不授 ADMIN，由 OPS_ADMIN 动态覆盖）
 INSERT INTO sys_permission (id, permission_code, permission_name, module_code, enabled) VALUES
 (1,  'system:user:list',        '用户列表',       'system', 1),
 (2,  'system:user:get',         '用户详情',       'system', 1),
@@ -347,15 +348,19 @@ INSERT INTO sys_permission (id, permission_code, permission_name, module_code, e
 (4,  'system:user:update',      '编辑用户',       'system', 1),
 (5,  'system:user:enable',      '启用停用用户',   'system', 1),
 (27, 'system:user:reset_password', '重置密码',    'system', 1),
+(31, 'system:user:bind_role',   '绑定管理员角色', 'system', 1),
 (6,  'system:roster:list',      '名单列表',       'system', 1),
 (7,  'system:roster:create',    '名单录入',       'system', 1),
 (8,  'system:roster:update',    '名单编辑',       'system', 1),
 (9,  'system:roster:enable',    '名单启用停用',   'system', 1),
+(29, 'system:roster:export',    '名单导出',       'system', 1),
+(30, 'system:roster:import',    '名单导入',       'system', 1),
 (10, 'system:department:list',   '组织列表',       'system', 1),
 (11, 'system:department:create', '组织新增',       'system', 1),
 (12, 'system:department:update', '组织编辑',       'system', 1),
 (13, 'system:department:enable', '组织启用停用',   'system', 1),
 (14, 'system:role:list',         '角色权限查看',   'system', 1),
+(28, 'system:role:assign',       '调整角色权限',   'system', 1),
 (15, 'system:scope:list',        '数据范围查看',   'system', 1),
 (16, 'system:scope:grant',       '数据范围授权',   'system', 1),
 (17, 'system:restriction:list',   '预约限制查看',   'system', 1),

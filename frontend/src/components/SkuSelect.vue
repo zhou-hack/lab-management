@@ -32,13 +32,15 @@ import { getMaterialSku, pageSkus } from '@/api/item'
  * 物料远程搜索选择器
  * 下拉按关键词远程搜索（一次 20 条），替代一次性预取全量物料；
  * 编辑场景预置 ID 时自动拉取详情回显名称；
- * 工具栏筛选场景传 allOption 在首部显示「全部」选项（选中即清空过滤）
+ * 工具栏筛选场景传 allOption 在首部显示「全部」选项（选中即清空过滤）；
+ * 传 categoryId 时候选限定在该物料分类内
  */
 const model = defineModel({ type: String, default: '' })
-defineProps({
+const props = defineProps({
   placeholder: { type: String, default: '输入编码/名称搜索物料' },
   allOption: { type: Boolean, default: false },
-  allLabel: { type: String, default: '全部物料' }
+  allLabel: { type: String, default: '全部物料' },
+  categoryId: { type: String, default: '' }
 })
 
 const options = ref([])
@@ -47,7 +49,12 @@ const searching = ref(false)
 async function searchOptions(keyword) {
   searching.value = true
   try {
-    const data = await pageSkus({ pageNum: 1, pageSize: 20, keyword: keyword || undefined })
+    const data = await pageSkus({
+      pageNum: 1,
+      pageSize: 20,
+      keyword: keyword || undefined,
+      categoryId: props.categoryId || undefined
+    })
     options.value = data.records.filter((s) => s.enabled)
   } catch {
     options.value = []
@@ -70,6 +77,7 @@ async function resolvePreset() {
 }
 
 watch(model, resolvePreset)
+watch(() => props.categoryId, () => searchOptions(''))
 
 onMounted(() => {
   searchOptions('')

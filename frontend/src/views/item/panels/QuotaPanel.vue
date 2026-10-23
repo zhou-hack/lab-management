@@ -1,13 +1,6 @@
 <template>
   <div>
     <div class="toolbar">
-      <el-input
-        v-model="query.offeringId"
-        clearable
-        class="w220"
-        placeholder="开课实例 ID 过滤"
-        @change="pager.search"
-      />
       <CategorySelect
         v-model="query.categoryId"
         all-option
@@ -36,18 +29,6 @@
       border
     >
       <el-table-column
-        prop="id"
-        label="定额 ID"
-        width="190"
-        show-overflow-tooltip
-      />
-      <el-table-column
-        prop="offeringId"
-        label="开课实例 ID"
-        width="180"
-        show-overflow-tooltip
-      />
-      <el-table-column
         label="物料"
         min-width="220"
         show-overflow-tooltip
@@ -60,8 +41,28 @@
         </template>
       </el-table-column>
       <el-table-column
-        label="每人每课时定额"
-        width="140"
+        prop="specification"
+        label="规格型号"
+        min-width="160"
+        show-overflow-tooltip
+      >
+        <template #default="{ row }">
+          {{ row.specification || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column
+        prop="categoryName"
+        label="分类"
+        width="120"
+        show-overflow-tooltip
+      >
+        <template #default="{ row }">
+          {{ row.categoryName || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="每人每课时用量"
+        width="150"
         align="right"
       >
         <template #default="{ row }">
@@ -117,22 +118,20 @@
 
     <PagerBar :list="pager" />
 
-    <!-- 批量登记（按开课实例整体覆盖） -->
+    <!-- 批量登记（全局定额：同物料覆盖更新） -->
     <el-dialog
       v-model="upsertVisible"
-      title="批量登记定额（同一开课实例整组覆盖）"
-      width="820px"
+      title="批量登记定额（同一物料已有定额则覆盖更新）"
+      width="980px"
     >
       <el-form label-width="120px">
-        <el-form-item
-          label="开课实例 ID"
-          required
-        >
-          <el-input
-            v-model="upsertForm.offeringId"
+        <el-form-item label="物料分类">
+          <CategorySelect
+            v-model="upsertCategory"
+            all-option
             class="w240"
-            placeholder="纯数字 ID"
           />
+          <span class="muted small ml8">先选分类缩小范围，再在行内搜索物料</span>
         </el-form-item>
       </el-form>
       <el-table
@@ -146,12 +145,31 @@
           <template #default="{ row }">
             <SkuSelect
               v-model="row.skuId"
+              :category-id="upsertCategory"
               placeholder="搜索物料"
             />
           </template>
         </el-table-column>
         <el-table-column
-          label="每人每课时定额"
+          label="规格型号"
+          min-width="150"
+          show-overflow-tooltip
+        >
+          <template #default="{ row }">
+            {{ (row.skuId && skuDetails[row.skuId]?.specification) || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="分类"
+          width="130"
+          show-overflow-tooltip
+        >
+          <template #default="{ row }">
+            {{ (row.skuId && skuDetails[row.skuId]?.categoryName) || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="每人每课时用量"
           width="200"
         >
           <template #default="{ row }">
@@ -186,7 +204,7 @@
         + 添加行
       </el-button>
       <div class="muted small mt8">
-        申领单登记时按 参与人数 × 课时数 × 每人每课时定额 生成快照，超定额仅标记需额外审批。
+        物料预约登记时按 参与人数 × 课时数 × 每人每课时用量 生成快照，超量仅标记需额外审批。
       </div>
       <template #footer>
         <el-button @click="upsertVisible = false">
@@ -209,7 +227,7 @@
       width="480px"
     >
       <el-form label-width="140px">
-        <el-form-item label="每人每课时定额">
+        <el-form-item label="每人每课时用量">
           <el-input-number
             v-model="updateQty"
             :min="0"
@@ -236,9 +254,9 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { disableQuota, enableQuota, pageQuotas, updateQuota, upsertQuota } from '@/api/item'
+import { disableQuota, enableQuota, getMaterialSku, pageQuotas, updateQuota, upsertQuota } from '@/api/item'
 import { usePagedList } from '@/utils/usePagedList'
 import { confirmAction } from '@/utils/confirm'
 import { formatQty } from '@/utils/format'
@@ -246,12 +264,11 @@ import PagerBar from '@/components/PagerBar.vue'
 import SkuSelect from '@/components/SkuSelect.vue'
 import CategorySelect from '@/components/CategorySelect.vue'
 
-const query = reactive({ offeringId: '', categoryId: null, skuId: null })
+const query = reactive({ categoryId: null, skuId: null })
 
 const pager = usePagedList((params) =>
   pageQuotas({
     ...params,
-    offeringId: query.offeringId || undefined,
     categoryId: query.categoryId || undefined,
     skuId: query.skuId || undefined
   })
@@ -259,23 +276,39 @@ const pager = usePagedList((params) =>
 
 const upsertVisible = ref(false)
 const submitting = ref(false)
-const upsertForm = reactive({ offeringId: '', lines: [] })
+const upsertForm = reactive({ lines: [] })
+/** 批量登记弹窗的物料分类过滤（全局定额，无实例维度） */
+const upsertCategory = ref(null)
+
+/** 批量登记弹窗内选中 SKU 的详情缓存（列表同步展示 规格型号 / 分类 用） */
+const skuDetails = reactive({})
+
+watch(
+  () => upsertForm.lines.map((l) => l.skuId),
+  (ids) => {
+    for (const id of ids) {
+      if (id && !skuDetails[id]) {
+        getMaterialSku(id)
+          .then((sku) => {
+            skuDetails[id] = sku
+          })
+          .catch(() => {})
+      }
+    }
+  }
+)
 
 const updateVisible = ref(false)
 const updateId = ref(null)
 const updateQty = ref(0)
 
 function openUpsert() {
-  upsertForm.offeringId = ''
+  upsertCategory.value = null
   upsertForm.lines = [{ skuId: null, qtyPerStudentPeriod: 0 }]
   upsertVisible.value = true
 }
 
 async function submitUpsert() {
-  if (!upsertForm.offeringId || !/^\d{1,19}$/.test(upsertForm.offeringId)) {
-    ElMessage.warning('开课实例 ID 必须为纯数字')
-    return
-  }
   if (!upsertForm.lines.length) {
     ElMessage.warning('请至少添加一行物料')
     return
@@ -289,7 +322,6 @@ async function submitUpsert() {
   submitting.value = true
   try {
     await upsertQuota({
-      offeringId: upsertForm.offeringId,
       lines: upsertForm.lines.map((l) => ({ skuId: l.skuId, qtyPerStudentPeriod: l.qtyPerStudentPeriod }))
     })
     ElMessage.success('定额已登记')
@@ -326,7 +358,7 @@ async function doToggle(row, enable) {
   const ok = await confirmAction(
     enable
       ? `确认启用「${row.skuName}」的领用定额？`
-      : `确认停用「${row.skuName}」的领用定额？停用后新申领单不再计算该物料快照。`
+      : `确认停用「${row.skuName}」的领用定额？停用后新物料预约不再计算该物料快照。`
   )
   if (!ok) return
   try {

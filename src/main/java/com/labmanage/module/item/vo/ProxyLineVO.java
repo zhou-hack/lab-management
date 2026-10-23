@@ -7,13 +7,10 @@ import java.math.BigDecimal;
 
 /**
  * 学生代理代领源申领行 VO（含剩余可代领量）
- * <p>
- * 剩余可代领量 = 源行批准量 − 源行实发量 − 已被有效代领单占用的申请量；
- * 有效代领单 = 未取消、未拒绝的 PROXY 单。
  */
-@Schema(description = "代领源申领行")
+@Schema(description = "学生代理代领源申领行")
 public record ProxyLineVO(
-        @Schema(description = "源申领行 ID（代领时作为 sourceLineId 提交）", example = "1234567890123456789")
+        @Schema(description = "源申领行 ID（代领提交时的 sourceLineId）", example = "1234567890123456789")
         String lineId,
 
         @Schema(description = "物料 ID", example = "1234567890123456789")
@@ -28,16 +25,16 @@ public record ProxyLineVO(
         @Schema(description = "计量单位", example = "瓶")
         String baseUnit,
 
-        @Schema(description = "批准量（老师审核写入）", example = "10")
+        @Schema(description = "源行批准量", example = "10")
         BigDecimal approvedQty,
 
-        @Schema(description = "已实发量", example = "2")
+        @Schema(description = "源行实发量", example = "0")
         BigDecimal fulfilledQty,
 
-        @Schema(description = "已被代领单占用申请量", example = "3")
+        @Schema(description = "已被有效代领单占用的申请量（未取消、未拒绝）", example = "2")
         BigDecimal occupiedQty,
 
-        @Schema(description = "剩余可代领量（本代领单提交量的上限）", example = "5")
+        @Schema(description = "剩余可代领量 = 批准量 − 实发量 − 占用量", example = "8")
         BigDecimal availableQty
 ) {
 
@@ -46,16 +43,17 @@ public record ProxyLineVO(
         BigDecimal approved = line.getApprovedQty() == null ? BigDecimal.ZERO : line.getApprovedQty();
         BigDecimal fulfilled = line.getFulfilledQty() == null ? BigDecimal.ZERO : line.getFulfilledQty();
         BigDecimal occupied = occupiedQty == null ? BigDecimal.ZERO : occupiedQty;
+        BigDecimal available = approved.subtract(fulfilled).subtract(occupied).max(BigDecimal.ZERO);
         return new ProxyLineVO(
                 String.valueOf(line.getId()),
                 String.valueOf(line.getSkuId()),
                 skuCode,
                 materialName,
                 baseUnit,
-                approved,
-                fulfilled,
-                occupied,
-                approved.subtract(fulfilled).subtract(occupied).max(BigDecimal.ZERO)
+                line.getApprovedQty(),
+                line.getFulfilledQty(),
+                occupiedQty,
+                available
         );
     }
 }

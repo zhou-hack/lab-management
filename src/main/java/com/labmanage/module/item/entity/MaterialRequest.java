@@ -9,6 +9,9 @@ import java.time.Instant;
 
 /**
  * 物料申领单（申领批准不扣库存，实际出库另行过账）
+ * <p>
+ * TEACHER 老师预约（单级管理员终审）+ PROXY 学生代理代领
+ * （引用老师端已审核源单，免老师级审核、管理员终审）。
  */
 @TableName("material_request")
 public class MaterialRequest extends BaseEntity {
@@ -19,14 +22,20 @@ public class MaterialRequest extends BaseEntity {
     /** 领用实验室 ID（空间模块建成前允许 NULL） */
     private Long labId;
 
-    /** 归属老师 ID（登录模块接入后由会话写入；PROXY 时代理代领绑定的责任老师，取源申领单归属老师） */
+    /** 归属老师 ID（老师本人即第一责任人；代领单为源单归属老师） */
     private Long ownerTeacherId;
 
-    /** 经办人 ID（学生代理代领时为代理学生本人） */
+    /** 经办人 ID（老师预约= 归属老师本人；PROXY 代领可选，学号/姓名留档为主；登录模块接入后由会话写入） */
     private Long operatorId;
 
     /** 命中的助理授权 ID */
     private Long grantId;
+
+    /** 学生学号（PROXY= 代理学生；TEACHER 为空） */
+    private String studentNo;
+
+    /** 学生姓名（PROXY= 代理学生；TEACHER 为空） */
+    private String studentName;
 
     /** 课程实例 ID（课程模块建成前允许 NULL） */
     private Long offeringId;
@@ -46,14 +55,30 @@ public class MaterialRequest extends BaseEntity {
     /** 用途 */
     private String purpose;
 
-    /** 申领类型：SELF 本人申领 / PROXY 学生代理代领 */
+    /** 申领类型：TEACHER 老师预约 / PROXY 学生代理代领 */
     private RequestType requestType;
 
-    /** 源申领单 ID（PROXY 时引用的老师已审核通过的申领单） */
+    /** 源申领单 ID（PROXY 代领时引用的老师端已审核源单） */
     private Long sourceRequestId;
 
     /** 状态 */
     private MaterialRequestStatus status;
+
+    public String getStudentNo() {
+        return studentNo;
+    }
+
+    public void setStudentNo(String studentNo) {
+        this.studentNo = studentNo;
+    }
+
+    public String getStudentName() {
+        return studentName;
+    }
+
+    public void setStudentName(String studentName) {
+        this.studentName = studentName;
+    }
 
     public Long getDocumentId() {
         return documentId;
@@ -167,25 +192,15 @@ public class MaterialRequest extends BaseEntity {
         this.status = status;
     }
 
-    /** 便捷判断：状态是否允许出库实发（APPROVED 后含部分实发） */
+    /** 便捷判断：状态是否允许出库实发（部分实发时仍为 APPROVED，可继续出库） */
     public boolean issuable() {
-        return status == MaterialRequestStatus.APPROVED
-                || status == MaterialRequestStatus.PARTIALLY_FULFILLED;
+        return status == MaterialRequestStatus.APPROVED;
     }
 
     /** 便捷判断：单据是否处于可取消状态 */
     public boolean cancellable() {
-        return status == MaterialRequestStatus.DRAFT
-                || status == MaterialRequestStatus.PENDING
-                || status == MaterialRequestStatus.TEACHER_APPROVED
-                || status == MaterialRequestStatus.APPROVED
-                || status == MaterialRequestStatus.PARTIALLY_FULFILLED;
-    }
-
-    /** 便捷判断：是否有已实发量（取消前须无实发） */
-    public boolean hasFulfillment() {
-        return status == MaterialRequestStatus.PARTIALLY_FULFILLED
-                || status == MaterialRequestStatus.FULFILLED;
+        return status == MaterialRequestStatus.TEACHER_APPROVED
+                || status == MaterialRequestStatus.APPROVED;
     }
 
     /** 登记时间（等价 createTime 语义，便于统一单据口径） */

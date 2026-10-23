@@ -28,6 +28,7 @@ import com.labmanage.module.item.vo.StockBalanceVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.labmanage.module.item.entity.StockBalance;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -50,7 +51,8 @@ import java.util.stream.Collectors;
  * <p>
  * 库存数量受「余额可从流水重建」审计约束，期初导入不直接改写余额：
  * 逐行校验（库位/SKU 存在且启用、组合当前无余额行、数量与单价精度合法）后，
- * 有效行组装为一张 OPENING 期初入库草稿单，走既有审批过账流程入账。
+ * 有效行组装为一张 OPENING 期初入库单并自动审批过账入账（单据处理面板
+ * 2026-10-23 下线，导入即入账；过账失败整笔回滚）。
  */
 @Service
 public class StockTransferServiceImpl implements StockTransferService {
@@ -89,6 +91,7 @@ public class StockTransferServiceImpl implements StockTransferService {
     // ==================== 期初余额导入 ====================
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public ImportResultVO importOpeningBalances(MultipartFile file) {
         List<List<String>> rows = readRows(file);
         ImportColumns.checkHeader(rows.isEmpty() ? null : rows.get(0), ImportColumns.BALANCE_OPENING_HEADER);
@@ -151,6 +154,9 @@ public class StockTransferServiceImpl implements StockTransferService {
                     MovementType.OPENING, OffsetDateTime.now(ZoneOffset.UTC), null, null,
                     "期初批量导入：" + validLines.size() + " 行", validLines);
             documentId = stockDocumentService.create(dto);
+            // 单据处理面板下线（2026-10-23）：期初单同一事务内自动审批并过账入账
+            stockDocumentService.approve(documentId);
+            stockDocumentService.post(documentId);
         }
         return new ImportResultVO(total, validLines.size(), failures.size(), failures, documentId);
     }

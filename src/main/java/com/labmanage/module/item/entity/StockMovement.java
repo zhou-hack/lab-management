@@ -49,6 +49,9 @@ public class StockMovement extends BaseEntity {
     /** 幂等键（STK:{documentId}:{lineNo}:{方向}，唯一） */
     private String movementKey;
 
+    /** 经办人姓名（直接登记时填写；空则展示侧按单据 operator_id 解析） */
+    private String operatorName;
+
     public Long getDocumentLineId() {
         return documentLineId;
     }
@@ -143,5 +146,13 @@ public class StockMovement extends BaseEntity {
 
     public void setMovementKey(String movementKey) {
         this.movementKey = movementKey;
+    }
+
+    public String getOperatorName() {
+        return operatorName;
+    }
+
+    public void setOperatorName(String operatorName) {
+        this.operatorName = operatorName;
     }
 }

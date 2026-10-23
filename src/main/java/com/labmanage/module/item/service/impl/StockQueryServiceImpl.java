@@ -11,12 +11,14 @@ import com.labmanage.module.item.dto.StockBalanceQuery;
 import com.labmanage.module.item.dto.StockBalanceWarningUpdateDTO;
 import com.labmanage.module.item.dto.StockMovementQuery;
 import com.labmanage.module.item.dto.StockWarningQuery;
+import com.labmanage.module.item.entity.MaterialRequest;
 import com.labmanage.module.item.entity.MaterialSku;
 import com.labmanage.module.item.entity.StockBalance;
 import com.labmanage.module.item.entity.StockDocument;
 import com.labmanage.module.item.entity.StockDocumentLine;
 import com.labmanage.module.item.entity.StockLocation;
 import com.labmanage.module.item.entity.StockMovement;
+import com.labmanage.module.item.mapper.MaterialRequestMapper;
 import com.labmanage.module.item.mapper.MaterialSkuMapper;
 import com.labmanage.module.item.mapper.StockBalanceMapper;
 import com.labmanage.module.item.mapper.StockDocumentLineMapper;
@@ -38,6 +40,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -55,6 +58,7 @@ public class StockQueryServiceImpl implements StockQueryService {
     private final StockLocationMapper locationMapper;
     private final StockDocumentLineMapper lineMapper;
     private final StockDocumentMapper documentMapper;
+    private final MaterialRequestMapper requestMapper;
     private final SysUserRefMapper sysUserRefMapper;
 
     public StockQueryServiceImpl(StockBalanceMapper balanceMapper,
@@ -63,6 +67,7 @@ public class StockQueryServiceImpl implements StockQueryService {
                                    StockLocationMapper locationMapper,
                                    StockDocumentLineMapper lineMapper,
                                    StockDocumentMapper documentMapper,
+                                   MaterialRequestMapper requestMapper,
                                    SysUserRefMapper sysUserRefMapper) {
         this.balanceMapper = balanceMapper;
         this.movementMapper = movementMapper;
@@ -70,6 +75,7 @@ public class StockQueryServiceImpl implements StockQueryService {
         this.locationMapper = locationMapper;
         this.lineMapper = lineMapper;
         this.documentMapper = documentMapper;
+        this.requestMapper = requestMapper;
         this.sysUserRefMapper = sysUserRefMapper;
     }
 
@@ -166,6 +172,25 @@ public class StockQueryServiceImpl implements StockQueryService {
             }
             wrapper.in(StockMovement::getDocumentLineId, lines.stream().map(StockDocumentLine::getId).toList());
         }
+        if (query.getMaterialRequestId() != null && !query.getMaterialRequestId().isBlank()) {
+            // 按申领单查其发放产生的全部流水：申领单 → 出库单（material_request_id）→ 单据行 → 流水
+            Long requestPk = IdUtils.requireId(query.getMaterialRequestId(), "申领单 ID");
+            List<Long> documentIds = documentMapper.selectList(new LambdaQueryWrapper<StockDocument>()
+                            .select(StockDocument::getId)
+                            .eq(StockDocument::getMaterialRequestId, requestPk))
+                    .stream().map(StockDocument::getId).toList();
+            if (documentIds.isEmpty()) {
+                return PageResult.of(List.of(), 0L, query.getPageNum(), query.getPageSize());
+            }
+            List<Long> lineIds = lineMapper.selectList(new LambdaQueryWrapper<StockDocumentLine>()
+                            .select(StockDocumentLine::getId)
+                            .in(StockDocumentLine::getStockDocumentId, documentIds))
+                    .stream().map(StockDocumentLine::getId).toList();
+            if (lineIds.isEmpty()) {
+                return PageResult.of(List.of(), 0L, query.getPageNum(), query.getPageSize());
+            }
+            wrapper.in(StockMovement::getDocumentLineId, lineIds);
+        }
         wrapper.orderByDesc(StockMovement::getOccurredAt).orderByDesc(StockMovement::getId);
         IPage<StockMovement> page = movementMapper.selectPage(PageUtils.toPage(query), wrapper);
 
@@ -180,16 +205,29 @@ public class StockQueryServiceImpl implements StockQueryService {
         Map<Long, StockDocument> documentMap = documentIds.isEmpty() ? Map.of()
                 : documentMapper.selectByIds(documentIds).stream()
                         .collect(Collectors.toMap(StockDocument::getId, doc -> doc));
+        // 申领单映射：申领发放产生的出库单经 material_request_id 关联（用途 purpose 在申领单上）
+        Set<Long> requestIds = documentMap.values().stream()
+                .map(StockDocument::getMaterialRequestId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, MaterialRequest> requestMap = requestIds.isEmpty() ? Map.of()
+                : requestMapper.selectByIds(requestIds).stream()
+                        .collect(Collectors.toMap(MaterialRequest::getId, req -> req));
         Map<Long, MaterialSku> skuMap = skuMapOf(movements.stream().map(StockMovement::getSkuId).collect(Collectors.toSet()));
         Map<Long, StockLocation> locationMap = locationMapOf(
                 movements.stream().map(StockMovement::getLocationId).collect(Collectors.toSet()));
-        Map<Long, String> userNames = movementUserNamesOf(movements, lineMap, documentMap, locationMap);
+        Map<Long, String> userNames = movementUserNamesOf(movements, lineMap, documentMap, requestMap, locationMap);
+        // 总数量（物料全部库位合计）：变更后总数量 = 当前总量 − 该行之后同物料全部流水增量
+        Map<Long, BigDecimal> totalNowMap = totalQtyBySkuOf(movements);
+        Map<Long, BigDecimal> afterSumMap = deltaAfterOf(movements);
         List<StockMovementVO> records = new java.util.ArrayList<>();
         for (StockMovement movement : movements) {
             StockDocumentLine line = lineMap.get(movement.getDocumentLineId());
             StockDocument doc = line == null ? null : documentMap.get(line.getStockDocumentId());
-            StockMovementVO vo = toMovementVO(movement, line, doc, skuMap.get(movement.getSkuId()),
-                    locationMap.get(movement.getLocationId()), userNames);
+            MaterialRequest request = doc == null || doc.getMaterialRequestId() == null
+                    ? null : requestMap.get(doc.getMaterialRequestId());
+            BigDecimal totalQty = totalNowMap.getOrDefault(movement.getSkuId(), BigDecimal.ZERO)
+                    .subtract(afterSumMap.getOrDefault(movement.getId(), BigDecimal.ZERO));
+            StockMovementVO vo = toMovementVO(movement, line, doc, request, skuMap.get(movement.getSkuId()),
+                    locationMap.get(movement.getLocationId()), userNames, totalQty);
             // 入库人/出库人/保管人 字段排查日志：定位姓名缺失或 ID 不匹配问题
             if (log.isDebugEnabled()) {
                 log.debug(
@@ -205,11 +243,12 @@ public class StockQueryServiceImpl implements StockQueryService {
     }
 
     /**
-     * 流水行涉及的用户姓名：单据经办人（入库人/出库人）+ 库位保管人，批量只读解析
+     * 流水行涉及的用户姓名：单据经办人（入库人/出库人）+ 申领老师 + 库位保管人，批量只读解析
      */
     private Map<Long, String> movementUserNamesOf(List<StockMovement> movements,
                                                   Map<Long, StockDocumentLine> lineMap,
                                                   Map<Long, StockDocument> documentMap,
+                                                  Map<Long, MaterialRequest> requestMap,
                                                   Map<Long, StockLocation> locationMap) {
         Set<Long> userIds = new HashSet<>();
         for (StockMovement movement : movements) {
@@ -217,6 +256,12 @@ public class StockQueryServiceImpl implements StockQueryService {
             StockDocument doc = line == null ? null : documentMap.get(line.getStockDocumentId());
             if (doc != null && doc.getOperatorId() != null) {
                 userIds.add(doc.getOperatorId());
+            }
+            Long teacherId = requestTeacherIdOf(doc,
+                    doc == null || doc.getMaterialRequestId() == null
+                            ? null : requestMap.get(doc.getMaterialRequestId()));
+            if (teacherId != null) {
+                userIds.add(teacherId);
             }
             StockLocation location = locationMap.get(movement.getLocationId());
             if (location != null && location.getCustodianId() != null) {
@@ -361,9 +406,11 @@ public class StockQueryServiceImpl implements StockQueryService {
     }
 
     private StockMovementVO toMovementVO(StockMovement movement, StockDocumentLine line, StockDocument doc,
-                                          MaterialSku sku, StockLocation location, Map<Long, String> userNames) {
+                                          MaterialRequest request, MaterialSku sku, StockLocation location,
+                                          Map<Long, String> userNames, BigDecimal totalQty) {
         Long operatorId = doc == null ? null : doc.getOperatorId();
         Long custodianId = location == null ? null : location.getCustodianId();
+        Long teacherId = requestTeacherIdOf(doc, request);
         return new StockMovementVO(
                 String.valueOf(movement.getId()),
                 movement.getMovementKey(),
@@ -378,15 +425,58 @@ public class StockQueryServiceImpl implements StockQueryService {
                 movement.getQtyDelta(),
                 movement.getBeforeQty(),
                 movement.getAfterQty(),
+                totalQty,
                 movement.getValueDelta(),
                 movement.getBeforeAvgPrice(),
                 movement.getAfterAvgPrice(),
                 movement.getOccurredAt(),
                 operatorId == null ? null : String.valueOf(operatorId),
-                operatorId == null ? null : userNames.get(operatorId),
+                // 经办人姓名：台账直接登记的流水优先展示登记姓名，其余按单据 operator_id 解析
+                movement.getOperatorName() != null ? movement.getOperatorName()
+                        : operatorId == null ? null : userNames.get(operatorId),
                 custodianId == null ? null : String.valueOf(custodianId),
-                custodianId == null ? null : userNames.get(custodianId)
+                custodianId == null ? null : userNames.get(custodianId),
+                doc == null || doc.getMaterialRequestId() == null ? null : String.valueOf(doc.getMaterialRequestId()),
+                teacherId == null ? null : String.valueOf(teacherId),
+                teacherId == null ? null : userNames.get(teacherId),
+                request == null ? null : request.getPurpose()
         );
+    }
+
+    /**
+     * 物料当前总量（全部库位 stock_qty 合计；流水页「总数量」列推算基准）
+     */
+    private Map<Long, BigDecimal> totalQtyBySkuOf(List<StockMovement> movements) {
+        Set<Long> skuIds = movements.stream().map(StockMovement::getSkuId).collect(Collectors.toSet());
+        if (skuIds.isEmpty()) {
+            return Map.of();
+        }
+        return balanceMapper.sumQtyBySkuIds(skuIds).stream()
+                .collect(Collectors.toMap(StockBalanceMapper.SkuQtyRow::skuId,
+                        row -> row.totalQty() == null ? BigDecimal.ZERO : row.totalQty()));
+    }
+
+    /**
+     * 每行流水之后（同物料、更晚发生）的全部增量合计（变更后总数量 = 当前总量 − 此值）
+     */
+    private Map<Long, BigDecimal> deltaAfterOf(List<StockMovement> movements) {
+        if (movements.isEmpty()) {
+            return Map.of();
+        }
+        return movementMapper.sumDeltaAfterByIds(
+                        movements.stream().map(StockMovement::getId).toList()).stream()
+                .collect(Collectors.toMap(StockMovementMapper.AfterSumRow::movementId,
+                        row -> row.afterSum() == null ? BigDecimal.ZERO : row.afterSum()));
+    }
+
+    /**
+     * 申领老师：优先取单据归属老师（issue 时写入），为空兜底申领单归属老师
+     */
+    private Long requestTeacherIdOf(StockDocument doc, MaterialRequest request) {
+        if (doc != null && doc.getOwnerTeacherId() != null) {
+            return doc.getOwnerTeacherId();
+        }
+        return request == null ? null : request.getOwnerTeacherId();
     }
 
     private String warningLevel(BigDecimal stockQty, BigDecimal safeQty) {

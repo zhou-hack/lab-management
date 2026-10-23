@@ -10,10 +10,10 @@
 
 | 顺序 | 文件 | 是什么 / 有什么用 |
 | --- | --- | --- |
-| 1 | `sys_rbac.sql` | **RBAC 基准**。11 张表：部门、预录名单、用户、角色、权限、菜单、用户-角色、角色-权限、角色-菜单、数据范围、预约限制。含种子：设备处(id=1)、角色 ADMIN(实验室管理员)/TEACHER/STUDENT/ASSISTANT(1-4)、管理员 admin(id=1，密码哈希为占位值，部署前必须替换)、system 模块 27 项权限 + 12 个菜单（system 操作不绑 ADMIN，由 OPS_ADMIN 动态接管；TEACHER 仅绑助理授权三项） |
+| 1 | `sys_rbac.sql` | **RBAC 基准**。11 张表：部门、预录名单、用户、角色、权限、菜单、用户-角色、角色-权限、角色-菜单、数据范围、预约限制。含种子：设备处(id=1)、角色 ADMIN(实验室管理员)/TEACHER/STUDENT/ASSISTANT(1-4)、管理员 admin(id=1，密码哈希为占位值，部署前必须替换)、system 模块 31 项权限 + 12 个菜单（system 操作不绑 ADMIN，由 OPS_ADMIN 动态接管；TEACHER 仅绑助理授权三项） |
 | 2 | `sys_policy.sql` | **业务策略参数表** `business_policy`。码+版本唯一、生效区间不重叠、发布后不可改；运行期按策略码读"当前生效的最新启用版本"（如预约时限等可调参数） |
 | 3 | `assistant_grant.sql` | **助理授权** `assistant_grant` + `assistant_grant_scope`。老师授权学生代办（学生代理），有效授权动态计算出 ASSISTANT 附加角色，不持久化到用户-角色表 |
-| 4 | `lab_management_all.sql` | **业务整合基线**（最大的一份）。分模块：① 场地 `lab` ② 统一单据与审批 `biz_document/approval_task/document_event` ③ 设备（分类/型号/台账/位置历史/借用/使用） ④ 物料一阶段（分类/SKU/库位/余额/单据/流水；只记数量不记金额） ⑤ 物料二阶段（申领/定额/结算；盘点功能已按 2026-10-19 需求砍除） ⑥ 场地预约（`class_period` 节次 / `lab_booking_series` 周期规则 / `lab_booking` 预约单 / `lab_slot` 占用槽）。含全部业务权限、菜单、角色绑定种子；头部注释有建表规则与编号段登记，新加表前先读 |
+| 4 | `lab_management_all.sql` | **业务整合基线**（最大的一份）。分模块：① 场地 `lab` ② 统一单据与审批 `biz_document/approval_task/document_event` ③ 设备（分类/型号/台账/位置历史/借用/使用） ④ 物料一阶段（分类/SKU/库位/余额/单据/流水；只记数量不记金额） ⑤ 物料二阶段（申领/定额/结算；盘点功能已按 2026-10-19 需求砍除） ⑥ 场地预约（`class_period` 节次 / `lab_booking_series` 周期规则 / `lab_booking` 预约单 / `lab_slot` 占用槽；物料预约预登记已按 2026-10-22 需求砍除）。含全部业务权限、菜单、角色绑定种子；头部注释有建表规则与编号段登记，新加表前先读 |
 | 5 | `sys_operation_log.sql` | **操作日志表** `sys_operation_log`。只追加不改删；登录、审批、敏感操作审计；动作码与权限码同规范 |
 | 6 | `sys_scope.sql` | **管理员数据范围种子**。给 admin(id=1) 授 ALL+WRITE（id=1）。无范围记录不自动授予全校数据，少了它管理员的写操作会全部 403 |
 | 7 | `sys_ops_role.sql` | **运维管理员**。预置角色 OPS_ADMIN(id=5) + 账号 opsadmin(id=2)，动态绑定库内全部启用权限与菜单；不受数据范围约束。密码哈希同为占位值，部署前替换 |
@@ -25,17 +25,33 @@
 
 **用途**：已经建过库、库里已有旧种子数据的环境（如组内早期开发库），不删库重建，改用这里的脚本把旧库"补/改"到当前定稿形态。**全新建库一律不执行本目录**（基线已含这些内容，执行了也会因幂等设计被跳过，但不要依赖这一点）。
 
-四个脚本均为幂等（`INSERT IGNORE` / 范围 `DELETE`），可重复执行：
+除特别标注外脚本均为幂等（`INSERT IGNORE` / 范围 `DELETE` / `information_schema` 判存守卫），可重复执行：
 
 | 文件 | 是什么 / 有什么用 |
 | --- | --- |
 | `booking_deploy.sql` | **预约模块首发部署**。适用：已有 RBAC + `lab` 表、还没有预约模块的库。建 `lab_booking`/`lab_slot` 两张表 + 预约授权种子；末尾自动回收曾误授给学生的预约权限 |
 | `booking_flow_deploy.sql` | **预约权级流程增量**（2026-10-17 定稿）。适用：已有预约模块的旧库。补建 `biz_document/approval_task/document_event` 三张流程表（审批流：教师发起 → 管理员核对/驳回 → 签到清点，超时自动取消）；新增学生只读权限 3005 `booking:lab:view` + 学生只读菜单 3004。**注意：其 3005/3004 内容已吸收进基线 `lab_management_all.sql` 6.3-6.5 节，新建库无需执行** |
-| `booking_student_revoke.sql` | **学生预约权限回收**。适用：执行过"师生均授预约权限"旧版种子的库。删除学生的预约权限(3001/3002/3003)与菜单 3003 绑定；只回收授权，不删除学生历史预约数据 |
-| `item_stocktake_drop.sql` | **盘点功能全量下线**（2026-10-19 需求定稿）。适用：执行过含盘点旧版基线/增量的库。删除 `stocktake`/`stocktake_line` 两表、盘点权限(133-137/166)、菜单(183/195-199/214)与全部绑定，并移除 `stock_document_line.adjust_direction` 列；编号全部弃用不复用，库存差异改走 ADJUST 调账单。**盘点历史数据随表删除，执行前先整库备份** |
-| `item_location_custodian.sql` | **库位保管人补列**。适用：建库早于 2026-10-19 定稿的旧库（基线 4.3 节已含，无需重复执行）。给 `stock_location` 幂等补 `custodian_id` 列（→ sys_user.id，每库位一名）与外键 `fk_item_location_custodian`；库存流水/库位台账展示保管人用，在库位维护界面设置 |
+| `booking_student_revoke.sql` | **学生预约权限回收**。适用：执行过"师生均授预约权限"旧版种子的库。删除学生的预约权限(3001/3002/3003)与菜单 3003 绑定；只回收授权，不删学生历史预约数据 |
+| `booking_period_series.sql` | **节次时间轴 + 批量周期预约**（2026-10-20，来自 dev/space）。适用：2026-10-19 前建成的库。建 `class_period`（含 8 条节次种子）与 `lab_booking_series`，`lab_booking` 追加日期/节次/series_id/课程/班级/上课老师 7 列（均可空，旧行不受影响）。**注意：全新建库无需执行，基线模块六已含全部内容** |
+| `item_location_custodian.sql` | **库位保管人补列**（2026-10-19 需求定稿，来自 material-manage）。适用：建库早于该定稿的库。`stock_location` 幂等补 `custodian_id` 列与外键 |
+| `item_stocktake_drop.sql` | **盘点功能全量下线**（2026-10-20，对应 2026-10-19 需求定稿，来自 material-manage）。适用：曾执行过含盘点（stocktake 两表、权限 133-137/166、菜单 183/195-199/214 及绑定）旧版种子的库。清理种子、DROP 盘点两表与 `adjust_direction` 列；**盘点历史随表删除不可恢复，执行前先备份** |
+| `item_quantity_rename.sql` | **数量列改名**（2026-10-20）。适用：2026-10-20 前建成的库。`stock_document_line.qty`、`material_settlement.qty` 改名 `quantity` 对齐 Java 实体（旧列名导致查询报错）；含 CHECK 约束先 DROP 再重建，幂等可重放 |
+| `equipment_repair_renumber.sql` | **设备报修与设备菜单改号**（2026-10-20 整合冲突裁决）。适用：已执行 2026-10-19 版正本（报修权限 160-161、设备菜单 202/204）的库。报修权限改号 168-169、设备菜单改号 210-211；按 module_code/menu_code 守卫只动 equipment 侧，OPS_ADMIN 绑定自动解绑补绑，幂等可重放 |
+| `item_delete_permission.sql` | **物料 delete 权限段补登记 + 学生代理改号**（2026-10-20 整合，来自 material-manage）。适用：建库早于 2026-10-20 整合版的库。补权限 138-140、菜单 200-202、绑定 238-240/350-352；学生代理绑定 238-239/350 改号 249-250/361。**若库内菜单 202 为 equipment 占用，须先执行 `equipment_repair_renumber.sql`** |
+| `item_transfer_permission.sql` | **物料批量导入/导出权限补登记**（2026-10-17，来自 material-manage）。适用：缺权限 160-163、菜单 206-209 种子的库。INSERT IGNORE 幂等 |
+| `item_stock_transfer_permission.sql` | **库存余额导入/导出权限补登记**（2026-10-17，来自 material-manage）。适用：缺权限 164-165、菜单 212-213 种子的库。INSERT IGNORE 幂等 |
+| `item_request_proxy.sql` | **申领两级审核 + 学生代理代领**（2026-10-19，来自 material-manage）。适用：已按 2026-10-17 版正本初始化的库。`material_request` 加 `request_type`/`source_request_id`、`material_request_line` 加 `source_line_id` 并扩展状态机；补权限 167、菜单 215 与角色绑定。**注意：ALTER/ADD CONSTRAINT 部分不可重复执行，须一次性执行成功** |
+| `system_permission_extend.sql` | **system 权限扩展 28-31**（2026-10-20，收编 dev/basic_model 与 dev/auth）。适用：sys_rbac 仅 27 项 system 权限的旧库。补调整角色权限/名单导入导出/绑定管理员角色 4 项，OPS_ADMIN 同步补绑。INSERT IGNORE 幂等 |
+| `item_booking_material.sql` | **物料预约预登记**（2026-10-20 需求定稿，来自 material-manage）。适用：建库早于该定稿的旧库（基线 6.8 节已含，无需重复执行）。建 `lab_booking_material` 表（预约单+SKU 唯一，预登记不减库存，软删行由服务端复活支持删后重加）+ item 权限 **172-175**（原 168-171 与 equipment 报修 168-169 撞号，2026-10-21 改号）/ 菜单 216-220 / 绑定 267-270、370-374，种子先删后插幂等可重放；仅绑 ADMIN，老师侧预约嵌入待场地预约模块接入后补绑定。**曾执行过旧版 168-171 种子的库必须先跑本脚本清理旧号，再执行 `equipment_repair_renumber.sql`（其 DELETE 168/169 不区分模块）**。**该功能已于 2026-10-22 全量下线，曾执行过本脚本的库随后执行 `item_booking_material_drop.sql` 清理** |
+| `item_booking_material_drop.sql` | **物料预约功能全量下线**（2026-10-22 需求定稿）。适用：曾执行过含物料预约（表 / 权限 172-175（或旧号 168-171）/ 菜单 216-220 / 绑定）旧版基线或 `item_booking_material.sql` 的库。按编号 + 权限码/菜单码双路幂等清理角色绑定（含 OPS_ADMIN 动态绑定）、菜单（先子后父规避自引用 1451）、权限，DROP `lab_booking_material` 表；预约单候选搜索接口随申领单保留（迁移至 material-requests/booking-options）。**预登记历史数据随表删除不可恢复，执行前先整库备份** |
+| `item_request_student_info.sql` | **预约单学生信息列**（2026-10-22 需求定稿）。适用：建库早于该定稿的旧库（基线 material_request 段已含，无需重复执行）。`material_request` 加 `student_no` VARCHAR(32) / `student_name` VARCHAR(64) / `student_class_name` VARCHAR(64) 三列（SELF=预约学生、PROXY=代理学生填写，TEACHER 老师预约为空），information_schema 判定幂等可重放。配套：预约类型枚举扩展 TEACHER（老师预约，创建即老师已审、仅管理员终审），后端接口与前端表单同步 |
+| `item_request_remove_self.sql` | **学生预约（SELF）下线 + 老师审核环节移除**（2026-10-22 需求定稿）。适用：曾执行过 `item_request_proxy.sql`（两级审核）或含 SELF 数据的库（基线 5.1/5.11 段已按新形态定稿，新建库无需执行）。清空历史 SELF 申领单及引用其作源单的 PROXY 代领单（含申领行；外键子先父后删除）；删权限 167/菜单 215 及全部角色绑定；CHECK 约束收紧（type 去 SELF、status 去 DRAFT/PENDING、source 仅 TEACHER 可无源单）；列默认值改 TEACHER / TEACHER_APPROVED。幂等可重放。**SELF/PROXY 历史数据删除不可恢复，执行前先整库备份** |
+| `item_request_remove_partially_fulfilled.sql` | **「部分实发」派生状态下线**（2026-10-22 需求定稿）。适用：建库早于该定稿的库（基线 material_request 段已按五值定稿，新建库无需执行）。历史数据归位 PARTIALLY_FULFILLED→APPROVED（含软删除行）；`chk_item_request_status` 收紧为五值（TEACHER_APPROVED/APPROVED/FULFILLED/REJECTED/CANCELLED）。幂等可重放 |
+| `item_quota_menu_merge.sql` | **领用定额独立菜单下线**（2026-10-22 需求定稿）。适用：曾执行过含定额菜单（页面 181、动作 189-192、绑定 331/339-342）旧版种子的库（基线 5.7/5.8 段已按新形态定稿，新建库无需执行）。定额并入「物料预约」页面页签；删菜单与绑定，**权限 127-130（item:quota:\*）保留**供接口与前端 v-permission 使用。幂等可重放 |
+| `item_quota_global.sql` | **领用定额转全局定额**（2026-10-22 需求定稿）。适用：曾按「开课实例+SKU」形态录入定额数据的库（基线 5.3 段已按新形态定稿，新建库无需执行）。同物料多行（含软删占位行）物理去重保留最新，offering_id 归一 0、列默认值与注释更新；后端 upsert 接口不再收 offeringId。**重复定额行物理删除不可恢复，执行前先整库备份** |
+| `item_movement_operator_name.sql` | **库存流水经办人姓名补列**（2026-10-23 需求，来自 dev/item）。适用：建库早于 2026-10-23 的库。`stock_movement` 幂等补 `operator_name` 列；新建库存流水（台账直接登记）填写入库人/出库人姓名落库，展示侧优先该列 |
 
-旧库升级顺序：`booking_deploy.sql` → `booking_flow_deploy.sql` →（如曾授予学生权限）`booking_student_revoke.sql` →（如曾启用过盘点）`item_stocktake_drop.sql` →（如 `stock_location` 缺 `custodian_id` 列）`item_location_custodian.sql`。
+旧库升级顺序（按需跳过已具备的）：`booking_deploy.sql` → `booking_flow_deploy.sql` →（如曾授予学生权限）`booking_student_revoke.sql` → `booking_period_series.sql` → `item_location_custodian.sql` → `item_stocktake_drop.sql` → `item_quantity_rename.sql` →（如残留旧版 168-171 物料预约种子）`item_booking_material.sql` → `equipment_repair_renumber.sql` → `item_delete_permission.sql` → `item_transfer_permission.sql` → `item_stock_transfer_permission.sql` → `item_request_proxy.sql` → `system_permission_extend.sql` →（如残留物料预约功能）`item_booking_material_drop.sql` → `item_request_student_info.sql` → `item_request_remove_self.sql` → `item_request_remove_partially_fulfilled.sql` → `item_quota_menu_merge.sql` → `item_quota_global.sql` → `item_movement_operator_name.sql`。
 
 ## 三、常见问题
 

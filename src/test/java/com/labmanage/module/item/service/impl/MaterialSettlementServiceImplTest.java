@@ -162,4 +162,38 @@ class MaterialSettlementServiceImplTest {
         assertEquals(0, result.records().size());
         assertEquals(0L, result.total());
     }
+
+    // ---------------------------------------------------------- issueOptions
+
+    @Test
+    void issueOptionsMapsRowsWithRemainQty() {
+        when(settlementMapper.selectIssueOptionPage(any(), org.mockito.ArgumentMatchers.eq("")))
+                .thenAnswer(inv -> {
+                    com.baomidou.mybatisplus.extension.plugins.pagination
+                            .Page<MaterialSettlementMapper.IssueOptionRow> page =
+                            new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(1, 50);
+                    page.setRecords(List.of(new MaterialSettlementMapper.IssueOptionRow(
+                            21L, 1L, "PE-DIO-1N4007", "整流二极管 1N4007", "个",
+                            new BigDecimal("10"), new BigDecimal("8"), new BigDecimal("2"),
+                            java.time.Instant.parse("2026-10-23T01:00:00.000Z"), 300L,
+                            "电力电子技术")));
+                    page.setTotal(1L);
+                    return page;
+                });
+
+        var result = service.issueOptions(new com.labmanage.module.item.dto.SettlementIssueOptionQuery());
+
+        assertEquals(1, result.records().size());
+        var vo = result.records().get(0);
+        assertEquals("21", vo.issueLineId());
+        assertEquals("1", vo.skuId());
+        assertEquals("PE-DIO-1N4007", vo.skuCode());
+        assertEquals("整流二极管 1N4007", vo.materialName());
+        assertEquals(new BigDecimal("10"), vo.quantity());
+        assertEquals(new BigDecimal("8"), vo.settledQty());
+        assertEquals(new BigDecimal("2"), vo.remainQty());
+        assertEquals("300", vo.materialRequestId());
+        // 课程名称（出库单 → 物料预约 → 场地预约链路解析）
+        assertEquals("电力电子技术", vo.courseName());
+    }
 }

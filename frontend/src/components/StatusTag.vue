@@ -10,7 +10,7 @@ import { statusOf } from '@/utils/statusMap'
 
 /**
  * 状态标签（配合 utils/statusMap 使用）
- * 用法：<StatusTag :value="row.status" :map="documentStatusMap" />
+ * 用法：<StatusTag :value="row.status" :map="requestStatusMap" />
  */
 const props = defineProps({
   value: { type: [String, Number], default: '' },

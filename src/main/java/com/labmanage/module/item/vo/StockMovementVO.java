@@ -49,6 +49,9 @@ public record StockMovementVO(
         @Schema(description = "变更后余额", example = "10")
         BigDecimal afterQty,
 
+        @Schema(description = "变更后总数量（该物料全部库位库存合计，随出入库变化）", example = "35")
+        BigDecimal totalQty,
+
         @Schema(description = "价值变动", example = "255.00")
         BigDecimal valueDelta,
 
@@ -71,6 +74,18 @@ public record StockMovementVO(
         String custodianId,
 
         @Schema(description = "保管人姓名（缺失用户时为空，前端回退显示 ID）", example = "李老师")
-        String custodianName
+        String custodianName,
+
+        @Schema(description = "申领单 ID（→ material_request.id；仅申领发放产生的流水有值）", example = "1234567890123456789")
+        String materialRequestId,
+
+        @Schema(description = "申领老师 ID（→ sys_user.id；优先取单据归属老师，兜底申领单归属老师）", example = "1234567890123456789")
+        String requestTeacherId,
+
+        @Schema(description = "申领老师姓名（缺失用户时为空，前端回退显示 ID）", example = "王老师")
+        String requestTeacherName,
+
+        @Schema(description = "申领用途（→ material_request.purpose）", example = "有机化学实验课耗材")
+        String requestPurpose
 ) {
 }

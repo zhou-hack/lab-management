@@ -100,6 +100,10 @@ export function updateBalanceWarning(id, data) {
   return request.put(`/stock-balances/${id}/warning-config`, data)
 }
 
+export function adjustStockBalance(id, data) {
+  return request.post(`/stock-balances/${id}/adjust`, data)
+}
+
 // ---------- 库存预警 ----------
 export function pageWarnings(params) {
   return request.get('/stock-warnings/page', { params })
@@ -110,31 +114,13 @@ export function pageMovements(params) {
   return request.get('/stock-movements/page', { params })
 }
 
-// ---------- 库存单据 ----------
-export function pageDocuments(params) {
-  return request.get('/stock-documents/page', { params })
+export function createMovement(data) {
+  return request.post('/stock-movements', data)
 }
 
-export function getDocument(id) {
-  return request.get(`/stock-documents/${id}`)
-}
-
-export function createDocument(data) {
-  return request.post('/stock-documents', data)
-}
-
-export function approveDocument(id) {
-  return request.post(`/stock-documents/${id}/approve`)
-}
-
-export function postDocument(id) {
-  return request.post(`/stock-documents/${id}/post`)
-}
-
-export function cancelDocument(id) {
-  return request.post(`/stock-documents/${id}/cancel`)
-}
-
+// ---------- 库存单据（单据处理面板 2026-10-23 下线：实发/期初导入/调整等
+// 均由服务端自动审批过账，前端无人工单据处理入口；调拨/归还/领用出库/报废
+// 走下方具名接口） ----------
 export function createTransfer(data) {
   return request.post('/stock-documents/transfer', data)
 }
@@ -151,7 +137,7 @@ export function createReversal(data) {
   return request.post('/stock-documents/reversal', data)
 }
 
-// ---------- 物料申领 ----------
+// ---------- 物料预约（原申领单） ----------
 export function pageRequests(params) {
   return request.get('/material-requests/page', { params })
 }
@@ -164,17 +150,7 @@ export function createRequest(data) {
   return request.post('/material-requests', data)
 }
 
-// 老师审核（第一级：草稿 → 老师已审核，逐行写批准量）
-export function teacherApproveRequest(id, data) {
-  return request.post(`/material-requests/${id}/teacher-approve`, data || {})
-}
-
-// 老师审核拒绝（草稿 → 已拒绝）
-export function teacherRejectRequest(id) {
-  return request.post(`/material-requests/${id}/teacher-reject`)
-}
-
-// 管理员终审（第二级：老师已审核 → 已批准，逐行写批准量）
+// 管理员终审（老师已审核 → 已批准，逐行写批准量）
 export function approveRequest(id, data) {
   return request.post(`/material-requests/${id}/approve`, data || {})
 }
@@ -192,12 +168,12 @@ export function issueRequest(id, data) {
   return request.post(`/material-requests/${id}/issue`, data)
 }
 
-// 学生代理代领：老师已审核通过的可代领源申领单分页
+// 学生代理代领源申领单分页（老师端已审核通过的老师预约单）
 export function pageProxySources(params) {
   return request.get('/material-requests/proxy-sources', { params })
 }
 
-// 学生代理代领：源申领单行（含剩余可代领量）
+// 源申领单行（含剩余可代领量 = 批准量 − 实发量 − 已被有效代领单占用量）
 export function listProxyLines(sourceRequestId) {
   return request.get(`/material-requests/proxy-sources/${sourceRequestId}/lines`)
 }
@@ -223,9 +199,24 @@ export function disableQuota(id) {
   return request.post(`/material-quotas/${id}/disable`)
 }
 
+// ---------- 物料预约关联场地预约（新建物料预约选择已预约课程） ----------
+// 预约单候选搜索（仅待审批/已批准状态，按场地/课程/班级/用途前缀，最多 20 条）
+export function bookingOptions(keyword) {
+  return request.get('/material-requests/booking-options', { params: { keyword: keyword || undefined } })
+}
+
+// 老师候选搜索（老师预约选择归属老师；仅启用 TEACHER 角色，姓名前缀，最多 20 条）
+export function teacherListOptions(keyword) {
+  return request.get('/material-requests/teacher-options', { params: { keyword: keyword || undefined } })
+}
+
 // ---------- 物料核销 ----------
 export function pageSettlements(params) {
   return request.get('/material-settlements/page', { params })
+}
+
+export function pageIssueOptions(params) {
+  return request.get('/material-settlements/issue-options', { params })
 }
 
 export function createSettlement(data) {

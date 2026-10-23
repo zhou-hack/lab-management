@@ -3,9 +3,11 @@ package com.labmanage.module.item.controller;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
+import com.labmanage.module.item.dto.StockBalanceAdjustDTO;
 import com.labmanage.module.item.dto.StockBalanceExportQuery;
 import com.labmanage.module.item.dto.StockBalanceQuery;
 import com.labmanage.module.item.dto.StockBalanceWarningUpdateDTO;
+import com.labmanage.module.item.service.StockDocumentService;
 import com.labmanage.module.item.service.StockQueryService;
 import com.labmanage.module.item.service.StockTransferService;
 import com.labmanage.module.item.transfer.FileFormat;
@@ -33,9 +35,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 库存余额查询与预警配置
+ * 物料存量（库存余额）查询与调整
  */
-@Tag(name = "库存余额", description = "按库位+SKU 查询当前库存、安全库存与预警状态，设置预警阈值；支持余额报表导出与期初批量导入")
+@Tag(name = "物料存量", description = "按库位+SKU 查询当前库存（物料存量）、安全库存与预警状态；支持直接调整库存（自动生成 ADJUST 调账单审批过账，立即生效）、预警配置、报表导出与期初批量导入")
 @RestController
 @RequestMapping("/api/v1/stock-balances")
 public class StockBalanceController {
@@ -44,17 +46,32 @@ public class StockBalanceController {
 
     private final StockTransferService stockTransferService;
 
+    private final StockDocumentService stockDocumentService;
+
     public StockBalanceController(StockQueryService stockQueryService,
-                                  StockTransferService stockTransferService) {
+                                  StockTransferService stockTransferService,
+                                  StockDocumentService stockDocumentService) {
         this.stockQueryService = stockQueryService;
         this.stockTransferService = stockTransferService;
+        this.stockDocumentService = stockDocumentService;
     }
 
-    @Operation(summary = "分页查询库存余额")
+    @Operation(summary = "分页查询物料存量（库存余额）")
     @SaCheckPermission("item:balance:list")
     @GetMapping("/page")
     public Result<PageResult<StockBalanceVO>> page(@Valid StockBalanceQuery query) {
         return Result.success(stockQueryService.pageBalance(query));
+    }
+
+    @Operation(summary = "调整库存（生成 ADJUST 调账单并自动审批过账，立即生效）",
+            description = "按目标数量与当前库存的差值生成调账单：调增走入库行、调减走出库行；"
+                    + "同一事务内自动审批过账，余额与流水立即更新并保留完整审计；调整事由必填")
+    @SaCheckPermission(value = {"item:stock:create", "item:stock:post"})
+    @PostMapping("/{id}/adjust")
+    public Result<String> adjust(
+            @Parameter(description = "余额 ID") @PathVariable String id,
+            @Valid @RequestBody StockBalanceAdjustDTO dto) {
+        return Result.success(stockDocumentService.adjustBalance(id, dto));
     }
 
     @Operation(summary = "设置预警配置（安全库存与补货目标库存）")

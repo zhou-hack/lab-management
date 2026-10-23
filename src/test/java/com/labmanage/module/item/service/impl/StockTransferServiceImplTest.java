@@ -118,6 +118,10 @@ class StockTransferServiceImplTest {
         assertEquals("102", dto.lines().get(1).skuId());
         assertNull(dto.lines().get(1).unitPrice());
         assertTrue(dto.reason().contains("期初批量导入"));
+
+        // 单据处理面板下线（2026-10-23）：期初单同事务自动审批并过账入账
+        verify(stockDocumentService).approve("9001");
+        verify(stockDocumentService).post("9001");
     }
 
     @Test

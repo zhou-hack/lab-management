@@ -1,8 +1,10 @@
 package com.labmanage.module.item.service;
 
 import com.labmanage.common.result.PageResult;
+import com.labmanage.module.item.dto.StockBalanceAdjustDTO;
 import com.labmanage.module.item.dto.StockDocumentCreateDTO;
 import com.labmanage.module.item.dto.StockDocumentQuery;
+import com.labmanage.module.item.dto.StockMovementCreateDTO;
 import com.labmanage.module.item.dto.StockReversalCreateDTO;
 import com.labmanage.module.item.dto.StockReturnCreateDTO;
 import com.labmanage.module.item.dto.StockScrapCreateDTO;
@@ -47,4 +49,17 @@ public interface StockDocumentService {
 
     /** 登记冲销单（REVERSAL 整单一次；行由服务端从原单复制，过账写相反流水），返回单据 ID */
     String createReversal(StockReversalCreateDTO dto);
+
+    /**
+     * 物料存量调整：目标量与当前量的差值生成 ADJUST 调账单（调增入库行 / 调减出库行），
+     * 同一事务内自动审批并过账，余额与流水立即更新（保留完整审计），返回调账单据 ID
+     */
+    String adjustBalance(String id, StockBalanceAdjustDTO dto);
+
+    /**
+     * 新建库存流水：按库位+物料+变更后数量登记（可指定出入库时间），
+     * 差值生成 ADJUST 调账单并在同一事务内自动审批过账，余额与流水立即更新，
+     * 方向须与差值符号一致（库存台账面板「新建流水」入口），返回调账单据 ID
+     */
+    String createMovement(StockMovementCreateDTO dto);
 }

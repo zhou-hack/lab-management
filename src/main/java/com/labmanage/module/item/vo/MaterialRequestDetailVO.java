@@ -3,6 +3,7 @@ package com.labmanage.module.item.vo;
 import com.labmanage.module.item.entity.MaterialRequest;
 import com.labmanage.module.item.enums.MaterialRequestStatus;
 import com.labmanage.module.item.enums.RequestType;
+import com.labmanage.module.item.mapper.LabBookingRefMapper;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
@@ -22,17 +23,24 @@ public record MaterialRequestDetailVO(
         @Schema(description = "领用实验室 ID", example = "1234567890123456789")
         String labId,
 
-        @Schema(description = "责任老师 ID（本人申领为归属老师；代领为源单归属老师）", example = "1234567890123456789")
+        @Schema(description = "责任老师 ID（老师预约为本人；代领为源单归属老师）", example = "1234567890123456789")
         String ownerTeacherId,
 
         @Schema(description = "责任老师姓名（解析失败为空，前端回退显示 ID）", example = "张老师")
         String ownerTeacherName,
 
-        @Schema(description = "代领人 ID（学生代理代领时为代理学生本人，经办人）", example = "1234567890123456789")
+        @Schema(description = "经办人 ID（老师预约= 责任老师本人；代领= 代理学生本人）",
+                example = "1234567890123456789")
         String operatorId,
 
-        @Schema(description = "代领人姓名（解析失败为空，前端回退显示 ID）", example = "李同学")
+        @Schema(description = "经办人姓名（代领单即代领人；解析失败为空，前端回退显示 ID）", example = "李同学")
         String operatorName,
+
+        @Schema(description = "学生学号（PROXY= 代理学生；TEACHER 为空）", example = "2023011234")
+        String studentNo,
+
+        @Schema(description = "学生姓名（PROXY= 代理学生；TEACHER 为空）", example = "李同学")
+        String studentName,
 
         @Schema(description = "命中的助理授权 ID", example = "1234567890123456789")
         String grantId,
@@ -42,6 +50,12 @@ public record MaterialRequestDetailVO(
 
         @Schema(description = "场地预约 ID", example = "1234567890123456789")
         String labBookingId,
+
+        @Schema(description = "课程名称（关联场地预约的课程名，未关联时为空）", example = "电力电子技术")
+        String courseName,
+
+        @Schema(description = "班级名称（关联场地预约的班级，可空）", example = "电气 2301")
+        String className,
 
         @Schema(description = "课次 ID", example = "1234567890123456789")
         String scheduleOccurrenceId,
@@ -55,7 +69,7 @@ public record MaterialRequestDetailVO(
         @Schema(description = "用途", example = "有机化学实验课耗材")
         String purpose,
 
-        @Schema(description = "申领类型：SELF 本人申领 / PROXY 学生代理代领", example = "SELF")
+        @Schema(description = "申领类型：TEACHER 老师预约 / PROXY 学生代理代领", example = "TEACHER")
         RequestType requestType,
 
         @Schema(description = "源申领单 ID（PROXY 时非空）", example = "1234567890123456789")
@@ -72,7 +86,8 @@ public record MaterialRequestDetailVO(
 ) {
 
     public static MaterialRequestDetailVO from(MaterialRequest e, List<MaterialRequestLineVO> lines,
-                                               String ownerTeacherName, String operatorName) {
+                                               String ownerTeacherName, String operatorName,
+                                               LabBookingRefMapper.BookingCourse course) {
         return new MaterialRequestDetailVO(
                 String.valueOf(e.getId()),
                 String.valueOf(e.getDocumentId()),
@@ -81,9 +96,13 @@ public record MaterialRequestDetailVO(
                 ownerTeacherName,
                 e.getOperatorId() == null ? null : String.valueOf(e.getOperatorId()),
                 operatorName,
+                e.getStudentNo(),
+                e.getStudentName(),
                 e.getGrantId() == null ? null : String.valueOf(e.getGrantId()),
                 e.getOfferingId() == null ? null : String.valueOf(e.getOfferingId()),
                 e.getLabBookingId() == null ? null : String.valueOf(e.getLabBookingId()),
+                course == null ? null : course.courseName(),
+                course == null ? null : course.className(),
                 e.getScheduleOccurrenceId() == null ? null : String.valueOf(e.getScheduleOccurrenceId()),
                 e.getParticipantCount(),
                 e.getPeriodCount(),

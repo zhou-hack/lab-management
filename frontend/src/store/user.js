@@ -13,18 +13,24 @@ const ADMIN_ITEM_PERMS = [
   'item:material:enable', 'item:material:delete', 'item:material:import', 'item:material:export',
   'item:location:list', 'item:location:create', 'item:location:update',
   'item:location:enable', 'item:location:delete',
-  'item:balance:import', 'item:balance:export',
-  // 申领两级审核 + 代理代领（管理员全部单据终审，含老师审核动作）
-  'item:request:list', 'item:request:create', 'item:request:teacher_approve',
-  'item:request:approve', 'item:request:cancel', 'item:request:issue'
+  'item:balance:import', 'item:balance:export', 'item:balance:update',
+  // 库存单据：调整库存/新建流水（ADJUST 自动过账）走 create+post；
+  // approve/cancel 保留给后端单据接口（单据处理面板 2026-10-23 下线，前端无入口）
+  'item:stock:create', 'item:stock:approve', 'item:stock:post', 'item:stock:cancel',
+  // 物料预约单级审核 + 代理代领（老师预约与代理代领均创建即「老师已审核」，管理员终审）
+  'item:request:list', 'item:request:create',
+  'item:request:approve', 'item:request:cancel', 'item:request:issue',
+  // 领用定额 / 物料核销
+  'item:quota:create', 'item:quota:update', 'item:quota:enable',
+  'item:settlement:create'
 ]
 
 const TEST_PROFILES = {
   STUDENT: {
     userInfo: { realName: '测试学生', username: '20230001' },
     roles: ['STUDENT'],
-    // 与运行库学生角色绑定一致：申领查询(122)、申领创建(123)、实发出库(126)；
-    // 学生可发起本人申领与代理代领，无审批权限
+    // 与运行库学生角色绑定一致：预约查询(122)、预约创建(123)、实发出库(126)；
+    // 学生可发起本人预约与代理代领，无审批权限
     perms: ['my:page', 'item:request:list', 'item:request:create', 'item:request:issue'],
     menus: [
       {
@@ -39,9 +45,8 @@ const TEST_PROFILES = {
   TEACHER: {
     userInfo: { realName: '测试老师', username: 'T1001' },
     roles: ['TEACHER'],
-    // 与运行库教师角色绑定一致：申领查询(122)、老师审核(167)；
-    // 审核学生个人申领单据；代领单据绑定其为责任老师，无需再次审批
-    perms: ['my:page', 'tApprove:page', 'item:request:list', 'item:request:teacher_approve'],
+    // 与运行库教师角色绑定一致：预约查询(122)；老师发起本人预约，无审批权限
+    perms: ['my:page', 'tApprove:page', 'item:request:list'],
     menus: [
       {
         menuId: 200,

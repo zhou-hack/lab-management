@@ -6,7 +6,7 @@
           物料管理
         </h1>
         <p class="ws-subtitle">
-          库存余额 / 台账 / 单据 / 申领定额 / 核销 / 基础数据管理；
+          物料存量 / 库存流水 / 物料预约（含领用定额）/ 核销 / 基础数据管理；
           登录模块未接入，数据经 Vite 代理直连后端 /api/v1
         </p>
       </div>
@@ -54,30 +54,15 @@
           v-show="active === 'movement'"
           ref="movementRef"
         />
-        <DocumentPanel
-          v-if="visited.document"
-          v-show="active === 'document'"
-          ref="documentRef"
-        />
         <RequestPanel
           v-if="visited.request"
           v-show="active === 'request'"
           ref="requestRef"
         />
-        <QuotaPanel
-          v-if="visited.quota"
-          v-show="active === 'quota'"
-          ref="quotaRef"
-        />
         <SettlementPanel
           v-if="visited.settlement"
           v-show="active === 'settlement'"
           ref="settlementRef"
-        />
-        <CategorySection
-          v-if="visited.basic_category"
-          v-show="active === 'basic_category'"
-          ref="categoryRef"
         />
         <SkuSection
           v-if="visited.basic_sku"
@@ -98,11 +83,8 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { DataAnalysis, List, Setting, Tickets } from '@element-plus/icons-vue'
 import BalancePanel from './panels/BalancePanel.vue'
-import CategorySection from './panels/basic/CategorySection.vue'
-import DocumentPanel from './panels/DocumentPanel.vue'
 import LocationSection from './panels/basic/LocationSection.vue'
 import MovementPanel from './panels/MovementPanel.vue'
-import QuotaPanel from './panels/QuotaPanel.vue'
 import RequestPanel from './panels/RequestPanel.vue'
 import SettlementPanel from './panels/SettlementPanel.vue'
 import SkuSection from './panels/basic/SkuSection.vue'
@@ -110,10 +92,11 @@ import SkuSection from './panels/basic/SkuSection.vue'
 /**
  * 物料管理工作台：左侧一级/二级菜单 + 右侧内容区
  * 菜单结构（一级=业务分组，二级=页面）：
- *   基础数据：物料分类 / 物料档案 / 库位管理（原内部页签摊平为二级菜单）
- *   库存查询：库存余额 / 库存流水
- *   库存业务：库存单据 / 申领单
- *   定额核销：领用定额 / 物料核销
+ *   基础数据：物料档案 / 库位管理（原内部页签摊平为二级菜单）
+ *   库存查询：物料存量 / 库存流水
+ *   库存业务：物料预约（页签含领用定额；单据处理面板 2026-10-23 下线，
+ *             实发/期初导入等改为服务端自动审批过账，无人工过账入口）
+ *   核销管理：物料核销（物料预约功能已按 2026-10-22 需求砍除）
  * 面板懒挂载：首次进入才挂载（v-if），此后切回仅切换显示（v-show）保留筛选与分页状态
  */
 const MENU = [
@@ -122,7 +105,6 @@ const MENU = [
     label: '基础数据',
     icon: Setting,
     children: [
-      { key: 'basic_category', label: '物料分类' },
       { key: 'basic_sku', label: '物料档案' },
       { key: 'basic_location', label: '库位管理' }
     ]
@@ -132,7 +114,7 @@ const MENU = [
     label: '库存查询',
     icon: DataAnalysis,
     children: [
-      { key: 'balance', label: '库存余额' },
+      { key: 'balance', label: '物料存量' },
       { key: 'movement', label: '库存流水' }
     ]
   },
@@ -141,16 +123,14 @@ const MENU = [
     label: '库存业务',
     icon: Tickets,
     children: [
-      { key: 'document', label: '库存单据' },
-      { key: 'request', label: '申领单' }
+      { key: 'request', label: '物料预约' }
     ]
   },
   {
     key: 'settle',
-    label: '定额核销',
+    label: '核销管理',
     icon: List,
     children: [
-      { key: 'quota', label: '领用定额' },
       { key: 'settlement', label: '物料核销' }
     ]
   }
@@ -166,22 +146,16 @@ const visited = reactive({ balance: true })
 
 const balanceRef = ref(null)
 const movementRef = ref(null)
-const documentRef = ref(null)
 const requestRef = ref(null)
-const quotaRef = ref(null)
 const settlementRef = ref(null)
-const categoryRef = ref(null)
 const skuRef = ref(null)
 const locationRef = ref(null)
 
 const panelRefs = {
   balance: balanceRef,
   movement: movementRef,
-  document: documentRef,
   request: requestRef,
-  quota: quotaRef,
   settlement: settlementRef,
-  basic_category: categoryRef,
   basic_sku: skuRef,
   basic_location: locationRef
 }
@@ -316,7 +290,7 @@ watch(
 }
 
 /* 下拉宽度跟随选中项文字自适应（EP 默认 100% 会占满导致换行）；
-   min-width 保底让「全部申领类型」等 4-6 字标签舒适展示，文字与箭头不挤压；
+   min-width 保底让「全部预约类型」等 4-6 字标签舒适展示，文字与箭头不挤压；
    max-width 上限制约长文本（如长分类名）防止撑爆工具栏触发横向滚动 */
 .toolbar .el-select {
   width: max-content;

@@ -3,6 +3,7 @@ package com.labmanage.module.item.service.impl;
 import com.labmanage.common.exception.BusinessException;
 import com.labmanage.module.item.dto.StockDocumentCreateDTO;
 import com.labmanage.module.item.dto.StockDocumentLineCreateDTO;
+import com.labmanage.module.item.dto.StockMovementCreateDTO;
 import com.labmanage.module.item.entity.MaterialSku;
 import com.labmanage.module.item.entity.StockBalance;
 import com.labmanage.module.item.entity.StockDocument;
@@ -34,6 +35,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -320,6 +322,181 @@ class StockDocumentServiceImplTest {
         BusinessException ex = assertBizError(40000, () -> service.create(dto));
 
         assertTrue(ex.getMessage().contains("数量精度超过物料限制"));
+    }
+
+    // ---------------------------------------------------------- createMovement
+
+    @Test
+    void createMovementInboundSuccess() {
+        StockMovementCreateDTO dto = new StockMovementCreateDTO(
+                "100", "1", MoveDirection.IN, new BigDecimal("25"),
+                OffsetDateTime.parse("2026-10-13T09:00:00+08:00"), "张三", "补录入库");
+        stubMovementPostPath(balance(501L, 100L, 1L, "10", "20.0000"),
+                line(11, 1, 1L, null, 100L, "15", null));
+
+        String result = service.createMovement(dto);
+
+        assertEquals("1", result);
+        ArgumentCaptor<StockDocument> docCaptor = ArgumentCaptor.forClass(StockDocument.class);
+        verify(documentMapper).insert(docCaptor.capture());
+        StockDocument savedDoc = docCaptor.getValue();
+        assertEquals(MovementType.ADJUST, savedDoc.getMovementType());
+        assertEquals(StockDocumentStatus.DRAFT, savedDoc.getStatus());
+        // 出入库时间取入参并归一化为 UTC 毫秒
+        assertEquals(Instant.parse("2026-10-13T01:00:00.000Z"), savedDoc.getOccurredAt());
+        assertEquals("补录入库", savedDoc.getReason());
+
+        ArgumentCaptor<StockDocumentLine> lineCaptor = ArgumentCaptor.forClass(StockDocumentLine.class);
+        verify(lineMapper).insert(lineCaptor.capture());
+        StockDocumentLine savedLine = lineCaptor.getValue();
+        assertEquals(1, savedLine.getLineNo());
+        assertEquals(1L, savedLine.getSkuId());
+        assertEquals(100L, savedLine.getToLocationId());
+        assertNull(savedLine.getFromLocationId());
+        assertEquals(0, savedLine.getQuantity().compareTo(new BigDecimal("15")));
+
+        verify(documentMapper).casApprove(1L);
+        // 移动加权均价 (10×20 + 15×0) / 25 = 8.0000（调账行无单价按 0 计）
+        verify(balanceMapper).updatePostBalance(501L, 0, new BigDecimal("25"), new BigDecimal("8.0000"));
+
+        ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
+        verify(movementMapper).insert(movementCaptor.capture());
+        StockMovement movement = movementCaptor.getValue();
+        assertEquals(MoveDirection.IN, movement.getDirection());
+        assertEquals(0, movement.getQtyDelta().compareTo(new BigDecimal("15")));
+        assertEquals(0, movement.getBeforeQty().compareTo(new BigDecimal("10")));
+        assertEquals(0, movement.getAfterQty().compareTo(new BigDecimal("25")));
+        assertEquals(OCCURRED, movement.getOccurredAt());
+        assertEquals("STK:9001:1:IN", movement.getMovementKey());
+
+        // 过账后流水回填经办人姓名
+        ArgumentCaptor<StockMovement> updateCaptor = ArgumentCaptor.forClass(StockMovement.class);
+        verify(movementMapper).updateById(updateCaptor.capture());
+        assertEquals("张三", updateCaptor.getValue().getOperatorName());
+    }
+
+    @Test
+    void createMovementOutboundSuccess() {
+        StockMovementCreateDTO dto = new StockMovementCreateDTO(
+                "100", "1", MoveDirection.OUT, new BigDecimal("4"),
+                OffsetDateTime.parse("2026-10-13T09:00:00+08:00"), "张三", "补录出库");
+        stubMovementPostPath(balance(501L, 100L, 1L, "10", "20.0000"),
+                line(11, 1, 1L, 100L, null, "6", null));
+
+        String result = service.createMovement(dto);
+
+        assertEquals("1", result);
+        ArgumentCaptor<StockDocumentLine> lineCaptor = ArgumentCaptor.forClass(StockDocumentLine.class);
+        verify(lineMapper).insert(lineCaptor.capture());
+        StockDocumentLine savedLine = lineCaptor.getValue();
+        // 调减填出库位（fromLocationId）
+        assertEquals(100L, savedLine.getFromLocationId());
+        assertNull(savedLine.getToLocationId());
+        assertEquals(0, savedLine.getQuantity().compareTo(new BigDecimal("6")));
+
+        // 出库均价不变
+        verify(balanceMapper).updatePostBalance(501L, 0, new BigDecimal("4"), new BigDecimal("20.0000"));
+
+        ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
+        verify(movementMapper).insert(movementCaptor.capture());
+        StockMovement movement = movementCaptor.getValue();
+        assertEquals(MoveDirection.OUT, movement.getDirection());
+        assertEquals(0, movement.getQtyDelta().compareTo(new BigDecimal("-6")));
+        assertEquals(0, movement.getBeforeQty().compareTo(new BigDecimal("10")));
+        assertEquals(0, movement.getAfterQty().compareTo(new BigDecimal("4")));
+        assertEquals("STK:9001:1:OUT", movement.getMovementKey());
+    }
+
+    @Test
+    void createMovementInitializesMissingBalance() {
+        StockMovementCreateDTO dto = new StockMovementCreateDTO(
+                "100", "1", MoveDirection.IN, new BigDecimal("8"),
+                OffsetDateTime.parse("2026-10-13T09:00:00+08:00"), "张三", "首次录入");
+        when(locationMapper.selectById(100L)).thenReturn(location(100L));
+        when(skuMapper.selectById(1L)).thenReturn(sku(1L, 3));
+        // 第一次锁读为 null → 初始化 0 余额行；过账时第二次锁读返回新建行
+        when(balanceMapper.lockByLocationAndSku(100L, 1L))
+                .thenReturn(null, balance(500L, 100L, 1L, "0", "0.0000"));
+        doAnswer(inv -> {
+            inv.getArgument(0, StockBalance.class).setId(500L);
+            return 1;
+        }).when(balanceMapper).insert(any(StockBalance.class));
+        stubDocumentPostPath(line(11, 1, 1L, null, 100L, "8", null));
+
+        String result = service.createMovement(dto);
+
+        assertEquals("1", result);
+        ArgumentCaptor<StockBalance> insertCaptor = ArgumentCaptor.forClass(StockBalance.class);
+        verify(balanceMapper).insert(insertCaptor.capture());
+        assertEquals(0, insertCaptor.getValue().getStockQty().compareTo(BigDecimal.ZERO));
+        assertEquals(100L, insertCaptor.getValue().getLocationId());
+        assertEquals(1L, insertCaptor.getValue().getSkuId());
+
+        ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
+        verify(movementMapper).insert(movementCaptor.capture());
+        assertEquals(0, movementCaptor.getValue().getBeforeQty().compareTo(BigDecimal.ZERO));
+        assertEquals(0, movementCaptor.getValue().getAfterQty().compareTo(new BigDecimal("8")));
+    }
+
+    @Test
+    void createMovementRejectsDirectionMismatch() {
+        StockMovementCreateDTO dto = new StockMovementCreateDTO(
+                "100", "1", MoveDirection.OUT, new BigDecimal("25"),
+                OffsetDateTime.parse("2026-10-13T09:00:00+08:00"), "张三", "方向冲突");
+        when(locationMapper.selectById(100L)).thenReturn(location(100L));
+        when(skuMapper.selectById(1L)).thenReturn(sku(1L, 3));
+        when(balanceMapper.lockByLocationAndSku(100L, 1L))
+                .thenReturn(balance(501L, 100L, 1L, "10", "20.0000"));
+
+        BusinessException ex = assertBizError(40000, () -> service.createMovement(dto));
+
+        assertTrue(ex.getMessage().contains("方向应选择入库"));
+        verify(documentMapper, never()).insert(any(StockDocument.class));
+    }
+
+    @Test
+    void createMovementRejectsNoChange() {
+        StockMovementCreateDTO dto = new StockMovementCreateDTO(
+                "100", "1", MoveDirection.IN, new BigDecimal("10"),
+                OffsetDateTime.parse("2026-10-13T09:00:00+08:00"), "张三", "无变化");
+        when(locationMapper.selectById(100L)).thenReturn(location(100L));
+        when(skuMapper.selectById(1L)).thenReturn(sku(1L, 3));
+        when(balanceMapper.lockByLocationAndSku(100L, 1L))
+                .thenReturn(balance(501L, 100L, 1L, "10", "20.0000"));
+
+        BusinessException ex = assertBizError(40000, () -> service.createMovement(dto));
+
+        assertTrue(ex.getMessage().contains("与当前库存一致"));
+        verify(documentMapper, never()).insert(any(StockDocument.class));
+    }
+
+    /** createMovement 成功路径公共 stub：档案校验 + 行锁 + 单据落库 + 自动审批过账 */
+    private void stubMovementPostPath(StockBalance locked, StockDocumentLine postedLine) {
+        when(locationMapper.selectById(100L)).thenReturn(location(100L));
+        when(skuMapper.selectById(1L)).thenReturn(sku(1L, 3));
+        when(balanceMapper.lockByLocationAndSku(100L, 1L)).thenReturn(locked);
+        stubDocumentPostPath(postedLine);
+    }
+
+    /** 落库后的审批过账链路 stub（insert 回填主键 1，CAS 成功，过账行/物料/余额更新就绪） */
+    private void stubDocumentPostPath(StockDocumentLine postedLine) {
+        doAnswer(inv -> {
+            inv.getArgument(0, StockDocument.class).setId(1L);
+            return 1;
+        }).when(documentMapper).insert(any(StockDocument.class));
+        when(documentMapper.casApprove(1L)).thenReturn(1);
+        when(documentMapper.casPost(eq(1L), any(Instant.class))).thenReturn(1);
+        when(documentMapper.selectById(1L)).thenReturn(document(MovementType.ADJUST, 9001L));
+        when(lineMapper.selectByDocumentId(1L)).thenReturn(List.of(postedLine));
+        when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L, 3)));
+        when(balanceMapper.updatePostBalance(any(), any(), any(), any())).thenReturn(1);
+        // 过账后回填经办人姓名的锁读（createMovement 直接登记路径）
+        when(movementMapper.selectOne(any())).thenAnswer(inv -> {
+            StockMovement m = new StockMovement();
+            m.setId(9001L);
+            m.setMovementKey("STK:9001:1:IN");
+            return m;
+        });
     }
 
     // -------------------------------------------------------------------- post

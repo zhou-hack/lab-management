@@ -13,15 +13,10 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 领用定额批量登记 DTO（开课实例 + SKU 已存在则更新量，不存在则新增并启用）
+ * 领用定额批量登记 DTO（全局定额：SKU 已存在则更新量，不存在则新增并启用）
  */
 @Schema(description = "领用定额批量登记参数")
 public record MaterialQuotaUpsertDTO(
-        @Schema(description = "开课实例 ID", example = "1234567890123456789")
-        @NotBlank(message = "开课实例不能为空")
-        @Pattern(regexp = "^\\d{1,19}$", message = "开课实例 ID 格式无效")
-        String offeringId,
-
         @Schema(description = "定额行")
         @NotEmpty(message = "定额行不能为空")
         List<@Valid QuotaLineDTO> lines

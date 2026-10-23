@@ -24,6 +24,9 @@ public class StockMovementQuery extends BasePageQuery {
     @Schema(description = "单据 ID", example = "1234567890123456789")
     private String stockDocumentId;
 
+    @Schema(description = "申领单 ID（查该申领发放产生的全部出入库流水）", example = "1234567890123456789")
+    private String materialRequestId;
+
     @Schema(description = "方向：IN / OUT", example = "IN")
     private MoveDirection direction;
 
@@ -63,6 +66,14 @@ public class StockMovementQuery extends BasePageQuery {
 
     public void setStockDocumentId(String stockDocumentId) {
         this.stockDocumentId = stockDocumentId;
+    }
+
+    public String getMaterialRequestId() {
+        return materialRequestId;
+    }
+
+    public void setMaterialRequestId(String materialRequestId) {
+        this.materialRequestId = materialRequestId;
     }
 
     public MoveDirection getDirection() {

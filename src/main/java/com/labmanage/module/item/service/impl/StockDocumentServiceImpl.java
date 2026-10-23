@@ -7,9 +7,11 @@ import com.labmanage.common.exception.BusinessException;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.ResultCode;
 import com.labmanage.common.utils.PageUtils;
+import com.labmanage.module.item.dto.StockBalanceAdjustDTO;
 import com.labmanage.module.item.dto.StockDocumentCreateDTO;
 import com.labmanage.module.item.dto.StockDocumentLineCreateDTO;
 import com.labmanage.module.item.dto.StockDocumentQuery;
+import com.labmanage.module.item.dto.StockMovementCreateDTO;
 import com.labmanage.module.item.dto.StockReversalCreateDTO;
 import com.labmanage.module.item.dto.StockReturnCreateDTO;
 import com.labmanage.module.item.dto.StockReturnLineDTO;
@@ -139,6 +141,130 @@ public class StockDocumentServiceImpl implements StockDocumentService {
         List<StockDocumentLine> lines = buildLines(document.getId(), direction, dto.lines());
         if (!lines.isEmpty()) {
             lineMapper.insertBatch(lines);
+        }
+        return String.valueOf(document.getId());
+    }
+
+    /**
+     * 物料存量调整：目标量与当前量的差值生成 ADJUST 调账单（调增入库行 / 调减出库行），
+     * 同一事务内自动审批并过账，余额与流水立即更新（物料存量面板「调整库存」入口，保留完整审计）
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String adjustBalance(String id, StockBalanceAdjustDTO dto) {
+        Long balanceId = IdUtils.requireId(id, "余额 ID");
+        StockBalance balance = balanceMapper.selectById(balanceId);
+        if (balance == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "库存余额不存在");
+        }
+        // 行锁读取当前量（锁持有至事务结束，避免并发移动导致目标量偏移）
+        StockBalance locked = balanceMapper.lockByLocationAndSku(balance.getLocationId(), balance.getSkuId());
+        if (locked == null) {
+            throw new BusinessException(ResultCode.INTERNAL_ERROR.getCode(), "库存余额行数据异常，无法调整");
+        }
+        MaterialSku sku = skuMapper.selectById(locked.getSkuId());
+        if (sku == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "物料不存在，无法调整");
+        }
+        validateQuantityScale(dto.targetQty(), sku);
+        BigDecimal delta = dto.targetQty().subtract(locked.getStockQty());
+        if (delta.signum() == 0) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "调整后数量与当前库存一致，无需调整");
+        }
+
+        StockDocument document = new StockDocument();
+        document.setDocumentId(IdWorker.getId());
+        document.setMovementType(MovementType.ADJUST);
+        document.setStatus(StockDocumentStatus.DRAFT);
+        document.setOccurredAt(Instant.now().truncatedTo(ChronoUnit.MILLIS));
+        document.setReason(dto.reason());
+        documentMapper.insert(document);
+
+        // 单行调账：调增填入库位（IN 方向），调减填出库位（OUT 方向）；数量恒为正
+        StockDocumentLine line = new StockDocumentLine();
+        line.setStockDocumentId(document.getId());
+        line.setLineNo(1);
+        line.setSkuId(locked.getSkuId());
+        if (delta.signum() > 0) {
+            line.setToLocationId(locked.getLocationId());
+        } else {
+            line.setFromLocationId(locked.getLocationId());
+        }
+        line.setQuantity(delta.abs());
+        lineMapper.insert(line);
+
+        // 同一事务内自动审批并过账：CAS 状态迁移 + 行锁 + 余额/流水更新复用既有过账路径
+        approve(String.valueOf(document.getId()));
+        post(String.valueOf(document.getId()));
+        return String.valueOf(document.getId());
+    }
+
+    /**
+     * 新建库存流水（库存台账面板入口）：按库位+物料+变更后数量登记，可指定出入库时间；
+     * 差值生成 ADJUST 调账单并在同一事务内自动审批过账，余额与流水立即更新。
+     * 与 adjustBalance 的差异：按库位+物料定位（无余额行时初始化 0 行，支持新组合直接录入）、
+     * 时间取入参、方向须与差值符号一致（入库要求变更后 ≥ 变更前，出库反之）。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String createMovement(StockMovementCreateDTO dto) {
+        Long locationId = IdUtils.requireId(dto.locationId(), "库位 ID");
+        Long skuId = IdUtils.requireId(dto.skuId(), "物料 ID");
+        StockLocation location = locationMapper.selectById(locationId);
+        if (location == null || location.getEnabled() == null || location.getEnabled() != 1) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "库位不存在或已停用");
+        }
+        MaterialSku sku = skuMapper.selectById(skuId);
+        if (sku == null || sku.getEnabled() == null || sku.getEnabled() != 1) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "物料不存在或已停用");
+        }
+        validateQuantityScale(dto.targetQty(), sku);
+        // 行锁读取（锁持有至事务结束；无余额行时初始化 0 行，支持该库位+物料首次录入）
+        StockBalance locked = lockBalance(locationId, skuId);
+        BigDecimal delta = dto.targetQty().subtract(locked.getStockQty());
+        if (delta.signum() == 0) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "变更后数量与当前库存一致，无需登记");
+        }
+        if (delta.signum() > 0 && dto.direction() != MoveDirection.IN) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(),
+                    "变更后数量大于当前库存，方向应选择入库");
+        }
+        if (delta.signum() < 0 && dto.direction() != MoveDirection.OUT) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(),
+                    "变更后数量小于当前库存，方向应选择出库");
+        }
+
+        StockDocument document = new StockDocument();
+        document.setDocumentId(IdWorker.getId());
+        document.setMovementType(MovementType.ADJUST);
+        document.setStatus(StockDocumentStatus.DRAFT);
+        document.setOccurredAt(dto.occurredAt().toInstant().truncatedTo(ChronoUnit.MILLIS));
+        document.setReason(dto.reason());
+        documentMapper.insert(document);
+
+        // 单行调账：调增填入库位（IN 方向），调减填出库位（OUT 方向）；数量恒为正
+        StockDocumentLine line = new StockDocumentLine();
+        line.setStockDocumentId(document.getId());
+        line.setLineNo(1);
+        line.setSkuId(skuId);
+        if (delta.signum() > 0) {
+            line.setToLocationId(locationId);
+        } else {
+            line.setFromLocationId(locationId);
+        }
+        line.setQuantity(delta.abs());
+        lineMapper.insert(line);
+
+        // 同一事务内自动审批并过账：CAS 状态迁移 + 行锁 + 余额/流水更新复用既有过账路径
+        approve(String.valueOf(document.getId()));
+        post(String.valueOf(document.getId()));
+
+        // 过账生成的流水回填经办人姓名（台账直接登记留档；展示侧优先显示该姓名）
+        StockMovement created = movementMapper.selectOne(new LambdaQueryWrapper<StockMovement>()
+                .eq(StockMovement::getDocumentLineId, line.getId()));
+        if (created != null) {
+            created.setOperatorName(dto.operatorName().trim());
+            movementMapper.updateById(created);
         }
         return String.valueOf(document.getId());
     }
@@ -299,7 +425,10 @@ public class StockDocumentServiceImpl implements StockDocumentService {
             case REVERSAL -> { postReversal(document, lines); return; }
             default -> { }
         }
-        MoveDirection direction = directionOf(document.getMovementType());
+        // ADJUST 方向由行结构决定：调增行填 toLocationId（IN）、调减行填 fromLocationId（OUT）
+        MoveDirection direction = document.getMovementType() == MovementType.ADJUST
+                ? (lines.get(0).getToLocationId() != null ? MoveDirection.IN : MoveDirection.OUT)
+                : directionOf(document.getMovementType());
         // ---- 第二阶段追加：归还行锁原出库行校验累计结算量；申领实发行锁申领行校验批准量 ----
         Map<Long, StockDocumentLine> issueLineMap = checkReturnQuota(lines);
         Map<Long, MaterialRequestLine> requestLineMap = checkIssueQuota(lines);
@@ -998,16 +1127,13 @@ public class StockDocumentServiceImpl implements StockDocumentService {
                     requestIds.add(requestLine.getRequestId());
                 }
             }
-            // 推进申领状态：全部行实发达批准量 → FULFILLED，否则 PARTIALLY_FULFILLED
+            // 推进申领状态：全部行实发达批准量 → FULFILLED；部分实发不设派生态，保持 APPROVED
             for (Long requestId : requestIds) {
                 List<MaterialRequestLine> latest = requestLineMapper.selectByRequestId(requestId);
                 boolean allFulfilled = latest.stream().allMatch(line ->
                         line.getApprovedQty() != null
                                 && line.getFulfilledQty().compareTo(line.getApprovedQty()) >= 0);
-                int moved = allFulfilled
-                        ? requestMapper.casMarkFulfilled(requestId)
-                        : requestMapper.casMarkPartiallyFulfilled(requestId);
-                if (allFulfilled && moved == 0) {
+                if (allFulfilled && requestMapper.casMarkFulfilled(requestId) == 0) {
                     throw new BusinessException(ResultCode.CONFLICT.getCode(), "申领单状态已变更，实发回写失败");
                 }
             }

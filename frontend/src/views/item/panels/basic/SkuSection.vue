@@ -13,44 +13,6 @@
         all-option
         @change="pager.search"
       />
-      <el-select
-        v-model="materialType"
-        clearable
-        placeholder="全部类型"
-        @change="pager.search"
-      >
-        <el-option
-          label="全部类型"
-          value=""
-        />
-        <el-option
-          label="耗材"
-          value="CONSUMABLE"
-        />
-        <el-option
-          label="可回收"
-          value="RETURNABLE"
-        />
-      </el-select>
-      <el-select
-        v-model="enabled"
-        clearable
-        placeholder="全部状态"
-        @change="pager.search"
-      >
-        <el-option
-          label="全部状态"
-          value=""
-        />
-        <el-option
-          label="启用"
-          value="true"
-        />
-        <el-option
-          label="停用"
-          value="false"
-        />
-      </el-select>
       <el-button
         v-permission="'item:material:create'"
         type="primary"
@@ -307,7 +269,7 @@
         </el-form-item>
       </el-form>
       <div class="muted small">
-        SKU 码全局唯一；被余额 / 单据 / 申领 / 定额引用时禁止删除。
+        SKU 码全局唯一；被余额 / 单据 / 物料预约 / 定额引用时禁止删除。
       </div>
       <template #footer>
         <el-button @click="dialogVisible = false">
@@ -361,8 +323,6 @@ import CategorySelect from '@/components/CategorySelect.vue'
 
 const keyword = ref('')
 const categoryId = ref(null)
-const materialType = ref(null)
-const enabled = ref(null)
 const importDialogRef = ref(null)
 const exporting = ref(false)
 
@@ -370,9 +330,7 @@ const pager = usePagedList((params) =>
   pageSkus({
     ...params,
     keyword: keyword.value || undefined,
-    categoryId: categoryId.value || undefined,
-    materialType: materialType.value || undefined,
-    enabled: enabled.value || undefined
+    categoryId: categoryId.value || undefined
   })
 )
 
@@ -472,7 +430,7 @@ async function submitForm() {
 async function doToggle(row) {
   const target = !row.enabled
   const ok = await confirmAction(
-    target ? `确认启用物料「${row.materialName}」？` : `确认停用物料「${row.materialName}」？停用后单据与申领不可选用。`
+    target ? `确认启用物料「${row.materialName}」？` : `确认停用物料「${row.materialName}」？停用后单据与物料预约不可选用。`
   )
   if (!ok) return
   try {
@@ -505,8 +463,6 @@ async function doExport(format) {
     const file = await exportSkus({
       keyword: keyword.value || undefined,
       categoryId: categoryId.value || undefined,
-      materialType: materialType.value || undefined,
-      enabled: enabled.value || undefined,
       format
     })
     saveBlobFile(file, `物料档案导出.${format}`)

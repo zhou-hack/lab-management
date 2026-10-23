@@ -76,10 +76,14 @@ public class StockLocationServiceImpl implements StockLocationService {
     public void create(StockLocationCreateDTO dto) {
         Long labId = IdUtils.optionalId(dto.labId(), "实验室 ID");
         Long custodianId = IdUtils.optionalId(dto.custodianId(), "保管人 ID");
-        checkCodeUnique(labId, dto.locationCode().trim(), null);
+        // 库位码前端不再填写：缺省自动生成（LOC- + 雪花），同实验室内唯一由唯一键兜底
+        String locationCode = (dto.locationCode() == null || dto.locationCode().isBlank())
+                ? "LOC-" + com.baomidou.mybatisplus.core.toolkit.IdWorker.getIdStr()
+                : dto.locationCode().trim();
+        checkCodeUnique(labId, locationCode, null);
         StockLocation entity = new StockLocation();
         entity.setLabId(labId);
-        entity.setLocationCode(dto.locationCode().trim());
+        entity.setLocationCode(locationCode);
         entity.setLocationName(dto.locationName().trim());
         entity.setLocationDetail(dto.locationDetail());
         entity.setCustodianId(custodianId);
@@ -97,17 +101,24 @@ public class StockLocationServiceImpl implements StockLocationService {
         requireLocation(id);
         Long labId = IdUtils.optionalId(dto.labId(), "实验室 ID");
         Long custodianId = IdUtils.optionalId(dto.custodianId(), "保管人 ID");
-        checkCodeUnique(labId, dto.locationCode().trim(), id);
         // 全量编辑表单语义：用 UpdateWrapper 显式 set 每个字段（含可空字段），
-        // 传 null 即清除（labId/custodianId），不能依赖 updateById 忽略 null 的默认策略
+        // 传 null 即清除（labId/custodianId），不能依赖 updateById 忽略 null 的默认策略。
+        // 库位码可选：不传或为空则保持原码不变（不 set、不校验唯一）
+        boolean changeCode = dto.locationCode() != null && !dto.locationCode().isBlank();
+        if (changeCode) {
+            checkCodeUnique(labId, dto.locationCode().trim(), id);
+        }
+        LambdaUpdateWrapper<StockLocation> wrapper = new LambdaUpdateWrapper<StockLocation>()
+                .eq(StockLocation::getId, id)
+                .set(StockLocation::getLabId, labId)
+                .set(StockLocation::getLocationName, dto.locationName().trim())
+                .set(StockLocation::getLocationDetail, dto.locationDetail())
+                .set(StockLocation::getCustodianId, custodianId);
+        if (changeCode) {
+            wrapper.set(StockLocation::getLocationCode, dto.locationCode().trim());
+        }
         try {
-            locationMapper.update(null, new LambdaUpdateWrapper<StockLocation>()
-                    .eq(StockLocation::getId, id)
-                    .set(StockLocation::getLabId, labId)
-                    .set(StockLocation::getLocationCode, dto.locationCode().trim())
-                    .set(StockLocation::getLocationName, dto.locationName().trim())
-                    .set(StockLocation::getLocationDetail, dto.locationDetail())
-                    .set(StockLocation::getCustodianId, custodianId));
+            locationMapper.update(null, wrapper);
         } catch (org.springframework.dao.DuplicateKeyException e) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "库位码已存在，不得复用");
         }

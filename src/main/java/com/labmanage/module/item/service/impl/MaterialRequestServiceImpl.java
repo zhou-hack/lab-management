@@ -23,6 +23,7 @@ import com.labmanage.module.item.enums.MaterialRequestStatus;
 import com.labmanage.module.item.enums.MovementType;
 import com.labmanage.module.item.enums.RequestType;
 import com.labmanage.module.item.enums.StockDocumentStatus;
+import com.labmanage.module.item.mapper.LabBookingRefMapper;
 import com.labmanage.module.item.mapper.MaterialQuotaMapper;
 import com.labmanage.module.item.mapper.MaterialRequestLineMapper;
 import com.labmanage.module.item.mapper.MaterialRequestMapper;
@@ -32,12 +33,15 @@ import com.labmanage.module.item.mapper.StockDocumentMapper;
 import com.labmanage.module.item.mapper.StockLocationMapper;
 import com.labmanage.module.item.mapper.SysUserRefMapper;
 import com.labmanage.module.item.service.MaterialRequestService;
+import com.labmanage.module.item.service.StockDocumentService;
 import com.labmanage.module.item.util.IdUtils;
+import com.labmanage.module.item.vo.BookingOptionVO;
 import com.labmanage.module.item.vo.MaterialRequestDetailVO;
 import com.labmanage.module.item.vo.MaterialRequestLineVO;
 import com.labmanage.module.item.vo.MaterialRequestVO;
 import com.labmanage.module.item.vo.ProxyLineVO;
 import com.labmanage.module.item.vo.ProxySourceVO;
+import com.labmanage.module.item.vo.TeacherOptionVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,10 +64,10 @@ import java.util.stream.Collectors;
  * 申领批准不扣库存；实发时生成关联申领行的 ISSUE 草稿单，过账阶段由库存引擎
  * 行锁申领行 + 条件更新 fulfilled_qty（防超批准量）并推进申领状态。
  * <p>
- * 两级审核（2026-10-19）：SELF 本人申领经老师审核（DRAFT → TEACHER_APPROVED）再经
- * 管理员终审（TEACHER_APPROVED → APPROVED）；PROXY 学生代理代领只能引用老师已审核
- * 通过的源申领单并按源行剩余可代领量领取，创建即 TEACHER_APPROVED（无需老师再审核），
- * 责任老师 = 源单归属老师，代领人 = operator_id，直接交由管理员终审。
+ * TEACHER 老师预约（单级管理员终审）+ PROXY 学生代理代领（2026-10-23 恢复）：
+ * 老师本人发起并作为第一责任人，创建即 TEACHER_APPROVED（行批准量=申请量，终审可调整），
+ * 直接交由管理员终审；学生代理代领只能引用老师端已审核通过的老师预约单（源行剩余可代领量控制），
+ * 老师作为第一责任人继承源单、免老师级审核，创建即 TEACHER_APPROVED 直接交管理员终审。
  */
 @Service
 public class MaterialRequestServiceImpl implements MaterialRequestService {
@@ -76,6 +80,9 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
     private final StockDocumentMapper documentMapper;
     private final StockDocumentLineMapper documentLineMapper;
     private final SysUserRefMapper sysUserRefMapper;
+    private final LabBookingRefMapper bookingRefMapper;
+    // 单据处理面板下线（2026-10-23）：实发出库单生成后同事务自动审批过账
+    private final StockDocumentService stockDocumentService;
 
     public MaterialRequestServiceImpl(MaterialRequestMapper requestMapper,
                                       MaterialRequestLineMapper requestLineMapper,
@@ -84,7 +91,9 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
                                       StockLocationMapper locationMapper,
                                       StockDocumentMapper documentMapper,
                                       StockDocumentLineMapper documentLineMapper,
-                                      SysUserRefMapper sysUserRefMapper) {
+                                      SysUserRefMapper sysUserRefMapper,
+                                      LabBookingRefMapper bookingRefMapper,
+                                      StockDocumentService stockDocumentService) {
         this.requestMapper = requestMapper;
         this.requestLineMapper = requestLineMapper;
         this.quotaMapper = quotaMapper;
@@ -93,20 +102,21 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
         this.documentMapper = documentMapper;
         this.documentLineMapper = documentLineMapper;
         this.sysUserRefMapper = sysUserRefMapper;
+        this.bookingRefMapper = bookingRefMapper;
+        this.stockDocumentService = stockDocumentService;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public String create(MaterialRequestCreateDTO dto) {
-        RequestType requestType = dto.requestType() == null || dto.requestType().isBlank()
-                ? RequestType.SELF : RequestType.valueOf(dto.requestType());
-        return requestType == RequestType.PROXY
+        return dto.requestType() == RequestType.PROXY
                 ? createProxy(dto)
-                : createSelf(dto);
+                : createTeacher(dto);
     }
 
-    /** 本人申领：学生个人发起，登记草稿，待老师审核 */
-    private String createSelf(MaterialRequestCreateDTO dto) {
+    /** 老师预约：老师本人发起并作为第一责任人，创建即 TEACHER_APPROVED，仅由管理员终审 */
+    private String createTeacher(MaterialRequestCreateDTO dto) {
+        Long ownerTeacherId = IdUtils.requireId(dto.ownerTeacherId(), "归属老师 ID");
         Long labBookingId = IdUtils.optionalId(dto.labBookingId(), "场地预约 ID");
         Long scheduleOccurrenceId = IdUtils.optionalId(dto.scheduleOccurrenceId(), "课次 ID");
         if (labBookingId != null && scheduleOccurrenceId != null) {
@@ -115,27 +125,12 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
         }
         Long offeringId = IdUtils.optionalId(dto.offeringId(), "开课实例 ID");
 
-        // 申领单 + SKU 唯一：同一单内物料去重
-        Set<Long> skuIds = new HashSet<>();
-        for (MaterialRequestLineDTO line : dto.lines()) {
-            Long skuId = IdUtils.requireId(line.skuId(), "物料 ID");
-            if (!skuIds.add(skuId)) {
-                throw new BusinessException(ResultCode.BAD_REQUEST.getCode(),
-                        "申领行物料重复：" + line.skuId());
-            }
-        }
-        Map<Long, MaterialSku> skuMap = skuMapper.selectByIds(skuIds).stream()
-                .collect(Collectors.toMap(MaterialSku::getId, sku -> sku));
-        // 启用定额一次加载（批量查询替代逐行 selectByOfferingAndSku）
-        Map<Long, MaterialQuota> quotaMap = offeringId == null ? Map.of()
-                : quotaMapper.selectByOfferingAndSkuIds(offeringId, skuIds).stream()
-                        .collect(Collectors.toMap(MaterialQuota::getSkuId, quota -> quota));
-
         MaterialRequest request = new MaterialRequest();
         request.setDocumentId(IdWorker.getId());
         request.setLabId(IdUtils.optionalId(dto.labId(), "实验室 ID"));
-        request.setOwnerTeacherId(IdUtils.optionalId(dto.ownerTeacherId(), "归属老师 ID"));
-        request.setOperatorId(IdUtils.optionalId(dto.operatorId(), "经办人 ID"));
+        request.setOwnerTeacherId(ownerTeacherId);
+        // 经办人 = 老师本人（登录模块接入后由会话写入）
+        request.setOperatorId(ownerTeacherId);
         request.setGrantId(IdUtils.optionalId(dto.grantId(), "助理授权 ID"));
         request.setOfferingId(offeringId);
         request.setLabBookingId(labBookingId);
@@ -143,46 +138,13 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
         request.setParticipantCount(dto.participantCount());
         request.setPeriodCount(dto.periodCount());
         request.setPurpose(dto.purpose());
-        request.setRequestType(RequestType.SELF);
-        request.setStatus(MaterialRequestStatus.DRAFT);
+        request.setRequestType(RequestType.TEACHER);
+        // 老师本人即第一责任人，创建即视为老师已审，仅由管理员终审
+        request.setStatus(MaterialRequestStatus.TEACHER_APPROVED);
         requestMapper.insert(request);
 
-        BigDecimal participant = dto.participantCount() == null
-                ? BigDecimal.ZERO : BigDecimal.valueOf(dto.participantCount());
-        BigDecimal period = dto.periodCount() == null
-                ? BigDecimal.ZERO : BigDecimal.valueOf(dto.periodCount());
-
-        List<MaterialRequestLine> lines = new ArrayList<>(dto.lines().size());
-        for (MaterialRequestLineDTO lineDto : dto.lines()) {
-            Long skuId = IdUtils.requireId(lineDto.skuId(), "物料 ID");
-            MaterialSku sku = requireEnabledSku(skuMap, skuId, lineDto.skuId());
-            validateQuantityScale(lineDto.requestedQty(), sku);
-
-            // 定额快照：开课实例有启用定额时按 参与人数 × 课时 × 每人每课时定额；缺定额记 0
-            BigDecimal quotaSnapshot = BigDecimal.ZERO;
-            if (offeringId != null) {
-                MaterialQuota quota = quotaMap.get(skuId);
-                if (quota != null && quota.getEnabled() != null && quota.getEnabled() == 1) {
-                    quotaSnapshot = participant.multiply(period)
-                            .multiply(quota.getQtyPerStudentPeriod())
-                            .setScale(3, RoundingMode.HALF_UP);
-                }
-            }
-
-            MaterialRequestLine line = new MaterialRequestLine();
-            line.setId(IdWorker.getId());
-            line.setRequestId(request.getId());
-            line.setSkuId(skuId);
-            line.setRequestedQty(lineDto.requestedQty());
-            line.setQuotaQtySnapshot(quotaSnapshot);
-            // 超定额（含缺定额按 0 记）须老师签批确认
-            line.setRequiresExtraApproval(
-                    lineDto.requestedQty().compareTo(quotaSnapshot) > 0 ? 1 : 0);
-            // 危险/高价值物料要求双人签字（标志按 SKU 主档预填，签字依赖后续接入）
-            line.setRequiresDualSign(isOne(sku.getIsHazardous()) || isOne(sku.getIsValuable()) ? 1 : 0);
-            line.setFulfilledQty(BigDecimal.ZERO);
-            lines.add(line);
-        }
+        List<MaterialRequestLine> lines = buildDirectLines(request, dto.lines(), offeringId,
+                dto.participantCount(), dto.periodCount());
         if (!lines.isEmpty()) {
             requestLineMapper.insertBatch(lines);
         }
@@ -190,23 +152,28 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
     }
 
     /**
-     * 学生代理代领：不能新建空白申领，必须引用老师已审核通过的源申领单
-     * （request_type=SELF、status=TEACHER_APPROVED），按源行剩余可代领量领取；
-     * 创建即 TEACHER_APPROVED（源单已过老师审核，无需老师再审核），
+     * 学生代理代领：不能新建空白申领，必须引用老师端已审核通过的源申领单
+     * （request_type=TEACHER、status=TEACHER_APPROVED），按源行剩余可代领量领取；
+     * 创建即 TEACHER_APPROVED（老师作为第一责任人继承源单，免老师级审核），
      * 责任老师强制绑定源单归属老师，代领人 = operator_id，直接交由管理员终审。
      */
     private String createProxy(MaterialRequestCreateDTO dto) {
         if (dto.sourceRequestId() == null || dto.sourceRequestId().isBlank()) {
             throw new BusinessException(ResultCode.BAD_REQUEST.getCode(),
-                    "学生代理代领必须指定老师已审核通过的源申领单，不能新建空白申领");
+                    "学生代理代领必须指定老师端已审核通过的源申领单，不能新建空白申领");
         }
         MaterialRequest source = requireRequest(dto.sourceRequestId());
-        if (source.getRequestType() != RequestType.SELF
+        if (source.getRequestType() != RequestType.TEACHER
                 || source.getStatus() != MaterialRequestStatus.TEACHER_APPROVED) {
             throw new BusinessException(ResultCode.BAD_REQUEST.getCode(),
-                    "源申领单不是老师已审核通过的本人申领单，不可代领");
+                    "源申领单不是老师端已审核通过的老师预约单，不可代领");
         }
-        Long proxyOperatorId = IdUtils.requireId(dto.operatorId(), "代领人 ID");
+        Long proxyOperatorId = IdUtils.optionalId(dto.operatorId(), "代领人 ID");
+        if (dto.studentNo() == null || dto.studentNo().isBlank()
+                || dto.studentName() == null || dto.studentName().isBlank()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(),
+                    "学生代理代领必须填写代理学生学号与姓名");
+        }
         Long sourceRequestId = source.getId();
 
         Map<Long, MaterialRequestLine> sourceLineMap = requestLineMapper
@@ -230,9 +197,12 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
         MaterialRequest request = new MaterialRequest();
         request.setDocumentId(IdWorker.getId());
         request.setLabId(source.getLabId());
-        // 责任老师 = 源单归属老师（第一责任人留档，入参忽略）
+        // 责任老师 = 源单归属老师（第一责任人继承源单，入参忽略）
         request.setOwnerTeacherId(source.getOwnerTeacherId());
         request.setOperatorId(proxyOperatorId);
+        // 代理学生学号/姓名留档（登录模块接入后可由会话自动带出）
+        request.setStudentNo(dto.studentNo().trim());
+        request.setStudentName(dto.studentName().trim());
         request.setGrantId(IdUtils.optionalId(dto.grantId(), "助理授权 ID"));
         request.setOfferingId(source.getOfferingId());
         request.setLabBookingId(source.getLabBookingId());
@@ -276,7 +246,7 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
             line.setRequestId(request.getId());
             line.setSkuId(skuId);
             line.setRequestedQty(lineDto.requestedQty());
-            // 定额快照与签批/双签标志继承源行（源行已经老师审核）
+            // 定额快照与签批/双签标志继承源行（源单已经老师端审核）
             line.setQuotaQtySnapshot(sourceLine.getQuotaQtySnapshot());
             line.setRequiresExtraApproval(sourceLine.getRequiresExtraApproval());
             line.setRequiresDualSign(sourceLine.getRequiresDualSign());
@@ -289,6 +259,69 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
             requestLineMapper.insertBatch(lines);
         }
         return String.valueOf(request.getId());
+    }
+
+    /** 老师预约行构建：SKU 去重 + 启用校验 + 定额快照 + 签批/双签标志 + 批准量=申请量（本人发起即视为老师已批） */
+    private List<MaterialRequestLine> buildDirectLines(MaterialRequest request,
+                                                       List<MaterialRequestLineDTO> lineDtos,
+                                                       Long offeringId,
+                                                       Integer participantCount,
+                                                       Integer periodCount) {
+        // 预约单 + SKU 唯一：同一单内物料去重
+        Set<Long> skuIds = new HashSet<>();
+        for (MaterialRequestLineDTO line : lineDtos) {
+            Long skuId = IdUtils.requireId(line.skuId(), "物料 ID");
+            if (!skuIds.add(skuId)) {
+                throw new BusinessException(ResultCode.BAD_REQUEST.getCode(),
+                        "预约行物料重复：" + line.skuId());
+            }
+        }
+        Map<Long, MaterialSku> skuMap = skuMapper.selectByIds(skuIds).stream()
+                .collect(Collectors.toMap(MaterialSku::getId, sku -> sku));
+        // 启用定额一次加载（批量查询替代逐行 selectByOfferingAndSku）
+        Map<Long, MaterialQuota> quotaMap = offeringId == null ? Map.of()
+                : quotaMapper.selectByOfferingAndSkuIds(offeringId, skuIds).stream()
+                        .collect(Collectors.toMap(MaterialQuota::getSkuId, quota -> quota));
+
+        BigDecimal participant = participantCount == null
+                ? BigDecimal.ZERO : BigDecimal.valueOf(participantCount);
+        BigDecimal period = periodCount == null
+                ? BigDecimal.ZERO : BigDecimal.valueOf(periodCount);
+
+        List<MaterialRequestLine> lines = new ArrayList<>(lineDtos.size());
+        for (MaterialRequestLineDTO lineDto : lineDtos) {
+            Long skuId = IdUtils.requireId(lineDto.skuId(), "物料 ID");
+            MaterialSku sku = requireEnabledSku(skuMap, skuId, lineDto.skuId());
+            validateQuantityScale(lineDto.requestedQty(), sku);
+
+            // 定额快照：开课实例有启用定额时按 参与人数 × 课时 × 每人每课时定额；缺定额记 0
+            BigDecimal quotaSnapshot = BigDecimal.ZERO;
+            if (offeringId != null) {
+                MaterialQuota quota = quotaMap.get(skuId);
+                if (quota != null && quota.getEnabled() != null && quota.getEnabled() == 1) {
+                    quotaSnapshot = participant.multiply(period)
+                            .multiply(quota.getQtyPerStudentPeriod())
+                            .setScale(3, RoundingMode.HALF_UP);
+                }
+            }
+
+            MaterialRequestLine line = new MaterialRequestLine();
+            line.setId(IdWorker.getId());
+            line.setRequestId(request.getId());
+            line.setSkuId(skuId);
+            line.setRequestedQty(lineDto.requestedQty());
+            line.setQuotaQtySnapshot(quotaSnapshot);
+            // 超定额（含缺定额按 0 记）须老师签批确认
+            line.setRequiresExtraApproval(
+                    lineDto.requestedQty().compareTo(quotaSnapshot) > 0 ? 1 : 0);
+            // 危险/高价值物料要求双人签字（标志按 SKU 主档预填，签字依赖后续接入）
+            line.setRequiresDualSign(isOne(sku.getIsHazardous()) || isOne(sku.getIsValuable()) ? 1 : 0);
+            // 老师本人发起即视为老师已批：批准量=申请量（管理员终审可调整）
+            line.setApprovedQty(lineDto.requestedQty());
+            line.setFulfilledQty(BigDecimal.ZERO);
+            lines.add(line);
+        }
+        return lines;
     }
 
     @Override
@@ -311,13 +344,23 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
             wrapper.eq(MaterialRequest::getOfferingId,
                     IdUtils.requireId(query.getOfferingId(), "开课实例 ID"));
         }
+        if (query.getCourseName() != null && !query.getCourseName().isBlank()) {
+            // 课程名称筛选：先按课程/班级名称查场地预约单，再按 lab_booking_id 过滤申领单
+            List<Long> bookingIds = bookingRefMapper.searchIdsByCourseKeyword(query.getCourseName().trim());
+            if (bookingIds.isEmpty()) {
+                return PageResult.of(List.of(), 0L, query.getPageNum(), query.getPageSize());
+            }
+            wrapper.in(MaterialRequest::getLabBookingId, bookingIds);
+        }
         wrapper.orderByDesc(MaterialRequest::getId);
         IPage<MaterialRequest> page = requestMapper.selectPage(PageUtils.toPage(query), wrapper);
         Map<Long, String> names = resolveNames(page.getRecords());
+        Map<Long, LabBookingRefMapper.BookingCourse> courseMap = bookingCourseMapOf(page.getRecords());
         List<MaterialRequestVO> records = page.getRecords().stream()
                 .map(e -> MaterialRequestVO.from(e,
                         names.get(e.getOwnerTeacherId()),
-                        names.get(e.getOperatorId())))
+                        names.get(e.getOperatorId()),
+                        courseMap.get(e.getLabBookingId())))
                 .toList();
         return PageResult.of(records, page.getTotal(), query.getPageNum(), query.getPageSize());
     }
@@ -340,32 +383,27 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
                 })
                 .toList();
         Map<Long, String> names = resolveNames(List.of(request));
+        Map<Long, LabBookingRefMapper.BookingCourse> courseMap = bookingCourseMapOf(List.of(request));
         return MaterialRequestDetailVO.from(request, lineVos,
                 names.get(request.getOwnerTeacherId()),
-                names.get(request.getOperatorId()));
+                names.get(request.getOperatorId()),
+                courseMap.get(request.getLabBookingId()));
     }
 
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void teacherApprove(String id, MaterialRequestApproveDTO dto) {
-        MaterialRequest request = requireRequest(id);
-        if (request.getStatus() != MaterialRequestStatus.DRAFT) {
-            throw new BusinessException(ResultCode.CONFLICT.getCode(),
-                    "申领单不处于草稿状态，无法老师审核（学生代理代领单无需老师审核）");
+    /**
+     * 批量解析申领单关联场地预约的课程信息（列表/详情展示课程名称用；未关联或已删除的预约返回空 Map 项）
+     */
+    private Map<Long, LabBookingRefMapper.BookingCourse> bookingCourseMapOf(List<MaterialRequest> requests) {
+        Set<Long> bookingIds = requests.stream()
+                .map(MaterialRequest::getLabBookingId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        if (bookingIds.isEmpty()) {
+            // 可变空 Map：调用方会以 null 键 get（申领单未关联预约），Map.of() 会抛 NPE
+            return new HashMap<>();
         }
-        writeApprovedQuantities(request, dto, true);
-        if (requestMapper.casTeacherApprove(request.getId()) == 0) {
-            throw new BusinessException(ResultCode.CONFLICT.getCode(), "申领单状态已变更，老师审核失败");
-        }
-    }
-
-    @Override
-    public void teacherReject(String id) {
-        MaterialRequest request = requireRequest(id);
-        if (requestMapper.casTeacherReject(request.getId()) == 0) {
-            throw new BusinessException(ResultCode.CONFLICT.getCode(),
-                    "申领单不存在或不处于草稿状态，无法老师审核拒绝");
-        }
+        return bookingRefMapper.selectCourseByIds(new ArrayList<>(bookingIds)).stream()
+                .collect(java.util.stream.Collectors.toMap(LabBookingRefMapper.BookingCourse::id, c -> c));
     }
 
     @Override
@@ -374,7 +412,7 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
         MaterialRequest request = requireRequest(id);
         if (request.getStatus() != MaterialRequestStatus.TEACHER_APPROVED) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(),
-                    "申领单未通过老师审核或已完成终审，无法管理员终审");
+                    "申领单不处于待终审状态，无法管理员终审");
         }
         writeApprovedQuantities(request, dto, false);
         if (requestMapper.casApprove(request.getId()) == 0) {
@@ -387,14 +425,30 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
         MaterialRequest request = requireRequest(id);
         if (requestMapper.casReject(request.getId()) == 0) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(),
-                    "申领单不存在或未通过老师审核，无法管理员终审拒绝");
+                    "申领单不存在或不处于待终审状态，无法管理员终审拒绝");
         }
+    }
+
+    @Override
+    public List<BookingOptionVO> bookingOptions(String keyword) {
+        String trimmed = keyword == null ? "" : keyword.trim();
+        return bookingRefMapper.searchOptionsByKeyword(trimmed).stream()
+                .map(BookingOptionVO::from)
+                .toList();
+    }
+
+    @Override
+    public List<TeacherOptionVO> teacherOptions(String keyword) {
+        String trimmed = keyword == null ? "" : keyword.trim();
+        return sysUserRefMapper.searchTeacherOptions(trimmed).stream()
+                .map(TeacherOptionVO::from)
+                .toList();
     }
 
     @Override
     public PageResult<ProxySourceVO> proxySources(MaterialRequestQuery query) {
         LambdaQueryWrapper<MaterialRequest> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(MaterialRequest::getRequestType, RequestType.SELF);
+        wrapper.eq(MaterialRequest::getRequestType, RequestType.TEACHER);
         wrapper.eq(MaterialRequest::getStatus, MaterialRequestStatus.TEACHER_APPROVED);
         if (query.getOwnerTeacherId() != null && !query.getOwnerTeacherId().isBlank()) {
             wrapper.eq(MaterialRequest::getOwnerTeacherId,
@@ -406,8 +460,10 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
         wrapper.orderByDesc(MaterialRequest::getId);
         IPage<MaterialRequest> page = requestMapper.selectPage(PageUtils.toPage(query), wrapper);
         Map<Long, String> names = resolveNames(page.getRecords());
+        Map<Long, LabBookingRefMapper.BookingCourse> courseMap = bookingCourseMapOf(page.getRecords());
         List<ProxySourceVO> records = page.getRecords().stream()
-                .map(e -> ProxySourceVO.from(e, names.get(e.getOwnerTeacherId())))
+                .map(e -> ProxySourceVO.from(e, names.get(e.getOwnerTeacherId()),
+                        courseMap.get(e.getLabBookingId())))
                 .toList();
         return PageResult.of(records, page.getTotal(), query.getPageNum(), query.getPageSize());
     }
@@ -415,10 +471,10 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
     @Override
     public List<ProxyLineVO> proxyLines(String sourceRequestId) {
         MaterialRequest source = requireRequest(sourceRequestId);
-        if (source.getRequestType() != RequestType.SELF
+        if (source.getRequestType() != RequestType.TEACHER
                 || source.getStatus() != MaterialRequestStatus.TEACHER_APPROVED) {
             throw new BusinessException(ResultCode.BAD_REQUEST.getCode(),
-                    "源申领单不是老师已审核通过的本人申领单，不可代领");
+                    "源申领单不是老师端已审核通过的老师预约单，不可代领");
         }
         List<MaterialRequestLine> lines = requestLineMapper.selectByRequestId(source.getId());
         Map<Long, BigDecimal> occupiedMap = occupiedQtyOf(lines.stream()
@@ -442,7 +498,10 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
     @Override
     public void cancel(String id) {
         MaterialRequest request = requireRequest(id);
-        if (request.hasFulfillment()) {
+        // 部分实发不设派生态（状态仍为 APPROVED），取消前按申领行实发量校验
+        boolean anyFulfilled = requestLineMapper.selectByRequestId(request.getId()).stream()
+                .anyMatch(line -> line.getFulfilledQty() != null && line.getFulfilledQty().signum() > 0);
+        if (anyFulfilled) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(),
                     "申领单已有实发量，不能取消，请走冲销流程");
         }
@@ -519,7 +578,9 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
             requireEnabledLocation(locationMap, issueLine.getFromLocationId());
         }
 
-        // 生成关联申领单的 ISSUE 草稿单（审批与过账走库存单据既有流程）
+        // 生成关联申领单的 ISSUE 出库单，同一事务内自动审批并过账
+        // （2026-10-23 单据处理面板下线：过账阶段行锁申领行、回写 fulfilled_qty、
+        //  推进申领状态并扣减库存，实发即入账；任一步失败整笔回滚）
         Instant occurredAt = dto.occurredAt().toInstant().truncatedTo(ChronoUnit.MILLIS);
         StockDocument document = new StockDocument();
         document.setDocumentId(IdWorker.getId());
@@ -541,6 +602,9 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
             issueLine.setLineNo(lineNo++);
         }
         documentLineMapper.insertBatch(issueLines);
+        // 同一事务内自动审批并过账：CAS 状态迁移 + 行锁 + 余额/流水/申领回写复用既有过账路径
+        stockDocumentService.approve(String.valueOf(document.getId()));
+        stockDocumentService.post(String.valueOf(document.getId()));
         return String.valueOf(document.getId());
     }
 
@@ -549,9 +613,9 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
     /**
      * 逐行写入批准量。
      *
-     * @param defaultToRequested 未指定行批准量的缺省策略：true=老师审核（第一级）按申请量批准；
-     *                           false=管理员终审（第二级）保持既有批准量，
-     *                           代领行尚未写入批准量时回退按申请量
+     * @param defaultToRequested 未指定行批准量的缺省策略：true=按申请量批准；
+     *                           false=管理员终审保持既有批准量，
+     *                           行尚未写入批准量时回退按申请量
      */
     private void writeApprovedQuantities(MaterialRequest request, MaterialRequestApproveDTO dto,
             boolean defaultToRequested) {
@@ -581,10 +645,10 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
                 continue;
             }
             if (defaultToRequested || line.getApprovedQty() == null) {
-                // 老师审核缺省按申请量；终审遇未写入批准量的行（代领行）也按申请量
+                // 缺省按申请量（老师预约行创建时已写入批准量）
                 approvedMap.put(line.getId(), line.getRequestedQty());
             } else {
-                // 管理员终审缺省保持老师审核确定的批准量
+                // 管理员终审缺省保持既有批准量（老师预约行的批准量）
                 approvedMap.put(line.getId(), line.getApprovedQty());
             }
         }
@@ -606,7 +670,7 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
                         MaterialRequestLineMapper.SourceLineOccupancy::occupiedQty));
     }
 
-    /** 批量解析责任老师/代领人姓名（跨模块只读引用 sys_user；缺失用户返回空，前端回退显示 ID） */
+    /** 批量解析责任老师/经办人姓名（跨模块只读引用 sys_user；缺失用户返回空，前端回退显示 ID） */
     private Map<Long, String> resolveNames(Collection<MaterialRequest> requests) {
         Set<Long> userIds = new HashSet<>();
         for (MaterialRequest request : requests) {
@@ -618,7 +682,8 @@ public class MaterialRequestServiceImpl implements MaterialRequestService {
             }
         }
         if (userIds.isEmpty()) {
-            return Map.of();
+            // 可变空 Map：调用方会以 null 键 get（记录无老师/经办人），Map.of() 会抛 NPE
+            return new HashMap<>();
         }
         return sysUserRefMapper.selectNamesByIds(List.copyOf(userIds)).stream()
                 .filter(ref -> ref.realName() != null)

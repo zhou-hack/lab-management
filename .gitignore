@@ -55,6 +55,10 @@ logs/
 hs_err_pid*.log
 replay_pid*
 
+# ---------- 运行时上传与本地备份（勿提交） ----------
+uploads/
+db_backup_*.sql
+
 # ---------- 测试与覆盖率 ----------
 coverage/
 *.lcov

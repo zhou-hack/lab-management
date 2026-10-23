@@ -5,8 +5,10 @@ import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.item.dto.MaterialSettlementCreateDTO;
 import com.labmanage.module.item.dto.MaterialSettlementQuery;
+import com.labmanage.module.item.dto.SettlementIssueOptionQuery;
 import com.labmanage.module.item.service.MaterialSettlementService;
 import com.labmanage.module.item.vo.MaterialSettlementVO;
+import com.labmanage.module.item.vo.SettlementIssueOptionVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -43,5 +45,14 @@ public class MaterialSettlementController {
     @GetMapping("/page")
     public Result<PageResult<MaterialSettlementVO>> page(@Valid MaterialSettlementQuery query) {
         return Result.success(settlementService.page(query));
+    }
+
+    @Operation(summary = "可核销出库行选项分页",
+            description = "核销登记下拉选择：已过账领用出库单的行（对应库存流水中的出库记录），"
+                    + "含原出库量、已结算量与剩余可核销量；keyword 按物料编码/名称过滤")
+    @SaCheckPermission("item:settlement:list")
+    @GetMapping("/issue-options")
+    public Result<PageResult<SettlementIssueOptionVO>> issueOptions(@Valid SettlementIssueOptionQuery query) {
+        return Result.success(settlementService.issueOptions(query));
     }
 }

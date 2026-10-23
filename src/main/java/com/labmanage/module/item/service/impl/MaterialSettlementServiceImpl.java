@@ -9,6 +9,7 @@ import com.labmanage.common.result.ResultCode;
 import com.labmanage.common.utils.PageUtils;
 import com.labmanage.module.item.dto.MaterialSettlementCreateDTO;
 import com.labmanage.module.item.dto.MaterialSettlementQuery;
+import com.labmanage.module.item.dto.SettlementIssueOptionQuery;
 import com.labmanage.module.item.entity.MaterialSettlement;
 import com.labmanage.module.item.entity.StockDocument;
 import com.labmanage.module.item.entity.StockDocumentLine;
@@ -21,6 +22,7 @@ import com.labmanage.module.item.mapper.StockDocumentMapper;
 import com.labmanage.module.item.service.MaterialSettlementService;
 import com.labmanage.module.item.util.IdUtils;
 import com.labmanage.module.item.vo.MaterialSettlementVO;
+import com.labmanage.module.item.vo.SettlementIssueOptionVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -97,6 +99,16 @@ public class MaterialSettlementServiceImpl implements MaterialSettlementService 
         IPage<MaterialSettlement> page = settlementMapper.selectPage(PageUtils.toPage(query), wrapper);
         List<MaterialSettlementVO> records = page.getRecords().stream()
                 .map(MaterialSettlementVO::from).toList();
+        return PageResult.of(records, page.getTotal(), query.getPageNum(), query.getPageSize());
+    }
+
+    @Override
+    public PageResult<SettlementIssueOptionVO> issueOptions(SettlementIssueOptionQuery query) {
+        String keyword = query.getKeyword() == null ? "" : query.getKeyword().trim();
+        IPage<MaterialSettlementMapper.IssueOptionRow> page =
+                settlementMapper.selectIssueOptionPage(PageUtils.toPage(query), keyword);
+        List<SettlementIssueOptionVO> records = page.getRecords().stream()
+                .map(SettlementIssueOptionVO::from).toList();
         return PageResult.of(records, page.getTotal(), query.getPageNum(), query.getPageSize());
     }
 }

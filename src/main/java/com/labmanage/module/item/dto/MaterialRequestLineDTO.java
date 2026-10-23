@@ -25,7 +25,7 @@ public record MaterialRequestLineDTO(
         @Digits(integer = 15, fraction = 3, message = "申请量整数最多 15 位、小数最多 3 位")
         BigDecimal requestedQty,
 
-        @Schema(description = "源申领行 ID（PROXY 学生代理代领必填：老师已审核源单的行）",
+        @Schema(description = "源申领行 ID（PROXY 学生代理代领必填：老师端已审核源单的行）",
                 example = "1234567890123456789")
         @Pattern(regexp = "^\\d{1,19}$", message = "源申领行 ID 格式无效")
         String sourceLineId

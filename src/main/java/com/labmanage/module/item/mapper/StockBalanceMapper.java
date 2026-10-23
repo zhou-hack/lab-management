@@ -8,12 +8,34 @@ import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.List;
 
 /**
  * 库存余额 Mapper
  */
 @Mapper
 public interface StockBalanceMapper extends BaseMapper<StockBalance> {
+
+    /**
+     * 物料当前总量行（全部库位合计，流水页「总数量」列推算用）
+     */
+    record SkuQtyRow(Long skuId, BigDecimal totalQty) {
+    }
+
+    /**
+     * 批量统计物料当前总量（全部库位 stock_qty 合计）
+     */
+    @Select("""
+            <script>
+            SELECT sku_id AS sku_id, SUM(stock_qty) AS total_qty
+              FROM stock_balance
+             WHERE deleted = 0 AND sku_id IN
+            <foreach collection='ids' item='i' open='(' separator=',' close=')'>#{i}</foreach>
+             GROUP BY sku_id
+            </script>
+            """)
+    List<SkuQtyRow> sumQtyBySkuIds(@Param("ids") Collection<Long> skuIds);
 
     /**
      * 行锁读取库位+SKU 余额（过账在事务内按 location_id、sku_id 排序加锁）

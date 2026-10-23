@@ -14,8 +14,7 @@ public record StockLocationCreateDTO(
         @Pattern(regexp = "^\\d{1,19}$", message = "实验室 ID 格式无效")
         String labId,
 
-        @Schema(description = "库位码（同实验室内唯一）", example = "LAB1-A-01")
-        @NotBlank(message = "库位码不能为空")
+        @Schema(description = "库位码（同实验室内唯一；可选，缺省自动生成 LOC- 前缀码）", example = "LAB1-A-01")
         @Size(max = 64, message = "库位码不能超过 64 个字符")
         String locationCode,
 

@@ -9,8 +9,10 @@ import com.labmanage.common.utils.PageUtils;
 import com.labmanage.module.item.dto.MaterialQuotaQuery;
 import com.labmanage.module.item.dto.MaterialQuotaUpdateDTO;
 import com.labmanage.module.item.dto.MaterialQuotaUpsertDTO;
+import com.labmanage.module.item.entity.MaterialCategory;
 import com.labmanage.module.item.entity.MaterialQuota;
 import com.labmanage.module.item.entity.MaterialSku;
+import com.labmanage.module.item.mapper.MaterialCategoryMapper;
 import com.labmanage.module.item.mapper.MaterialQuotaMapper;
 import com.labmanage.module.item.mapper.MaterialSkuMapper;
 import com.labmanage.module.item.service.MaterialQuotaService;
@@ -33,16 +35,23 @@ public class MaterialQuotaServiceImpl implements MaterialQuotaService {
 
     private final MaterialQuotaMapper quotaMapper;
     private final MaterialSkuMapper skuMapper;
+    private final MaterialCategoryMapper categoryMapper;
 
-    public MaterialQuotaServiceImpl(MaterialQuotaMapper quotaMapper, MaterialSkuMapper skuMapper) {
+    public MaterialQuotaServiceImpl(MaterialQuotaMapper quotaMapper, MaterialSkuMapper skuMapper,
+                                    MaterialCategoryMapper categoryMapper) {
         this.quotaMapper = quotaMapper;
         this.skuMapper = skuMapper;
+        this.categoryMapper = categoryMapper;
     }
+
+    /**
+     * 全局定额固定分组标识（2026-10-22 定稿：定额不再按开课实例分组，offering_id 保留列固定 0）
+     */
+    private static final Long GLOBAL_OFFERING_ID = 0L;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void upsert(MaterialQuotaUpsertDTO dto) {
-        Long offeringId = IdUtils.requireId(dto.offeringId(), "开课实例 ID");
         Set<Long> skuIds = new HashSet<>();
         for (MaterialQuotaUpsertDTO.QuotaLineDTO line : dto.lines()) {
             Long skuId = IdUtils.requireId(line.skuId(), "物料 ID");
@@ -53,9 +62,9 @@ public class MaterialQuotaServiceImpl implements MaterialQuotaService {
         }
         Map<Long, MaterialSku> skuMap = skuMapper.selectByIds(skuIds).stream()
                 .collect(Collectors.toMap(MaterialSku::getId, sku -> sku));
-        // 存量定额一次加载（批量查询替代逐行 selectByOfferingAndSku）
+        // 存量定额一次加载（批量查询替代逐行查询；全局定额下每物料至多一条）
         Map<Long, MaterialQuota> existingMap = quotaMapper
-                .selectByOfferingAndSkuIds(offeringId, skuIds).stream()
+                .selectByOfferingAndSkuIds(GLOBAL_OFFERING_ID, skuIds).stream()
                 .collect(Collectors.toMap(MaterialQuota::getSkuId, quota -> quota));
         for (MaterialQuotaUpsertDTO.QuotaLineDTO line : dto.lines()) {
             Long skuId = IdUtils.requireId(line.skuId(), "物料 ID");
@@ -70,7 +79,7 @@ public class MaterialQuotaServiceImpl implements MaterialQuotaService {
                 quotaMapper.updateById(existing);
             } else {
                 MaterialQuota quota = new MaterialQuota();
-                quota.setOfferingId(offeringId);
+                quota.setOfferingId(GLOBAL_OFFERING_ID);
                 quota.setSkuId(skuId);
                 quota.setQtyPerStudentPeriod(line.qtyPerStudentPeriod());
                 quota.setEnabled(1);
@@ -78,7 +87,7 @@ public class MaterialQuotaServiceImpl implements MaterialQuotaService {
                     quotaMapper.insert(quota);
                 } catch (org.springframework.dao.DuplicateKeyException e) {
                     throw new BusinessException(ResultCode.CONFLICT.getCode(),
-                            "定额已存在（开课实例 + 物料唯一），请勿重复登记");
+                            "该物料定额已存在，请勿重复登记");
                 }
             }
         }
@@ -132,13 +141,26 @@ public class MaterialQuotaServiceImpl implements MaterialQuotaService {
         Map<Long, MaterialSku> skuMap = skuIds.isEmpty() ? Map.of()
                 : skuMapper.selectByIds(skuIds).stream()
                         .collect(Collectors.toMap(MaterialSku::getId, sku -> sku));
+        // 批量解析 SKU 所属分类（列表展示分类名称用）
+        Set<Long> categoryIds = skuMap.values().stream()
+                .map(MaterialSku::getCategoryId).filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, MaterialCategory> categoryMap = categoryIds.isEmpty() ? Map.of()
+                : categoryMapper.selectByIds(categoryIds).stream()
+                        .collect(Collectors.toMap(MaterialCategory::getId, category -> category));
         List<MaterialQuotaVO> vos = records.stream()
                 .map(quota -> {
                     MaterialSku sku = skuMap.get(quota.getSkuId());
+                    MaterialCategory category = sku == null ? null
+                            : categoryMap.get(sku.getCategoryId());
                     return MaterialQuotaVO.from(quota,
                             sku == null ? null : sku.getSkuCode(),
                             sku == null ? null : sku.getMaterialName(),
-                            sku == null ? null : sku.getBaseUnit());
+                            sku == null ? null : sku.getSpecification(),
+                            sku == null ? null : sku.getBaseUnit(),
+                            sku == null || sku.getCategoryId() == null
+                                    ? null : String.valueOf(sku.getCategoryId()),
+                            category == null ? null : category.getCategoryName());
                 })
                 .toList();
         return PageResult.of(vos, page.getTotal(), query.getPageNum(), query.getPageSize());

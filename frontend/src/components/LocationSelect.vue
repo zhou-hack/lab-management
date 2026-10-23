@@ -18,7 +18,7 @@
     <el-option
       v-for="l in options"
       :key="l.id"
-      :label="`${l.locationCode} · ${l.locationName}`"
+      :label="l.locationName"
       :value="l.id"
     />
   </el-select>
@@ -36,7 +36,7 @@ import { getStockLocation, pageLocations } from '@/api/item'
  */
 const model = defineModel({ type: String, default: '' })
 defineProps({
-  placeholder: { type: String, default: '输入编码/名称搜索库位' },
+  placeholder: { type: String, default: '输入名称搜索库位' },
   allOption: { type: Boolean, default: false },
   allLabel: { type: String, default: '全部库位' }
 })

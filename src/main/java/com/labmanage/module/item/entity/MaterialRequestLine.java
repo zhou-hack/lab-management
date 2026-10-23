@@ -29,7 +29,7 @@ public class MaterialRequestLine extends BaseEntity {
     /** 双人签字：1是 0否（危险/高价值物料） */
     private Integer requiresDualSign;
 
-    /** 源申领行 ID（学生代理代领时引用的老师已审核单行） */
+    /** 源申领行 ID（学生代理代领时引用的老师端已审核源单行） */
     private Long sourceLineId;
 
     /** 批准量（审批时写入，不超过申请量） */
