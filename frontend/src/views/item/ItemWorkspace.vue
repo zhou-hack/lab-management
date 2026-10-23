@@ -6,143 +6,84 @@
           物料管理
         </h1>
         <p class="ws-subtitle">
-          物料存量 / 库存流水 / 物料预约（含领用定额）/ 核销 / 基础数据管理；
-          登录模块未接入，数据经 Vite 代理直连后端 /api/v1
+          基础数据 / 库存查询 / 库存业务（物料预约，页签含领用定额）/ 核销管理；
+          分组导航见左侧菜单，登录模块未接入，数据经 Vite 代理直连后端 /api/v1
         </p>
       </div>
     </header>
 
-    <div class="ws-body">
-      <aside class="ws-side">
-        <el-menu
-          class="ws-menu"
-          :default-active="active"
-          :default-openeds="openGroups"
-          @select="onMenuSelect"
-        >
-          <el-sub-menu
-            v-for="group in MENU"
-            :key="group.key"
-            :index="group.key"
-          >
-            <template #title>
-              <el-icon><component :is="group.icon" /></el-icon>
-              <span>{{ group.label }}</span>
-            </template>
-            <el-menu-item
-              v-for="leaf in group.children"
-              :key="leaf.key"
-              :index="leaf.key"
-            >
-              {{ leaf.label }}
-            </el-menu-item>
-          </el-sub-menu>
-        </el-menu>
-      </aside>
-
-      <main class="ws-main">
-        <div class="ws-main-title">
-          {{ activeLabel }}
-        </div>
-        <BalancePanel
-          v-if="visited.balance"
-          v-show="active === 'balance'"
-          ref="balanceRef"
-        />
-        <MovementPanel
-          v-if="visited.movement"
-          v-show="active === 'movement'"
-          ref="movementRef"
-        />
-        <RequestPanel
-          v-if="visited.request"
-          v-show="active === 'request'"
-          ref="requestRef"
-        />
-        <SettlementPanel
-          v-if="visited.settlement"
-          v-show="active === 'settlement'"
-          ref="settlementRef"
-        />
-        <SkuSection
-          v-if="visited.basic_sku"
-          v-show="active === 'basic_sku'"
-          ref="skuRef"
-        />
-        <LocationSection
-          v-if="visited.basic_location"
-          v-show="active === 'basic_location'"
-          ref="locationRef"
-        />
-      </main>
-    </div>
+    <main class="ws-main">
+      <div class="ws-main-title">
+        {{ activeLabel }}
+      </div>
+      <BalancePanel
+        v-if="visited.balance"
+        v-show="active === 'balance'"
+        ref="balanceRef"
+      />
+      <MovementPanel
+        v-if="visited.movement"
+        v-show="active === 'movement'"
+        ref="movementRef"
+      />
+      <RequestPanel
+        v-if="visited.request"
+        v-show="active === 'request'"
+        ref="requestRef"
+      />
+      <SettlementPanel
+        v-if="visited.settlement"
+        v-show="active === 'settlement'"
+        ref="settlementRef"
+      />
+      <SkuSection
+        v-if="visited.basic_sku"
+        v-show="active === 'basic_sku'"
+        ref="skuRef"
+      />
+      <LocationSection
+        v-if="visited.basic_location"
+        v-show="active === 'basic_location'"
+        ref="locationRef"
+      />
+    </main>
   </div>
 </template>
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
-import { DataAnalysis, List, Setting, Tickets } from '@element-plus/icons-vue'
+import { useRoute } from 'vue-router'
 import BalancePanel from './panels/BalancePanel.vue'
 import LocationSection from './panels/basic/LocationSection.vue'
 import MovementPanel from './panels/MovementPanel.vue'
 import RequestPanel from './panels/RequestPanel.vue'
 import SettlementPanel from './panels/SettlementPanel.vue'
 import SkuSection from './panels/basic/SkuSection.vue'
+import './workspace.css'
 
 /**
- * 物料管理工作台：左侧一级/二级菜单 + 右侧内容区
- * 菜单结构（一级=业务分组，二级=页面）：
- *   基础数据：物料档案 / 库位管理（原内部页签摊平为二级菜单）
- *   库存查询：物料存量 / 库存流水
- *   库存业务：物料预约（页签含领用定额；单据处理面板 2026-10-23 下线，
- *             实发/期初导入等改为服务端自动审批过账，无人工过账入口）
- *   核销管理：物料核销（物料预约功能已按 2026-10-22 需求砍除）
+ * 物料管理内容区：业务分组菜单在全局侧边栏（AdminLayout，2026-10-23 需求：
+ * 基础数据 / 库存查询 / 库存业务 / 核销管理 四个分组替换原「物料工作台」入口），
+ * 本页按路由参数 :panel 挂载对应面板，同记录参数切换复用组件实例
  * 面板懒挂载：首次进入才挂载（v-if），此后切回仅切换显示（v-show）保留筛选与分页状态
  */
-const MENU = [
-  {
-    key: 'basic',
-    label: '基础数据',
-    icon: Setting,
-    children: [
-      { key: 'basic_sku', label: '物料档案' },
-      { key: 'basic_location', label: '库位管理' }
-    ]
-  },
-  {
-    key: 'query',
-    label: '库存查询',
-    icon: DataAnalysis,
-    children: [
-      { key: 'balance', label: '物料存量' },
-      { key: 'movement', label: '库存流水' }
-    ]
-  },
-  {
-    key: 'business',
-    label: '库存业务',
-    icon: Tickets,
-    children: [
-      { key: 'request', label: '物料预约' }
-    ]
-  },
-  {
-    key: 'settle',
-    label: '核销管理',
-    icon: List,
-    children: [
-      { key: 'settlement', label: '物料核销' }
-    ]
-  }
-]
+const route = useRoute()
 
-/** 一级分组默认全部展开，二级页面直接可见 */
-const openGroups = MENU.map((group) => group.key)
+/** 面板 key → 标题（与侧边栏分组叶子项一一对应） */
+const PANELS = {
+  basic_sku: '物料档案',
+  basic_location: '库位管理',
+  balance: '物料存量',
+  movement: '库存流水',
+  request: '物料预约',
+  settlement: '物料核销'
+}
 
-const active = ref('balance')
+/** 当前面板：路由参数非法时回退物料存量（默认面板） */
+const active = computed(() => (PANELS[route.params.panel] ? route.params.panel : 'balance'))
 
-/** 已访问过的页面（懒挂载标记）：初始页随工作台挂载 */
-const visited = reactive({ balance: true })
+/** 已访问过的页面（懒挂载标记）：初始面板随路由就绪 */
+const visited = reactive({ [active.value]: true })
 
 const balanceRef = ref(null)
 const movementRef = ref(null)
@@ -160,18 +101,8 @@ const panelRefs = {
   basic_location: locationRef
 }
 
-function onMenuSelect(key) {
-  active.value = key
-}
-
-/** 内容区页面标题：原页签标签移入侧边后，由内容区补足当前页面名 */
-const activeLabel = computed(() => {
-  for (const group of MENU) {
-    const leaf = group.children.find((c) => c.key === active.value)
-    if (leaf) return leaf.label
-  }
-  return ''
-})
+/** 内容区页面标题：由内容区补足当前页面名 */
+const activeLabel = computed(() => PANELS[active.value])
 
 // 切换页面时刷新对应面板，保证每次进入看到最新数据；
 // 首次进入由挂载时自行加载，不重复请求（flush post 确保挂载完成后取 ref）
@@ -216,37 +147,8 @@ watch(
   color: #909399;
 }
 
-.ws-body {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
-  margin-top: 8px;
-}
-
-.ws-side {
-  width: 200px;
-  flex-shrink: 0;
-  position: sticky;
-  top: 20px;
-  background: var(--surface);
-  border: .5px solid var(--hair);
-  border-radius: 8px;
-  padding: 6px 0;
-}
-
-.ws-menu {
-  border-right: none;
-}
-
-/* 紧凑两级菜单：标题与菜单项统一 44px 行高 */
-.ws-menu :deep(.el-sub-menu__title),
-.ws-menu :deep(.el-menu-item) {
-  height: 44px;
-  line-height: 44px;
-}
-
 .ws-main {
-  flex: 1;
+  margin-top: 8px;
   min-width: 0;
 }
 
@@ -255,101 +157,5 @@ watch(
   font-size: 15px;
   font-weight: 600;
   color: var(--g1);
-}
-</style>
-
-<style>
-/* 物料工作台公共小样式（随工作台全局加载） */
-
-/* 物料/库位远程搜索下拉（popper 挂载在 body，需全局样式）：
-   长选项「编码 · 名称」换行完整展示，不省略截断 */
-.item-select-popper .el-select-dropdown__item {
-  white-space: normal;
-  height: auto;
-  min-height: 34px;
-  padding-top: 7px;
-  padding-bottom: 7px;
-  line-height: 20px;
-  word-break: break-all;
-}
-
-/* 工具栏固定单行：所有筛选控件横排一行，窄屏放不下时横向滚动，绝不换行 */
-.toolbar {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  overflow-x: auto;
-}
-
-/* 单行布局下控件按内容占宽、禁止压缩，避免文字被挤压遮挡 */
-.toolbar > * {
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-/* 下拉宽度跟随选中项文字自适应（EP 默认 100% 会占满导致换行）；
-   min-width 保底让「全部预约类型」等 4-6 字标签舒适展示，文字与箭头不挤压；
-   max-width 上限制约长文本（如长分类名）防止撑爆工具栏触发横向滚动 */
-.toolbar .el-select {
-  width: max-content;
-  min-width: 144px;
-  max-width: 220px;
-}
-
-/* el-select 内部 input 默认 padding-right:30px 留给下拉箭头，
-   选中长文本时文字会与箭头重叠遮挡，缩到 26px 并加 truncate 防遮挡 */
-.toolbar .el-select .el-select__wrapper {
-  padding-right: 26px;
-}
-.toolbar .el-select .el-select__selected-item {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* el-input 同样按内容自适应，但固定宽度的 w180/w220/w240 仍保留；
-   用 :where() 降低此规则优先级，让具名宽度类（w180 等）胜出 */
-.toolbar :where(.el-input) {
-  width: max-content;
-  min-width: 180px;
-}
-
-.toolbar .w180 {
-  width: 180px;
-}
-
-.toolbar .w220 {
-  width: 220px;
-}
-
-.toolbar .w240 {
-  width: 240px;
-}
-
-.w240 {
-  width: 240px;
-}
-
-.pager {
-  margin-top: 12px;
-  justify-content: flex-end;
-}
-
-.muted {
-  color: #909399;
-}
-
-.small {
-  font-size: 12px;
-}
-
-.mt8 {
-  margin-top: 8px;
-}
-
-.ml4 {
-  margin-left: 4px;
 }
 </style>

@@ -45,8 +45,8 @@ const TEST_PROFILES = {
   TEACHER: {
     userInfo: { realName: '测试老师', username: 'T1001' },
     roles: ['TEACHER'],
-    // 与运行库教师角色绑定一致：预约查询(122)；老师发起本人预约，无审批权限
-    perms: ['my:page', 'tApprove:page', 'item:request:list'],
+    // 与运行库教师角色绑定一致：预约查询/创建；无审批、实发、取消、定额权限
+    perms: ['item:request:list', 'item:request:create'],
     menus: [
       {
         menuId: 200,
@@ -86,9 +86,14 @@ export const useUserStore = defineStore('user', {
   }),
   getters: {
     isAdmin: (state) => state.roles.includes('ADMIN'),
-    // 管理员/老师进物料工作台；学生无物料权限（产品定稿），进管理端首页
+    // 管理员进物料工作台；老师进教师端物料预约（不含管理员功能）；
+    // 学生无物料权限（产品定稿），进管理端首页
     homePath: (state) =>
-      state.roles.includes('ADMIN') || state.roles.includes('TEACHER') ? '/admin/item/workspace' : '/admin/home'
+      state.roles.includes('ADMIN')
+        ? '/admin/item/workspace'
+        : state.roles.includes('TEACHER')
+          ? '/admin/item/teacher'
+          : '/admin/home'
   },
   actions: {
     /**

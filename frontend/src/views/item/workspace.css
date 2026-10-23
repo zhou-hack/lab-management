@@ -1,0 +1,93 @@
+/* 物料工作台公共小样式（ItemWorkspace / TeacherWorkspace 全局加载） */
+
+/* 物料/库位远程搜索下拉（popper 挂载在 body，需全局样式）：
+   长选项「编码 · 名称」换行完整展示，不省略截断 */
+.item-select-popper .el-select-dropdown__item {
+  white-space: normal;
+  height: auto;
+  min-height: 34px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  line-height: 20px;
+  word-break: break-all;
+}
+
+/* 工具栏固定单行：所有筛选控件横排一行，窄屏放不下时横向滚动，绝不换行 */
+.toolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+}
+
+/* 单行布局下控件按内容占宽、禁止压缩，避免文字被挤压遮挡 */
+.toolbar > * {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* 下拉宽度跟随选中项文字自适应（EP 默认 100% 会占满导致换行）；
+   min-width 保底让「全部预约类型」等 4-6 字标签舒适展示，文字与箭头不挤压；
+   max-width 上限制约长文本（如长分类名）防止撑爆工具栏触发横向滚动 */
+.toolbar .el-select {
+  width: max-content;
+  min-width: 144px;
+  max-width: 220px;
+}
+
+/* el-select 内部 input 默认 padding-right:30px 留给下拉箭头，
+   选中长文本时文字会与箭头重叠遮挡，缩到 26px 并加 truncate 防遮挡 */
+.toolbar .el-select .el-select__wrapper {
+  padding-right: 26px;
+}
+.toolbar .el-select .el-select__selected-item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* el-input 同样按内容自适应，但固定宽度的 w180/w220/w240 仍保留；
+   用 :where() 降低此规则优先级，让具名宽度类（w180 等）胜出 */
+.toolbar :where(.el-input) {
+  width: max-content;
+  min-width: 180px;
+}
+
+.toolbar .w180 {
+  width: 180px;
+}
+
+.toolbar .w220 {
+  width: 220px;
+}
+
+.toolbar .w240 {
+  width: 240px;
+}
+
+.w240 {
+  width: 240px;
+}
+
+.pager {
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
+.muted {
+  color: #909399;
+}
+
+.small {
+  font-size: 12px;
+}
+
+.mt8 {
+  margin-top: 8px;
+}
+
+.ml4 {
+  margin-left: 4px;
+}

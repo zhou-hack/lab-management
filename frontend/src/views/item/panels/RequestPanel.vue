@@ -9,7 +9,9 @@
         label="物料预约"
         name="request"
       />
+      <!-- 定额页签按权限展示：无 item:quota:list（如教师角色）隐藏，避免 403 -->
       <el-tab-pane
+        v-if="quotaVisible"
         label="领用定额"
         name="quota"
       />
@@ -166,7 +168,7 @@
             >
               详情
             </el-button>
-            <!-- 待终审（老师预约创建即「老师已审核」）：管理员终审 -->
+            <!-- 待终审（老师预约创建即「老师已审核」）：管理员终审，无权限者由 v-permission 隐藏 -->
             <template v-if="row.status === 'TEACHER_APPROVED'">
               <el-button
                 v-permission="'item:request:approve'"
@@ -194,6 +196,7 @@
             >
               取消
             </el-button>
+            <!-- 实发为出库操作：无权限者由 v-permission 隐藏 -->
             <el-button
               v-if="row.status === 'APPROVED'"
               v-permission="'item:request:issue'"
@@ -646,8 +649,9 @@
                 v-model="row.skuId"
                 placeholder="搜索物料"
               />
+              <!-- 定额提示按权限展示：无 item:quota:list（如教师角色）隐藏，避免 403 -->
               <div
-                v-if="row.skuId"
+                v-if="row.skuId && quotaVisible"
                 class="small quota-hint"
                 :class="quotaHintOf(row.skuId).warn ? 'quota-hint-warn' : 'muted'"
               >
@@ -868,6 +872,8 @@ import {
   teacherListOptions
 } from '@/api/item'
 import { usePagedList } from '@/utils/usePagedList'
+import { hasPermission } from '@/utils/permission'
+import { useUserStore } from '@/store/user'
 import { confirmAction } from '@/utils/confirm'
 import { requestStatusMap, requestTypeMap } from '@/utils/statusMap'
 import { copyText, fmtShanghai, formatQty, nowUtcIso } from '@/utils/format'
@@ -877,6 +883,14 @@ import LocationSelect from '@/components/LocationSelect.vue'
 import SkuSelect from '@/components/SkuSelect.vue'
 import BookingSelect from '@/components/BookingSelect.vue'
 import QuotaPanel from './QuotaPanel.vue'
+
+/**
+ * 定额页签/定额提示按权限展示（与管理员端同一面板，内容一致）：
+ * 无 item:quota:list 的角色（如教师，运行库绑定仅 item:request:list/create）自动隐藏，
+ * 避免 403；终审/实发等操作按钮由 v-permission 按权限自动隐藏
+ */
+const userStore = useUserStore()
+const quotaVisible = computed(() => hasPermission('item:quota:list', userStore.perms))
 
 /**
  * 页签：物料预约 / 领用定额（2026-10-22 需求：定额并入物料预约页，不再单列菜单）
@@ -1005,6 +1019,8 @@ async function searchTeachers(keyword) {
 const quotaHints = reactive({})
 
 async function loadQuotaHint(skuId) {
+  // 无定额查询权限（如教师角色）跳过加载，避免 403 错误弹窗
+  if (!quotaVisible.value) return
   const key = String(skuId)
   if (!key || quotaHints[key]) return
   quotaHints[key] = { loading: true, records: [] }

@@ -24,10 +24,24 @@ const staticRoutes = [
     redirect: '/admin/item/workspace',
     children: [
       {
+        // 无参旧地址（/admin 重定向、homePath、/item 兼容跳转）统一落到默认面板
         path: 'item/workspace',
+        redirect: '/admin/item/workspace/balance'
+      },
+      {
+        // 物料管理内容区：侧边栏分组直达面板（原「物料工作台」入口已由分组导航替换）；
+        // 同记录参数切换，组件实例复用，面板懒挂载 + v-show 保留筛选与分页状态
+        path: 'item/workspace/:panel',
         name: 'AdminItemWorkspace',
         component: () => import('@/views/item/ItemWorkspace.vue'),
-        meta: { title: '物料工作台' }
+        meta: { title: '物料管理' }
+      },
+      {
+        // 教师端：老师登录默认落地页，仅物料预约（无管理员功能）
+        path: 'item/teacher',
+        name: 'AdminItemTeacher',
+        component: () => import('@/views/item/TeacherWorkspace.vue'),
+        meta: { title: '物料预约（教师端）' }
       },
       {
         path: 'home',

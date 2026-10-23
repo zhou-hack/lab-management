@@ -13,6 +13,7 @@
       <el-menu
         class="admin_layout__menu"
         :default-active="route.path"
+        :default-openeds="openedMenus"
         :collapse="collapsed"
         router
       >
@@ -26,7 +27,9 @@
             首页
           </template>
         </el-menu-item>
-        <!-- 骨架环境：本分支仅物料模块，侧边栏只放物料管理（管理员/老师可见） -->
+        <!-- 骨架环境：本分支仅物料模块，侧边栏只放物料管理（管理员/老师可见）：
+             管理员按业务分组直达面板（2026-10-23 需求：四个分组替换原「物料工作台」入口，
+             工作台内部左侧菜单同步移除），老师进教师端物料预约 -->
         <el-sub-menu
           v-if="showItemMenu"
           index="item"
@@ -35,8 +38,55 @@
             <el-icon><Goods /></el-icon>
             <span>物料管理</span>
           </template>
-          <el-menu-item index="/admin/item/workspace">
-            物料工作台
+          <template v-if="store.roles.includes('ADMIN')">
+            <el-sub-menu index="item_basic">
+              <template #title>
+                <el-icon><Setting /></el-icon>
+                <span>基础数据</span>
+              </template>
+              <el-menu-item index="/admin/item/workspace/basic_sku">
+                物料档案
+              </el-menu-item>
+              <el-menu-item index="/admin/item/workspace/basic_location">
+                库位管理
+              </el-menu-item>
+            </el-sub-menu>
+            <el-sub-menu index="item_query">
+              <template #title>
+                <el-icon><DataAnalysis /></el-icon>
+                <span>库存查询</span>
+              </template>
+              <el-menu-item index="/admin/item/workspace/balance">
+                物料存量
+              </el-menu-item>
+              <el-menu-item index="/admin/item/workspace/movement">
+                库存流水
+              </el-menu-item>
+            </el-sub-menu>
+            <el-sub-menu index="item_business">
+              <template #title>
+                <el-icon><Tickets /></el-icon>
+                <span>库存业务</span>
+              </template>
+              <el-menu-item index="/admin/item/workspace/request">
+                物料预约
+              </el-menu-item>
+            </el-sub-menu>
+            <el-sub-menu index="item_settle">
+              <template #title>
+                <el-icon><List /></el-icon>
+                <span>核销管理</span>
+              </template>
+              <el-menu-item index="/admin/item/workspace/settlement">
+                物料核销
+              </el-menu-item>
+            </el-sub-menu>
+          </template>
+          <el-menu-item
+            v-if="store.roles.includes('TEACHER')"
+            index="/admin/item/teacher"
+          >
+            物料预约（教师端）
           </el-menu-item>
         </el-sub-menu>
       </el-menu>
@@ -87,7 +137,7 @@
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import { ArrowDown, Expand, Fold, Goods, HomeFilled, Tools } from '@element-plus/icons-vue'
+import { ArrowDown, DataAnalysis, Expand, Fold, Goods, HomeFilled, List, Setting, Tickets, Tools } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 
 const route = useRoute()
@@ -99,6 +149,22 @@ const collapsed = ref(window.innerWidth < 1024)
 
 // 物料管理入口：仅管理员/老师可见；学生无物料管理权限（产品定稿）
 const showItemMenu = computed(() => store.roles.includes('ADMIN') || store.roles.includes('TEACHER'))
+
+// 面板路由参数 → 侧边栏分组 index：进入页面时自动展开当前面板所在分组
+const PANEL_GROUP = {
+  basic_sku: 'item_basic',
+  basic_location: 'item_basic',
+  balance: 'item_query',
+  movement: 'item_query',
+  request: 'item_business',
+  settlement: 'item_settle'
+}
+
+/** 默认展开：物料管理 + 当前面板所属分组（非面板页仅展开物料管理） */
+const openedMenus = computed(() => {
+  const group = PANEL_GROUP[route.params.panel]
+  return group ? ['item', group] : ['item']
+})
 
 async function onUserCommand(command) {
   if (command !== 'logout') return
