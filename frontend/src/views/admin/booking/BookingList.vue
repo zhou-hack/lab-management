@@ -134,7 +134,8 @@
         </el-table-column>
         <el-table-column
           label="场地"
-          min-width="140"
+          min-width="190"
+          show-overflow-tooltip
         >
           <template #default="{ row }">
             <span class="bk_admin__space">{{ row.labName || row.spaceId }}</span>
@@ -554,7 +555,13 @@ onMounted(() => {
 }
 
 .bk_admin__space {
+  display: inline-block;
+  max-width: 100%;
   font-weight: var(--fw-medium, 500);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
 }
 
 .bk_admin__pager {
