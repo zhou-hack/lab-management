@@ -144,6 +144,7 @@
         <el-table-column
           label="使用时段"
           min-width="180"
+          show-overflow-tooltip
         >
           <template #default="{ row }">
             {{ formatRange(row.startAt, row.endAt) }}
@@ -184,7 +185,8 @@
         </el-table-column>
         <el-table-column
           label="提交时间"
-          min-width="140"
+          min-width="160"
+          show-overflow-tooltip
         >
           <template #default="{ row }">
             {{ formatInstant(row.createTime) }}

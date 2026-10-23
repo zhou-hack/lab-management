@@ -72,6 +72,7 @@
             <el-table-column
               label="课程 / 班级"
               min-width="150"
+              show-overflow-tooltip
             >
               <template #default="{ row }">
                 {{ [row.courseName, row.className].filter(Boolean).join(' · ') || '—' }}
@@ -80,6 +81,7 @@
             <el-table-column
               label="使用时段"
               min-width="180"
+              show-overflow-tooltip
             >
               <template #default="{ row }">
                 {{ formatRange(row.startAt, row.endAt) }}
@@ -176,6 +178,7 @@
             <el-table-column
               label="课程 / 班级"
               min-width="140"
+              show-overflow-tooltip
             >
               <template #default="{ row }">
                 {{ [row.courseName, row.className].filter(Boolean).join(' · ') || '—' }}
@@ -184,6 +187,7 @@
             <el-table-column
               label="星期 + 节次"
               min-width="150"
+              show-overflow-tooltip
             >
               <template #default="{ row }">
                 {{ row.weekdayName }} {{ row.startPeriodName }} ~ {{ row.endPeriodName }}
@@ -191,7 +195,8 @@
             </el-table-column>
             <el-table-column
               label="使用周期"
-              min-width="180"
+              min-width="220"
+              show-overflow-tooltip
             >
               <template #default="{ row }">
                 {{ row.cycleStartDate }} ~ {{ row.cycleEndDate }}
