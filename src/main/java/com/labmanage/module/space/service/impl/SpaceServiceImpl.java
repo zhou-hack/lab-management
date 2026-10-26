@@ -445,6 +445,10 @@ public class SpaceServiceImpl implements SpaceService {
                 errors.add("开放时段小时不能超过 23");
                 return null;
             }
+            if (minute > 59) {
+                errors.add("开放时段分钟不能超过 59");
+                return null;
+            }
             times.add(LocalTime.of(hour, minute));
         }
         if (times.size() != 2) {

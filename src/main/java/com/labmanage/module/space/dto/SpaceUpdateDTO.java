@@ -2,6 +2,7 @@ package com.labmanage.module.space.dto;
 
 import com.labmanage.module.space.enums.SpaceStatus;
 import com.labmanage.module.space.enums.SpaceType;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -28,6 +29,7 @@ public record SpaceUpdateDTO(
 
         @NotNull(message = "容纳人数不能为空")
         @Min(value = 1, message = "容纳人数必须大于 0")
+        @Max(value = 9999, message = "容纳人数不能超过 9999")
         Integer capacity,
 
         @Size(max = 2000, message = "配套设备清单长度不能超过 2000")

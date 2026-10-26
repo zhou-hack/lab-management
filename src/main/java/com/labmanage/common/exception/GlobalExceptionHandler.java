@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
@@ -63,6 +64,10 @@ public class GlobalExceptionHandler {
         String message = e.getBindingResult().getFieldError() != null
                 ? e.getBindingResult().getFieldError().getDefaultMessage()
                 : ResultCode.BAD_REQUEST.getMsg();
+        // 关键日志：字段级校验失败留痕（如容量超 9999 上限），便于排查前端绕过/并发写冲突
+        log.warn("[参数校验] 拦截：字段={}, 原因={}",
+                e.getBindingResult().getFieldError() != null ? e.getBindingResult().getFieldError().getField() : "-",
+                message);
         return Result.error(ResultCode.BAD_REQUEST.getCode(), message);
     }
 
@@ -87,6 +92,17 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleBadRequestException(Exception e) {
         return Result.error(ResultCode.BAD_REQUEST.getCode(), ResultCode.BAD_REQUEST.getMsg());
+    }
+
+    /**
+     * 唯一键冲突（并发/重复提交撞唯一索引，如场地名称 uk_lab_name 并发撞名）：
+     * 统一映射 40900，避免落入兜底 500（清单 B18）。全局生效，预约、授权等模块同样受益。
+     */
+    @ExceptionHandler(DuplicateKeyException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public Result<Void> handleDuplicateKeyException(DuplicateKeyException e) {
+        log.warn("[数据冲突] 唯一键约束拦截：{}", e.getMessage());
+        return Result.error(ResultCode.CONFLICT.getCode(), "数据已存在（可能与他人操作冲突），请刷新后重试");
     }
 
     /**

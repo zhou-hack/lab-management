@@ -339,16 +339,16 @@ async function onSubmit() {
   const [startDate, endDate] = form.dateRange || []
   // 半开区间 [startAt, endAt)：失效日期当日 24 点 = 次日 00:00（上海）
   const payload = {
-    studentId: Number(form.studentId),
+    studentId: form.studentId,
     startAt: shanghaiLocalToIso(startDate, '00:00'),
     endAt: shanghaiLocalToIso(addDaysShanghai(endDate, 1), '00:00'),
     reason: form.reason?.trim() || null,
     scopes: form.labIds.flatMap((labId) =>
-      form.actions.map((actionCode) => ({ scopeType: 'LAB', labId: Number(labId), actionCode })))
+      form.actions.map((actionCode) => ({ scopeType: 'LAB', labId: labId, actionCode })))
   }
   submitting.value = true
   try {
-    console.info('[助理管理] 提交授权', { studentId: payload.studentId, scopeCount: payload.scopes.length, startAt: payload.startAt, endAt: payload.endAt })
+    console.info('[助理管理] 提交授权', { studentId: payload.studentId, labIds: form.labIds, actions: form.actions, scopeCount: payload.scopes.length, startAt: payload.startAt, endAt: payload.endAt })
     await createGrant(payload)
     ElMessage.success('授权已生效')
     formVisible.value = false

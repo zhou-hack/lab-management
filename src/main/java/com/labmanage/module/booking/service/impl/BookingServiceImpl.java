@@ -182,6 +182,16 @@ public class BookingServiceImpl implements BookingService {
             throw new BusinessException(ResultCode.CONFLICT.getCode(),
                     "仅待审批或已批准的预约可取消，当前状态：" + booking.getStatus().getDisplayName());
         }
+        // 已开门签到（IN_USE 使用中）的单不允许撤销：撤销会立即释放占用槽并跳过结束清点，
+        // 导致系统显示空闲而实际仍在使用（清单 B22）。已签到单须先由管理员结束清点。
+        if (booking.getStatus() == BookingStatus.APPROVED) {
+            BizDocument doc = requireFlowDocument(id);
+            if (flowService.hasEvent(doc.getId(), DocumentEventType.CHECKIN)) {
+                log.warn("[预约撤销] 已完成开门签到，拒绝撤销：操作人={}, 预约ID={}", operatorId, id);
+                throw new BusinessException(ResultCode.CONFLICT.getCode(),
+                        "该预约已完成开门签到（使用中），请先由管理员结束清点后，再行取消");
+            }
+        }
 
         String reason = dto == null ? null : dto.reason();
         doCancel(booking, operatorId, CancelType.MANUAL, reason);
