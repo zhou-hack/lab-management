@@ -6,7 +6,7 @@
           设备申请初审
         </h2>
         <p class="t-sub">
-          指定给您初审的学生申请 · 通过即生效；超 24 小时未处理管理员可代批
+          指定给您初审的学生申请 · 通过后转管理员终审，最终以管理员终审为准
         </p>
       </div>
     </div>
@@ -245,7 +245,7 @@ async function load() {
 async function approve(row) {
   try {
     await ElMessageBox.confirm(
-      '初审通过后申请即生效。确认通过？',
+      '初审通过后转管理员终审，最终以管理员终审为准。确认通过？',
       '初审通过',
       { type: 'info', confirmButtonText: '通过', cancelButtonText: '取消' }
     )

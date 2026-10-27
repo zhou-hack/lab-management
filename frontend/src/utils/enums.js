@@ -18,12 +18,13 @@ export const EQUIPMENT_STATUS_OPTIONS = Object.entries(EQUIPMENT_STATUS).map(([v
   label: meta.label
 }))
 
-/** 设备使用申请单状态（学生单教师初审，超时管理员代批） */
+/** 设备使用申请单状态（学生单：教师初审 → 管理员终审；教师单：仅管理员终审；到期未还 → 已逾期并冻结 7 天申请） */
 export const BOOKING_STATUS = {
   PENDING_TEACHER: { label: '待教师初审', pill: 'pill--warn' },
   PENDING_ADMIN: { label: '待管理员终审', pill: 'pill--warn' },
   APPROVED: { label: '已批准', pill: 'pill--ok' },
   CHECKED_OUT: { label: '已借出', pill: 'pill--warn' },
+  OVERDUE: { label: '已逾期', pill: 'pill--danger' },
   RETURNED: { label: '已归还', pill: 'pill--muted' },
   REJECTED: { label: '已驳回', pill: 'pill--danger' },
   CANCELLED: { label: '已撤销', pill: 'pill--muted' }

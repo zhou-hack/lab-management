@@ -121,11 +121,11 @@
           >
             <template #default="{ row }">
               <el-tooltip
-                v-if="row.status === 'CHECKED_OUT' && isOverdue(row)"
-                content="已超过预约归还时段，请线下跟进归还"
+                v-if="row.status === 'OVERDUE'"
+                content="已超预约归还时段未归还，申请人申请权限已冻结 7 天"
                 placement="top"
               >
-                <span class="pill pill--danger">超期未还</span>
+                <span class="pill pill--danger">逾期未还</span>
               </el-tooltip>
               <span
                 v-else
@@ -167,7 +167,7 @@
                 借出登记
               </el-button>
               <el-button
-                v-else-if="row.status === 'CHECKED_OUT'"
+                v-else-if="row.status === 'CHECKED_OUT' || row.status === 'OVERDUE'"
                 v-permission="'equipment:booking:return'"
                 link
                 type="primary"
@@ -337,17 +337,8 @@ const records = ref([])
 const total = ref(0)
 const loading = ref(false)
 
-/** 加载时刻的当前时间：超期标记按页面数据快照计算 */
-let loadedAt = Date.now()
-
-function isOverdue(row) {
-  const time = new Date(row.endAt).getTime()
-  return Number.isFinite(time) && time < loadedAt
-}
-
 async function load() {
   loading.value = true
-  loadedAt = Date.now()
   try {
     const params = { pageNum: query.pageNum, pageSize: query.pageSize }
     if (query.status) {
@@ -368,16 +359,13 @@ function search() {
   load()
 }
 
-/* ---------------- 终审 / 代批 ---------------- */
+/* ---------------- 管理员终审 ---------------- */
 
 async function approve(row) {
-  const isSubstitute = row.status === 'PENDING_TEACHER'
   try {
     await ElMessageBox.confirm(
-      isSubstitute
-        ? '该学生单教师初审已超时，确认由管理员代批通过？'
-        : '终审通过后申请即生效，可登记借出发放。确认通过？',
-      isSubstitute ? '代批通过' : '终审通过',
+      '终审通过后申请即生效，可登记借出发放。确认通过？',
+      '终审通过',
       { type: 'info', confirmButtonText: '通过', cancelButtonText: '取消' }
     )
   } catch {
