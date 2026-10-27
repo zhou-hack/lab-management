@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getToken } from '@/utils/token'
 
 /**
@@ -7,6 +7,7 @@ import { getToken } from '@/utils/token'
  * - baseURL 固定 /api/v1（与开发代理前缀一致）
  * - 请求拦截注入 Authorization: Bearer <token>
  * - 响应拦截解包 code/msg/data；401 清状态跳登录；403 提示无权限
+ * - B3：40301（需二级认证）统一弹密码确认框，确认通过后自动重试原请求
  */
 const service = axios.create({
   baseURL: '/api/v1',
@@ -33,6 +34,9 @@ service.interceptors.response.use(
     if (body.code === 40100) {
       return handleUnauthorized(body.msg)
     }
+    if (body.code === 40301) {
+      return handleNeedSafeAuth(response.config)
+    }
     if (body.code === 40300) {
       ElMessage.error(body.msg || '无权限')
       return Promise.reject(new Error(body.msg || '无权限'))
@@ -54,6 +58,47 @@ service.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+/**
+ * B3 二级认证：敏感操作被 40301 拦截时，弹密码确认框；确认成功（openSafe 300s）
+ * 后自动重发原请求。safeAuthPromise 去重锁：并发敏感请求只弹一次框。
+ * config.__safeRetried 防循环重试（确认后仍 40301 说明确认未生效，直接报错）。
+ */
+let safeAuthPromise = null
+
+function handleNeedSafeAuth(config) {
+  if (config.__safeRetried) {
+    ElMessage.error('二级认证未生效，请重新确认密码后再试')
+    return Promise.reject(new Error('二级认证未生效'))
+  }
+  if (!safeAuthPromise) {
+    safeAuthPromise = promptSafeAuth().finally(() => {
+      safeAuthPromise = null
+    })
+  }
+  return safeAuthPromise.then(() => {
+    config.__safeRetried = true
+    return service(config)
+  })
+}
+
+async function promptSafeAuth() {
+  const { value } = await ElMessageBox.prompt(
+    '当前为敏感操作（删除/启停/审批/强制取消/签到清点/授权等），请输入登录密码完成二级认证，确认后 5 分钟内同类操作免重复确认',
+    '二级认证',
+    {
+      inputType: 'password',
+      inputPlaceholder: '登录密码',
+      inputValidator: (v) => (v && v.trim() ? true : '请输入登录密码'),
+      confirmButtonText: '确认',
+      cancelButtonText: '取消'
+    }
+  )
+  const { confirmPassword } = await import('@/api/user')
+  // 密码错误由后端返回 40000，拦截器统一提示；此处不再重复提示
+  await confirmPassword(value.trim())
+  ElMessage.success('二级认证通过，5 分钟内敏感操作免确认')
+}
 
 /**
  * 401 统一处理：清理 token/用户/权限/动态路由并跳转登录页。

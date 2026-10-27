@@ -1,5 +1,6 @@
 server:
-  port: 8080
+  # 固定 8081：本机 8080 常被其他项目（cmzs-backend）抢占，导致请求被异系统拦截
+  port: 8081
 
 spring:
   application:
@@ -42,3 +43,14 @@ knife4j:
   enable: true
   setting:
     language: zh_cn
+
+lab:
+  booking:
+    # A1：APPROVED 单超过结束时间该时长（小时）仍未清点，定时任务自动完结并释放占用
+    auto-finish-delay-hours: 2
+  security:
+    # B3：敏感操作（删除/启停/审批/强制取消/签到清点/授权）是否要求二级认证（密码确认后 300 秒有效）
+    sensitive-safe-check: true
+  docs:
+    # B2：API 文档（Swagger/Knife4j）是否免登录公开；仅 dev profile 开启，其余环境需登录且 ADMIN 角色
+    public: false

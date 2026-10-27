@@ -4,6 +4,7 @@ import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.labmanage.common.core.BasePageQuery;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
+import com.labmanage.config.SensitiveOperationGuard;
 import com.labmanage.roles.dto.GrantCreateDTO;
 import com.labmanage.roles.service.AssistantGrantService;
 import com.labmanage.roles.vo.GrantVO;
@@ -31,8 +32,11 @@ public class AssistantGrantController {
 
     private final AssistantGrantService grantService;
 
-    public AssistantGrantController(AssistantGrantService grantService) {
+    private final SensitiveOperationGuard sensitiveGuard;
+
+    public AssistantGrantController(AssistantGrantService grantService, SensitiveOperationGuard sensitiveGuard) {
         this.grantService = grantService;
+        this.sensitiveGuard = sensitiveGuard;
     }
 
     @GetMapping
@@ -50,12 +54,14 @@ public class AssistantGrantController {
     @PostMapping
     @SaCheckPermission("system:grant:create")
     public Result<Map<String, String>> create(@Valid @RequestBody GrantCreateDTO dto) {
+        sensitiveGuard.checkSafe("助理授权创建");
         return Result.success(Map.of("id", String.valueOf(grantService.create(dto))));
     }
 
     @PostMapping("/{id}/revoke")
     @SaCheckPermission("system:grant:revoke")
     public Result<Void> revoke(@PathVariable Long id) {
+        sensitiveGuard.checkSafe("助理授权撤销");
         grantService.revoke(id);
         return Result.success(null);
     }

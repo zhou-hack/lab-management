@@ -30,6 +30,9 @@ public interface BookingService {
     /** 申请人本人取消（PENDING 直接取消；APPROVED 同步释放占用），写撤销事件 */
     void cancel(Long id, BookingCancelDTO dto);
 
+    /** 管理员强制取消（仅 APPROVED；释放占用 + FORCE_CANCEL 事件，原因必填） */
+    void forceCancel(Long id, BookingCancelDTO dto);
+
     /** 管理员核对通过（任务 APPROVED + 批准事件 + 场地行锁内写占用） */
     void approve(Long id);
 
@@ -76,4 +79,7 @@ public interface BookingService {
 
     /** 定时任务：开始时间已过仍待管理员核对的预约自动取消 */
     int autoCancelExpired();
+
+    /** 定时任务：结束时间已过（含宽限）仍未清点的已批准预约自动完结并释放占用（A1） */
+    int autoFinishStale();
 }

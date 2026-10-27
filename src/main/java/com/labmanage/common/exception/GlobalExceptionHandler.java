@@ -2,6 +2,9 @@ package com.labmanage.common.exception;
 
 import cn.dev33.satoken.exception.NotLoginException;
 import cn.dev33.satoken.exception.NotPermissionException;
+import cn.dev33.satoken.exception.NotRoleException;
+import cn.dev33.satoken.exception.NotSafeException;
+import cn.dev33.satoken.exception.SaTokenException;
 import com.labmanage.common.result.Result;
 import com.labmanage.common.result.ResultCode;
 import jakarta.servlet.http.HttpServletResponse;
@@ -37,7 +40,14 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(BusinessException.class)
     public Result<Void> handleBusinessException(BusinessException e, HttpServletResponse response) {
-        response.setStatus(toHttpStatus(e.getCode()));
+        int httpStatus = toHttpStatus(e.getCode());
+        response.setStatus(httpStatus);
+        // B16：业务异常留痕——5xx 映射告警级，40900 等业务冲突 info 级（排查占用/状态竞争现场）
+        if (httpStatus >= 500) {
+            log.warn("[业务异常] code={}, msg={}", e.getCode(), e.getMessage());
+        } else {
+            log.info("[业务异常] code={}, msg={}", e.getCode(), e.getMessage());
+        }
         return Result.error(e.getCode(), e.getMessage());
     }
 
@@ -48,7 +58,7 @@ public class GlobalExceptionHandler {
         return switch (code) {
             case 40000 -> HttpStatus.BAD_REQUEST.value();
             case 40100 -> HttpStatus.UNAUTHORIZED.value();
-            case 40300 -> HttpStatus.FORBIDDEN.value();
+            case 40300, 40301 -> HttpStatus.FORBIDDEN.value();
             case 40400 -> HttpStatus.NOT_FOUND.value();
             case 50000 -> HttpStatus.INTERNAL_SERVER_ERROR.value();
             default -> HttpStatus.CONFLICT.value();
@@ -158,6 +168,37 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.FORBIDDEN)
     public Result<Void> handleNotPermissionException(NotPermissionException e) {
         return Result.error(ResultCode.FORBIDDEN.getCode(), ResultCode.FORBIDDEN.getMsg());
+    }
+
+    /**
+     * Sa-Token 无角色（B6：如文档端点的 ADMIN 角色校验失败）
+     */
+    @ExceptionHandler(NotRoleException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public Result<Void> handleNotRoleException(NotRoleException e) {
+        return Result.error(ResultCode.FORBIDDEN.getCode(), ResultCode.FORBIDDEN.getMsg());
+    }
+
+    /**
+     * Sa-Token 二级认证未通过（B3：敏感操作未在 openSafe 有效期内）。
+     * 返回独立错误码 40301，前端据此弹出密码确认框后自动重试原请求。
+     */
+    @ExceptionHandler(NotSafeException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public Result<Void> handleNotSafeException(NotSafeException e) {
+        log.info("[二级认证] 敏感操作未通过二级认证：{}", e.getMessage());
+        return Result.error(ResultCode.NEED_SAFE_AUTH.getCode(), "敏感操作需先完成密码确认");
+    }
+
+    /**
+     * Sa-Token 其余异常（B6：伪造/畸形 token、二级认证校验失败等）统一按未认证处理，
+     * 不落入兜底 500，也不泄露 token 校验内部细节
+     */
+    @ExceptionHandler(SaTokenException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public Result<Void> handleSaTokenException(SaTokenException e) {
+        log.warn("[认证异常] {}：{}", e.getClass().getSimpleName(), e.getMessage());
+        return Result.error(ResultCode.UNAUTHORIZED.getCode(), ResultCode.UNAUTHORIZED.getMsg());
     }
 
     /**

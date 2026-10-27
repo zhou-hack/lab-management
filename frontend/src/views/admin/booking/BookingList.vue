@@ -223,8 +223,9 @@
                 驳回
               </el-button>
             </template>
-            <template v-else-if="row.status === 'APPROVED' && !row.checkinAt">
+            <template v-else-if="row.status === 'APPROVED'">
               <el-button
+                v-if="!row.checkinAt"
                 v-permission="'booking:lab:approve'"
                 link
                 type="success"
@@ -232,15 +233,22 @@
               >
                 开门签到
               </el-button>
-            </template>
-            <template v-else-if="row.status === 'APPROVED' && row.checkinAt && !row.checkoutAt">
               <el-button
+                v-else-if="!row.checkoutAt"
                 v-permission="'booking:lab:approve'"
                 link
                 type="warning"
                 @click="onCheckout(row)"
               >
                 结束清点
+              </el-button>
+              <el-button
+                v-permission="'booking:lab:approve'"
+                link
+                type="danger"
+                @click="onForceCancel(row)"
+              >
+                强制取消
               </el-button>
             </template>
           </template>
@@ -284,6 +292,7 @@ import {
   rejectBooking,
   checkinBooking,
   checkoutBooking,
+  forceCancelBooking,
   exportAllBookings
 } from '@/api/booking'
 import { listSpaceOptions } from '@/api/space'
@@ -419,6 +428,31 @@ async function onReject(row) {
   }
   await rejectBooking(row.id, reason)
   ElMessage.success('已驳回')
+  loadData()
+  loadStats()
+}
+
+// A2：管理员强制取消（仅已批准单）：原因必填，立即释放占用槽，事件记 FORCE_CANCEL
+async function onForceCancel(row) {
+  let reason
+  try {
+    const res = await ElMessageBox.prompt(
+      `强制取消「${row.applicantName || row.applicantId}」预约 ${row.labName} ${formatRange(row.startAt, row.endAt)}？将立即释放占用时段，原因必填（≤200 字）。`,
+      '强制取消确认',
+      {
+        inputPlaceholder: '强制取消原因（必填）',
+        inputValidator: (v) => (v && v.trim() ? (v.length <= 200 ? true : '原因不能超过 200 字') : '请填写强制取消原因'),
+        type: 'error',
+        confirmButtonText: '确认强制取消',
+        cancelButtonText: '取消'
+      }
+    )
+    reason = res.value.trim()
+  } catch {
+    return
+  }
+  await forceCancelBooking(row.id, reason)
+  ElMessage.success('已强制取消，占用时段已释放')
   loadData()
   loadStats()
 }

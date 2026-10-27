@@ -51,7 +51,11 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.sql.init.mode=always",
         "spring.sql.init.encoding=UTF-8",
         "spring.sql.init.schema-locations=classpath:sql/booking_schema_h2.sql",
-        "spring.sql.init.data-locations=classpath:sql/booking_data_h2.sql"
+        "spring.sql.init.data-locations=classpath:sql/booking_data_h2.sql",
+        // B2 验证：测试覆盖 dev profile 的文档公开开关，模拟非 dev 环境的登录保护
+        "lab.docs.public=false",
+        // B3：本类聚焦业务逻辑，关闭二级认证；二级认证拦截由 SensitiveSafeCheckIntegrationTest 覆盖
+        "lab.security.sensitive-safe-check=false"
 }, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import(BookingApiIntegrationTest.TestAuthConfig.class)
 class BookingApiIntegrationTest {
@@ -600,5 +604,71 @@ class BookingApiIntegrationTest {
     @DisplayName("未登录访问：HTTP 401")
     void withoutToken_shouldReturn401() throws Exception {
         assertThat(getRaw("/api/v1/booking/labs")).isEqualTo(401);
+    }
+
+    // ------------------------------------------------------------------ A2 管理员强制取消
+
+    @Test
+    @DisplayName("强制取消：已批准单取消成功、cancelType=FORCE、占用释放可再约")
+    void forceCancel_success_releasesSlot() throws Exception {
+        JsonNode created = createBookingOn("2026-12-25", teacherToken);
+        String id = created.path("data").path("id").asText();
+        assertThat(post("/api/v1/booking/labs/" + id + "/approve", null, adminToken)
+                .path("code").asInt()).isZero();
+
+        JsonNode cancelled = post("/api/v1/booking/labs/" + id + "/force_cancel",
+                "{\"reason\": \"设备突发故障，暂停使用\"}", adminToken);
+        assertThat(cancelled.path("code").asInt()).isZero();
+
+        JsonNode detail = get("/api/v1/booking/labs/" + id, teacherToken);
+        assertThat(detail.path("data").path("status").asText()).isEqualTo("CANCELLED");
+        assertThat(detail.path("data").path("cancelType").asText()).isEqualTo("FORCE");
+        assertThat(detail.path("data").path("cancelReason").asText())
+                .isEqualTo("管理员强制取消：设备突发故障，暂停使用");
+
+        // 占用已释放：同时段可再次提交并成功
+        JsonNode again = createBookingOn("2026-12-25", teacherToken);
+        assertThat(again.path("code").asInt()).isZero();
+    }
+
+    @Test
+    @DisplayName("强制取消：原因必填 40000；待审批单引导驳回 40900；教师越权 40300")
+    void forceCancel_validationAndGuards() throws Exception {
+        // 原因必填
+        JsonNode a = createBookingOn("2026-12-26", teacherToken);
+        String idA = a.path("data").path("id").asText();
+        assertThat(post("/api/v1/booking/labs/" + idA + "/approve", null, adminToken)
+                .path("code").asInt()).isZero();
+        assertThat(post("/api/v1/booking/labs/" + idA + "/force_cancel", "{\"reason\": \"\"}", adminToken)
+                .path("code").asInt()).isEqualTo(40000);
+        // 状态未被破坏
+        assertThat(get("/api/v1/booking/labs/" + idA, adminToken)
+                .path("data").path("status").asText()).isEqualTo("APPROVED");
+
+        // 待审批单不可强制取消（引导走驳回）
+        JsonNode b = createBookingOn("2026-12-27", teacherToken);
+        String idB = b.path("data").path("id").asText();
+        assertThat(post("/api/v1/booking/labs/" + idB + "/force_cancel", "{\"reason\": \"误操作\"}", adminToken)
+                .path("code").asInt()).isEqualTo(40900);
+
+        // 教师无审批权限
+        assertThat(post("/api/v1/booking/labs/" + idA + "/force_cancel", "{\"reason\": \"越权\"}", teacherToken)
+                .path("code").asInt()).isEqualTo(40300);
+    }
+
+    // ------------------------------------------------------------------ B2/B6 安全
+
+    @Test
+    @DisplayName("B2：文档端点未登录访问 401（非 dev 不公开）")
+    void docsEndpoints_requireLogin() throws Exception {
+        assertThat(getRaw("/v3/api-docs")).isEqualTo(401);
+        assertThat(getRaw("/doc.html")).isEqualTo(401);
+    }
+
+    @Test
+    @DisplayName("B6：伪造 token 访问业务接口 401（SaToken 异常统一映射）")
+    void forgedToken_shouldReturn401() throws Exception {
+        JsonNode body = get("/api/v1/booking/labs", "forged-token-value-0000");
+        assertThat(body.path("code").asInt()).isEqualTo(40100);
     }
 }

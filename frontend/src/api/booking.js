@@ -64,6 +64,11 @@ export function cancelBooking(id, reason) {
   return request.post(`/booking/labs/${id}/cancel`, { reason })
 }
 
+/** 管理员强制取消（booking:lab:approve，仅已批准单；原因必填，事件记 FORCE_CANCEL） */
+export function forceCancelBooking(id, reason) {
+  return request.post(`/booking/labs/${id}/force_cancel`, { reason })
+}
+
 /** 批准预约（booking:lab:approve，占用时段生效） */
 export function approveBooking(id) {
   return request.post(`/booking/labs/${id}/approve`)

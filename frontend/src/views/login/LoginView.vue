@@ -149,7 +149,9 @@ async function sendCode() {
     await sendSmsCode(form.phone)
     ElMessage.success('验证码已发送')
   } catch {
+    // B15：发送失败（限流/后端异常）不启动重发倒计时，避免误导用户空等
     // 接口错误提示由请求拦截器统一处理；后端未就绪时此处不再重复提示
+    return
   }
   countdown.value = 60
   timer = setInterval(() => {

@@ -13,7 +13,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api/v1': {
-        target: 'http://localhost:8080',
+        // 后端独立端口 8081：8080 常被本机其他项目（cmzs-backend）抢占
+        target: 'http://localhost:8081',
         changeOrigin: true
       }
     }

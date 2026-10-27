@@ -40,9 +40,11 @@ import com.labmanage.roles.entity.SysUser;
 import com.labmanage.roles.mapper.SysUserMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -66,6 +68,10 @@ import java.util.Map;
 public class BookingServiceImpl implements BookingService {
 
     private static final Logger log = LoggerFactory.getLogger(BookingServiceImpl.class);
+
+    /** A1：APPROVED 单超过结束时间该时长（小时）仍未清点，由定时任务自动完结释放占用 */
+    @Value("${lab.booking.auto-finish-delay-hours:2}")
+    private int autoFinishDelayHours;
 
     /** 业务时区：页面展示与开放窗口按上海日历，时间点统一 UTC 传输存储 */
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
@@ -200,6 +206,31 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public void forceCancel(Long id, BookingCancelDTO dto) {
+        Long operatorId = SecurityUtils.currentUserId();
+        String reason = dto == null || dto.reason() == null ? "" : dto.reason().trim();
+        if (reason.isEmpty()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "强制取消必须填写原因");
+        }
+        log.info("[强制取消] 开始：操作人={}, 预约ID={}, 原因={}", operatorId, id, reason);
+
+        LabBooking booking = requireBooking(id);
+        requireFlowDocument(id);
+        if (booking.getStatus() == BookingStatus.PENDING) {
+            throw new BusinessException(ResultCode.CONFLICT.getCode(),
+                    "该预约仍处待审批，请使用「驳回」终止，而非强制取消");
+        }
+        if (booking.getStatus() != BookingStatus.APPROVED) {
+            throw new BusinessException(ResultCode.CONFLICT.getCode(),
+                    "仅已批准的预约可强制取消，当前状态：" + booking.getStatus().getDisplayName());
+        }
+        // doCancel：APPROVED 分支释放占用槽 + 条件更新防并发 + FORCE_CANCEL 事件
+        doCancel(booking, operatorId, CancelType.FORCE, "管理员强制取消：" + reason);
+        log.info("[强制取消] 完成：操作人={}, 预约ID={}", operatorId, id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void approve(Long id) {
         Long operatorId = SecurityUtils.currentUserId();
         long begin = System.nanoTime();
@@ -311,6 +342,13 @@ public class BookingServiceImpl implements BookingService {
         if (now.isBefore(booking.getStartAt())) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "尚未到达预约开始时间，不能开门签到");
         }
+        // B24：签到过期上限——结束时间已过的滞留单不允许再被"激活"签到
+        if (now.isAfter(booking.getEndAt())) {
+            log.warn("[开门签到] 预约结束时间已过，拒绝签到：操作人={}, 预约ID={}, 结束时间={}",
+                    operatorId, id, booking.getEndAt());
+            throw new BusinessException(ResultCode.CONFLICT.getCode(),
+                    "预约结束时间已过，无法开门签到；请由管理员强制取消释放占用");
+        }
 
         flowService.onCheckin(doc, booking, operatorId, now);
         log.info("[开门签到] 完成：操作人={}, 预约ID={}, 签到时间={}", operatorId, id, now);
@@ -336,6 +374,10 @@ public class BookingServiceImpl implements BookingService {
         }
 
         Instant now = Instant.now();
+        // B23：清点时间下限——不得早于预约开始时间（防"秒签秒清"提前释放占用）
+        if (now.isBefore(booking.getStartAt())) {
+            throw new BusinessException(ResultCode.CONFLICT.getCode(), "尚未到达预约开始时间，不能结束清点");
+        }
         String note = dto == null || dto.note() == null || dto.note().isBlank()
                 ? "结束清点" : dto.note().trim();
         flowService.onCheckout(doc, booking, operatorId, now, note);
@@ -585,14 +627,21 @@ public class BookingServiceImpl implements BookingService {
         Map<Long, BizSpace> spaces = loadSpaces(records);
         Map<Long, SysUser> users = loadUsers(records);
         Map<Long, SysUser> teachers = loadTeachers(records);
+        // A12：使用闭环字段——签到/清点时间取自 document_event（与列表/详情同数据源）
+        Map<Long, Map<String, Instant>> checkTimes =
+                flowService.loadCheckTimes(records.stream().map(LabBooking::getId).toList());
         StringBuilder sb = new StringBuilder("﻿");
-        sb.append("预约ID,场地,申请人,课程,班级,老师,事由,人数,预约日期,开始时间,结束时间,状态,驳回原因,提交时间\r\n");
+        sb.append("预约ID,场地,申请人,课程,班级,老师,事由,人数,预约日期,开始时间,结束时间,状态,"
+                + "签到时间,清点时间,驳回原因,取消原因,取消方式,提交时间\r\n");
         java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter
                 .ofPattern("yyyy-MM-dd HH:mm").withZone(SHANGHAI);
         for (LabBooking b : records) {
             BizSpace space = spaces.get(b.getLabId());
             SysUser applicant = users.get(b.getApplicantId());
             SysUser teacher = b.getTeacherId() == null ? null : teachers.get(b.getTeacherId());
+            Map<String, Instant> ct = checkTimes.get(b.getId());
+            Instant checkin = ct == null ? null : ct.get("CHECKIN");
+            Instant checkout = ct == null ? null : ct.get("CHECKOUT");
             sb.append(b.getId()).append(',')
                     .append(csvCell(space == null ? null : space.getLabName())).append(',')
                     .append(csvCell(applicant == null ? null : applicant.getRealName())).append(',')
@@ -605,7 +654,11 @@ public class BookingServiceImpl implements BookingService {
                     .append(fmt.format(b.getStartAt())).append(',')
                     .append(fmt.format(b.getEndAt())).append(',')
                     .append(b.getStatus() == null ? "" : b.getStatus().getDisplayName()).append(',')
+                    .append(checkin == null ? "" : fmt.format(checkin)).append(',')
+                    .append(checkout == null ? "" : fmt.format(checkout)).append(',')
                     .append(csvCell(b.getRejectReason())).append(',')
+                    .append(csvCell(b.getCancelReason())).append(',')
+                    .append(b.getCancelType() == null ? "" : b.getCancelType().getDisplayName()).append(',')
                     .append(fmt.format(b.getCreateTime())).append("\r\n");
         }
         log.info("[预约导出] 完成：操作人={}, 条件=[{}], 导出行数={}, 耗时={}ms",
@@ -664,6 +717,31 @@ public class BookingServiceImpl implements BookingService {
         }
         log.info("[超时自动取消] 扫描完成：拾取={}, 实际取消={}, 扫描时间={}", expired.size(), cancelled, now);
         return cancelled;
+    }
+
+    /**
+     * A1 占用滞留兜底：结束时间已过宽限仍未清点的 APPROVED 单自动完结。
+     * 宽限由 lab.booking.auto-finish-delay-hours 配置（默认 2 小时，对齐 PRD end+2h）。
+     */
+    @Override
+    public int autoFinishStale() {
+        Instant now = Instant.now();
+        Instant threshold = now.minus(Duration.ofHours(autoFinishDelayHours));
+        List<LabBooking> stale = bookingMapper.selectStaleApproved(threshold);
+        if (stale.isEmpty()) {
+            return 0;
+        }
+        int finished = 0;
+        for (LabBooking booking : stale) {
+            try {
+                finished += expiryService.finishOne(booking, now);
+            } catch (Exception e) {
+                // 单条失败不阻断整批；下一轮扫描会再次拾取
+                log.error("[超时自动完结] 单条处理失败，跳过：预约ID={}, 错误={}", booking.getId(), e.getMessage(), e);
+            }
+        }
+        log.info("[超时自动完结] 扫描完成：拾取={}, 实际完结={}, 阈值={}", stale.size(), finished, threshold);
+        return finished;
     }
 
     // ------------------------------------------------------------- 组装/辅助
@@ -910,6 +988,7 @@ public class BookingServiceImpl implements BookingService {
         BizDocument doc = flowService.findByBookingId(booking.getId());
         if (doc != null) {
             boolean system = cancelType == CancelType.AUTO_EXPIRED;
+            booking.setCancelType(cancelType);
             flowService.onCancel(doc, booking, system ? null : operatorId, system, reason);
         }
     }

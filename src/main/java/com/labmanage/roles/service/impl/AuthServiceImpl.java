@@ -176,19 +176,23 @@ public class AuthServiceImpl implements AuthService {
                 throw new BusinessException(40100, "旧密码错误");
             }
         }
-        user.setPasswordHash(passwordEncoder.encode(dto.newPassword()));
-        user.setPasswordChangedAt(Instant.now());
-        userMapper.updateById(user);
+        // B14：定点更新密码相关两列，避免整行 updateById 覆盖并发改动的其他字段
+        userMapper.update(null, Wrappers.<SysUser>lambdaUpdate()
+                .eq(SysUser::getId, user.getId())
+                .set(SysUser::getPasswordHash, passwordEncoder.encode(dto.newPassword()))
+                .set(SysUser::getPasswordChangedAt, Instant.now()));
     }
 
     @Override
     public ConfirmVO confirmPassword(PasswordConfirmDTO dto) {
         SysUser user = currentUser();
         if (user.getPasswordHash() == null) {
-            throw new BusinessException(40100, "尚未设置密码，请先设置后再进行敏感操作确认");
+            // B3：二级认证场景，账号未设密码属参数/前置问题，不走 401（避免前端误踢登录页）
+            throw new BusinessException(40000, "尚未设置密码，请先在个人中心设置后再进行敏感操作确认");
         }
         if (!passwordEncoder.matches(dto.password(), user.getPasswordHash())) {
-            throw new BusinessException(40100, "密码错误");
+            // B3：确认密码错误返回 40000 而非 40100——用户已登录，仅本次确认失败
+            throw new BusinessException(40000, "密码错误");
         }
         StpUtil.openSafe(SAFE_AUTH_SECONDS);
         return new ConfirmVO((int) SAFE_AUTH_SECONDS);
@@ -249,7 +253,8 @@ public class AuthServiceImpl implements AuthService {
         SysPersonRoster roster = rosterMapper.selectOne(Wrappers.<SysPersonRoster>lambdaQuery()
                 .eq(SysPersonRoster::getPhone, phone));
         if (roster == null) {
-            throw new BusinessException(40900, "该手机号未在预录名单中，无法登录，请联系管理员");
+            // B8：文案去枚举化，不暴露手机号是否在预录名单中，防止名单探测
+            throw new BusinessException(40900, "当前无法登录，请联系管理员核实账号信息");
         }
         if (!Integer.valueOf(1).equals(roster.getEnabled())) {
             throw new BusinessException(40900, "预录名单已停用，请联系管理员");
@@ -306,15 +311,18 @@ public class AuthServiceImpl implements AuthService {
     private void onPasswordFail(SysUser user) {
         int maxFail = policyService.getInt("LOGIN_MAX_FAIL", "maxFailCount", 5);
         int lockMinutes = policyService.getInt("LOGIN_LOCK_MINUTES", "lockMinutes", 30);
+        // B4：数据库原子自增失败计数，避免并发登录失败时读改写竞态导致计数丢失
+        userMapper.update(null, Wrappers.<SysUser>lambdaUpdate()
+                .eq(SysUser::getId, user.getId())
+                .setSql("failed_login_count = IFNULL(failed_login_count, 0) + 1"));
         int failCount = (user.getFailedLoginCount() == null ? 0 : user.getFailedLoginCount()) + 1;
         if (failCount >= maxFail) {
-            user.setFailedLoginCount(0);
-            user.setLockedUntil(Instant.now().plusSeconds(lockMinutes * 60L));
-            userMapper.updateById(user);
+            userMapper.update(null, Wrappers.<SysUser>lambdaUpdate()
+                    .eq(SysUser::getId, user.getId())
+                    .set(SysUser::getFailedLoginCount, 0)
+                    .set(SysUser::getLockedUntil, Instant.now().plusSeconds(lockMinutes * 60L)));
             throw new BusinessException(40100, "连续失败 " + maxFail + " 次，账号已锁定 " + lockMinutes + " 分钟");
         }
-        user.setFailedLoginCount(failCount);
-        userMapper.updateById(user);
         throw new BusinessException(40100, "账号或密码错误，还可尝试 " + (maxFail - failCount) + " 次");
     }
 

@@ -40,6 +40,14 @@ public interface LabBookingMapper extends BaseMapper<LabBooking> {
     List<LabBooking> selectExpiredPending(@Param("now") Instant now);
 
     /**
+     * 超时未清点的已批准预约：APPROVED 且结束时间已过指定阈值（A1 自动完结扫描）。
+     * 限 200 条分批；是否已清点由调用方按 CHECKOUT 事件复核。
+     */
+    @Select("SELECT * FROM lab_booking WHERE deleted = 0 AND status = 'APPROVED' "
+            + "AND end_at <= #{threshold} ORDER BY end_at ASC LIMIT 200")
+    List<LabBooking> selectStaleApproved(@Param("threshold") Instant threshold);
+
+    /**
      * 周期预约规则生成的各周预约单（取消/详情核对用），按开始时间升序。
      */
     @Select("SELECT * FROM lab_booking WHERE deleted = 0 AND series_id = #{seriesId} "

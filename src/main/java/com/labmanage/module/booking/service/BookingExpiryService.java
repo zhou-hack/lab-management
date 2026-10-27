@@ -6,6 +6,7 @@ import com.labmanage.module.booking.entity.LabSlot;
 import com.labmanage.module.booking.enums.BookingStatus;
 import com.labmanage.module.booking.enums.CancelType;
 import com.labmanage.module.booking.flow.entity.BizDocument;
+import com.labmanage.module.booking.flow.enums.DocumentEventType;
 import com.labmanage.module.booking.flow.service.BookingFlowService;
 import com.labmanage.module.booking.mapper.LabBookingMapper;
 import com.labmanage.module.booking.mapper.LabSlotMapper;
@@ -70,6 +71,35 @@ public class BookingExpiryService {
         } else {
             log.warn("[超时自动取消] 流程单据缺失，仅流转预约状态：预约ID={}", booking.getId());
         }
+        return 1;
+    }
+
+    /**
+     * 超时自动完结单条已批准预约（A1）：占用滞留兜底。
+     * <p>
+     * 已有 CHECKOUT 事件（人工已清点）直接跳过；否则幂等释放占用槽并写
+     * AUTO_FINISH 事件。主状态保持 APPROVED，不引入第五态；事件按
+     * requestKey 幂等，与人工清点/撤销并发时先到者生效、后到者安全跳过。
+     *
+     * @return 1=本次完结；0=已清点或无占用可释放
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
+    public int finishOne(LabBooking booking, Instant now) {
+        BizDocument doc = flowService.findByBookingId(booking.getId());
+        if (doc != null && flowService.hasEvent(doc.getId(), DocumentEventType.CHECKOUT)) {
+            return 0;
+        }
+        int released = slotMapper.update(null, new LambdaUpdateWrapper<LabSlot>()
+                .eq(LabSlot::getBookingId, booking.getId())
+                .isNull(LabSlot::getReleasedAt)
+                .set(LabSlot::getReleasedAt, now)
+                .set(LabSlot::getReleaseReason, "超时未清点自动完结"));
+        if (doc == null) {
+            log.warn("[超时自动完结] 流程单据缺失，仅释放占用：预约ID={}, 释放行数={}", booking.getId(), released);
+        } else {
+            flowService.onAutoFinish(doc, booking, now);
+        }
+        log.info("[超时自动完结] 完成：预约ID={}, 释放占用行数={}, 时间={}", booking.getId(), released, now);
         return 1;
     }
 }

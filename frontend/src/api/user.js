@@ -39,3 +39,11 @@ export function switchIdentity(data) {
 export function logout() {
   return request.post('/auth/logout')
 }
+
+/**
+ * 敏感操作二级认证（B3）：密码确认后 300 秒内敏感操作免重复确认。
+ * 密码错误返回 40000（不会触发 401 踢出登录）。
+ */
+export function confirmPassword(password) {
+  return request.post('/auth/password/confirm', { password })
+}

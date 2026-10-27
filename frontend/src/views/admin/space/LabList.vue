@@ -47,31 +47,12 @@
           <el-autocomplete
             v-model="query.labName"
             :fetch-suggestions="fetchKeywordSuggestions"
-            :debounce="200"
-            :trigger-on-focus="false"
             placeholder="输入名称或关键字，如 实训室"
             clearable
             class="space_list__input space_list__input--suggest"
-            popper-class="space_suggest_popper"
             @select="onKeywordSelect"
             @keyup.enter="onSearch('enter')"
-          >
-            <template #default="{ item }">
-              <div
-                v-if="item.empty"
-                class="space_list__suggest_empty"
-              >
-                {{ item.meta }}
-              </div>
-              <div
-                v-else
-                class="space_list__suggest"
-              >
-                <span class="space_list__suggest_name">{{ item.value }}</span>
-                <span class="space_list__suggest_meta">{{ item.meta }}</span>
-              </div>
-            </template>
-          </el-autocomplete>
+          />
         </el-form-item>
         <el-form-item label="位置">
           <el-input
@@ -350,7 +331,6 @@
       :space="editingSpace"
       @close="formVisible = false"
       @submit="onSubmitForm"
-      @preview="onPreviewSpace"
     />
     <SpaceDetailDrawer
       v-model="detailVisible"
@@ -362,120 +342,12 @@
       @close="importVisible = false"
       @success="onImported"
     />
-
-    <!-- 页面左侧弹出式场地信息面板：点击面板外部或关闭按钮收起；容器不拦截页面与弹窗点击 -->
-    <transition name="space_preview">
-      <div
-        v-if="previewVisible"
-        class="space_preview"
-      >
-        <aside
-          class="space_preview__panel"
-          role="dialog"
-          aria-label="场地信息"
-        >
-          <header class="space_preview__head">
-            <div class="space_preview__head_text">
-              <span class="t-sub">场地信息</span>
-              <h3 class="space_preview__name">
-                {{ previewDetail?.labName || previewName || '加载中…' }}
-              </h3>
-            </div>
-            <div class="space_preview__head_actions">
-              <span
-                v-if="previewDetail"
-                class="pill"
-                :class="SPACE_STATUS_MAP[previewDetail.status]?.pill"
-              >
-                {{ SPACE_STATUS_MAP[previewDetail.status]?.label || previewDetail.status }}
-              </span>
-              <el-button
-                link
-                aria-label="关闭场地信息"
-                @click="closePreview"
-              >
-                <el-icon><Close /></el-icon>
-              </el-button>
-            </div>
-          </header>
-
-          <el-skeleton
-            v-if="previewLoading"
-            :rows="8"
-            animated
-          />
-          <div
-            v-else-if="previewError"
-            class="space_preview__empty"
-          >
-            <p>{{ previewError }}</p>
-            <el-button
-              size="small"
-              @click="retryPreview"
-            >
-              重试
-            </el-button>
-          </div>
-          <dl
-            v-else-if="previewDetail"
-            class="space_preview__grid"
-          >
-            <div class="is_span2">
-              <dt>场地编号</dt>
-              <dd class="is_mono">
-                {{ previewDetail.id }}
-              </dd>
-            </div>
-            <div>
-              <dt>场地类型</dt>
-              <dd>{{ SPACE_TYPE_MAP[previewDetail.labType]?.label || previewDetail.labType }}</dd>
-            </div>
-            <div>
-              <dt>容纳人数</dt>
-              <dd>{{ previewDetail.capacity }} 人</dd>
-            </div>
-            <div>
-              <dt>面积</dt>
-              <dd>未登记</dd>
-            </div>
-            <div>
-              <dt>使用状态</dt>
-              <dd>{{ SPACE_STATUS_MAP[previewDetail.status]?.label || previewDetail.status }}</dd>
-            </div>
-            <div class="is_span2">
-              <dt>位置</dt>
-              <dd>{{ previewDetail.locationDetail || '—' }}</dd>
-            </div>
-            <div class="is_span2">
-              <dt>开放时段</dt>
-              <dd>{{ previewDetail.openStart }} - {{ previewDetail.openEnd }}</dd>
-            </div>
-            <div class="is_span2">
-              <dt>设备配置</dt>
-              <dd class="is_facilities">
-                {{ previewDetail.facilities || '暂未登记' }}
-              </dd>
-            </div>
-            <div>
-              <dt>创建时间</dt>
-              <dd>{{ formatShanghai(previewDetail.createTime) }}</dd>
-            </div>
-            <div>
-              <dt>更新时间</dt>
-              <dd>{{ formatShanghai(previewDetail.updateTime) }}</dd>
-            </div>
-          </dl>
-        </aside>
-      </div>
-    </transition>
   </div>
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Close } from '@element-plus/icons-vue'
-import { formatInstant } from '@/utils/datetime'
 import SpaceFormDialog from './SpaceFormDialog.vue'
 import SpaceDetailDrawer from './SpaceDetailDrawer.vue'
 import SpaceImportDialog from './SpaceImportDialog.vue'
@@ -483,8 +355,7 @@ import {
   SPACE_TYPES,
   SPACE_TYPE_MAP,
   SPACE_STATUS,
-  SPACE_STATUS_MAP,
-  buildSpaceSuggestions
+  SPACE_STATUS_MAP
 } from './space.constants'
 import {
   pageSpaces,
@@ -525,18 +396,7 @@ const detailVisible = ref(false)
 const detailSpace = ref(null)
 const importVisible = ref(false)
 
-// ---------------------------------------------------------------------------
-// 页面左侧弹出式场地信息面板：由新建/编辑弹窗选择场地名称后触发
-// ---------------------------------------------------------------------------
-const previewVisible = ref(false)
-const previewLoading = ref(false)
-const previewError = ref('')
-const previewDetail = ref(null)
-const previewName = ref('')
-const previewSpaceId = ref(null)
-let previewSeq = 0
-
-/** 耗时统计（毫秒），用于排查筛选与联想响应速度 */
+/** 耗时统计（毫秒），用于排查筛选响应速度 */
 function elapsedMs(begin) {
   return Math.round(performance.now() - begin)
 }
@@ -617,52 +477,28 @@ function onFilterChange() {
   onSearch('filter')
 }
 
-// 关键字实时联想：输入任意字符即请求场地选项，模糊匹配场地名称 + 标准词条
-let keywordSuggestSeq = 0
-let lastKeywordInput = ''
-
+// 关键字联想：核心自动补全——输入即按名称模糊请求场地选项，选中填入查询框
 async function fetchKeywordSuggestions(queryString, cb) {
-  const begin = performance.now()
   const keyword = String(queryString || '').trim()
-  lastKeywordInput = keyword
   if (!keyword) {
-    console.debug('[关键字联想] 输入为空，不发起联想')
+    console.log('[关键字联想] 输入为空，不发起请求')
     cb([])
     return
   }
-  const seq = ++keywordSuggestSeq
-  console.info('[关键字联想] 开始请求', { keyword, seq })
+  console.log('[关键字联想] 触发请求：keyword =', keyword)
   try {
-    const options = await listSpaceOptions({ keyword, limit: 50 })
-    if (seq !== keywordSuggestSeq) {
-      console.info('[关键字联想] 丢弃过期响应', { keyword, seq, latestSeq: keywordSuggestSeq })
-      return
-    }
-    const list = buildSpaceSuggestions(keyword, options, { limit: 50 })
-    console.info('[关键字联想] 请求完成', {
-      keyword,
-      optionCount: options?.length || 0,
-      suggestionCount: list.length,
-      empty: !list.length,
-      costMs: elapsedMs(begin)
-    })
-    cb(list.length ? list : [{ value: '', empty: true, meta: '无匹配的场地名称或关键字' }])
+    const options = await listSpaceOptions({ keyword, limit: 15 })
+    console.log('[关键字联想] 请求完成：keyword =', keyword, '候选数 =', options?.length || 0)
+    cb((options || []).map((item) => ({ value: item.labName })))
   } catch (e) {
-    console.warn('[关键字联想] 请求失败', { keyword, error: e?.message, costMs: elapsedMs(begin) })
-    if (seq === keywordSuggestSeq) {
-      cb([{ value: '', empty: true, meta: '联想加载失败，请稍后重试' }])
-    }
+    console.warn('[关键字联想] 请求失败：keyword =', keyword, ' error =', e?.message)
+    cb([])
   }
 }
 
-/** 点击候选：场地名称直接查询；空态项恢复原输入，避免被清空 */
+/** 选中候选即按该名称查询 */
 function onKeywordSelect(item) {
-  if (item?.empty) {
-    console.info('[关键字联想] 点击空态项，恢复原输入', { keyword: lastKeywordInput })
-    query.labName = lastKeywordInput
-    return
-  }
-  console.info('[关键字联想] 选择候选，立即查询', { value: item?.value, kind: item?.kind })
+  console.log('[关键字联想] 选中候选：', item?.value, '（触发查询）')
   onSearch('suggest')
 }
 
@@ -711,96 +547,6 @@ async function onDetail(row) {
   } catch (e) {
     ElMessage.error(e.message || '详情加载失败')
   }
-}
-
-/** 弹窗选中场地名称后：页面左侧弹出信息面板并加载详情 */
-function onPreviewSpace(option) {
-  if (!option?.id) return
-  previewVisible.value = true
-  previewName.value = option.labName || ''
-  previewSpaceId.value = String(option.id)
-  previewDetail.value = null
-  previewError.value = ''
-  console.info('[场地信息面板] 打开', {
-    spaceId: option.id,
-    labName: option.labName,
-    activeElement: document.activeElement?.tagName || ''
-  })
-  bindPreviewGlobal()
-  loadPreviewDetail(option.id)
-}
-
-async function loadPreviewDetail(id) {
-  const begin = performance.now()
-  const seq = ++previewSeq
-  previewLoading.value = true
-  previewError.value = ''
-  console.info('[场地信息面板] 加载开始', { spaceId: id })
-  try {
-    const detail = await getSpaceDetail(id)
-    if (seq !== previewSeq) {
-      console.info('[场地信息面板] 丢弃过期响应', { spaceId: id, seq, latestSeq: previewSeq })
-      return
-    }
-    previewDetail.value = detail
-    previewName.value = detail.labName
-    console.info('[场地信息面板] 加载完成', {
-      spaceId: id,
-      labName: detail.labName,
-      costMs: elapsedMs(begin)
-    })
-  } catch (e) {
-    if (seq !== previewSeq) return
-    previewError.value = e?.message || '场地信息加载失败'
-    console.warn('[场地信息面板] 加载失败', { spaceId: id, error: e?.message, costMs: elapsedMs(begin) })
-  } finally {
-    if (seq === previewSeq) previewLoading.value = false
-  }
-}
-
-function closePreview() {
-  if (!previewVisible.value) return
-  previewVisible.value = false
-  previewSeq += 1
-  console.info('[场地信息面板] 关闭', { spaceId: previewSpaceId.value })
-  unbindPreviewGlobal()
-}
-
-// 点击面板外部任意处收起（捕获阶段监听，不拦截弹窗等页面元素的正常交互）
-let previewGlobalBound = false
-
-function onGlobalPointerDown(event) {
-  if (!previewVisible.value) return
-  if (event.target?.closest?.('.space_preview__panel')) return
-  closePreview()
-}
-
-function bindPreviewGlobal() {
-  if (previewGlobalBound) return
-  document.addEventListener('mousedown', onGlobalPointerDown, true)
-  previewGlobalBound = true
-}
-
-function unbindPreviewGlobal() {
-  if (!previewGlobalBound) return
-  document.removeEventListener('mousedown', onGlobalPointerDown, true)
-  previewGlobalBound = false
-}
-
-// 新建/编辑弹窗关闭（提交成功/取消）时联动收起左侧面板，避免残留旧场地信息
-watch(formVisible, (visible) => {
-  if (!visible) closePreview()
-})
-
-onBeforeUnmount(unbindPreviewGlobal)
-
-function retryPreview() {
-  if (previewSpaceId.value) loadPreviewDetail(previewSpaceId.value)
-}
-
-/** UTC ISO 时间点按上海时区展示（不依赖浏览器本地时区） */
-function formatShanghai(value) {
-  return value ? formatInstant(value) : '—'
 }
 
 async function onSubmitForm({ id, payload }) {
@@ -984,177 +730,6 @@ onMounted(() => {
 
 .space_list__input--suggest {
   width: 220px;
-}
-
-/* 关键字实时联想候选（下拉由 Element Plus teleport 到 body，层级高于页面元素） */
-.space_list__suggest {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.space_list__suggest_name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--g1);
-}
-
-.space_list__suggest_meta {
-  flex-shrink: 0;
-  font-size: 12px;
-  color: var(--g4);
-}
-
-.space_list__suggest_empty {
-  padding: 4px 0;
-  font-size: 12px;
-  color: var(--g3);
-  text-align: center;
-}
-
-/* 页面左侧弹出式场地信息面板（层级高于弹窗；容器不拦截点击，由全局监听实现点击外部收起） */
-.space_preview {
-  position: fixed;
-  inset: 0;
-  z-index: 3200;
-  pointer-events: none;
-}
-
-.space_preview__panel {
-  position: absolute;
-  left: 16px;
-  top: 84px;
-  width: clamp(280px, 26vw, 360px);
-  max-height: calc(100vh - 120px);
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  background: var(--surface);
-  border: .5px solid var(--hair);
-  border-radius: var(--r-md);
-  box-shadow: 0 18px 48px rgba(15, 23, 42, .18);
-  pointer-events: auto;
-}
-
-.space_preview__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.space_preview__name {
-  margin: 2px 0 0;
-  font-size: 16px;
-  font-weight: var(--fw-semibold);
-  color: var(--g1);
-  word-break: break-all;
-}
-
-.space_preview__head_actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.space_preview__grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px 12px;
-  margin: 0;
-}
-
-.space_preview__grid > div {
-  min-width: 0;
-}
-
-.space_preview__grid dt {
-  margin-bottom: 3px;
-  font-size: 12px;
-  color: var(--g3);
-}
-
-.space_preview__grid dd {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--g1);
-  word-break: break-word;
-}
-
-.space_preview__grid .is_span2 {
-  grid-column: 1 / -1;
-}
-
-.space_preview__grid .is_mono {
-  font-family: var(--font-num);
-  font-size: 12px;
-  color: var(--g2);
-  word-break: break-all;
-}
-
-.space_preview__grid .is_facilities {
-  white-space: pre-wrap;
-}
-
-.space_preview__empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 24px 8px;
-  font-size: 13px;
-  color: var(--g3);
-  text-align: center;
-}
-
-.space_preview__empty p {
-  margin: 0;
-}
-
-/* 平滑展开/收起（240ms） */
-.space_preview-enter-active,
-.space_preview-leave-active {
-  transition: opacity var(--dur) var(--ease);
-}
-
-.space_preview-enter-from,
-.space_preview-leave-to {
-  opacity: 0;
-}
-
-.space_preview-enter-active .space_preview__panel,
-.space_preview-leave-active .space_preview__panel {
-  transition: transform var(--dur) var(--ease);
-}
-
-.space_preview-enter-from .space_preview__panel,
-.space_preview-leave-to .space_preview__panel {
-  transform: translateX(-24px);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .space_preview-enter-active,
-  .space_preview-leave-active,
-  .space_preview-enter-active .space_preview__panel,
-  .space_preview-leave-active .space_preview__panel {
-    transition: none;
-  }
-}
-
-@media (max-width: 768px) {
-  .space_preview__panel {
-    left: 12px;
-    right: 12px;
-    top: 64px;
-    width: auto;
-  }
 }
 
 .space_list__select {

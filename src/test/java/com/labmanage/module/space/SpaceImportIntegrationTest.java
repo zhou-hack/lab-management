@@ -44,7 +44,9 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.sql.init.mode=always",
         "spring.sql.init.encoding=UTF-8",
         "spring.sql.init.schema-locations=classpath:sql/space_schema_h2.sql",
-        "spring.sql.init.data-locations=classpath:sql/space_data_h2.sql"
+        "spring.sql.init.data-locations=classpath:sql/space_data_h2.sql",
+        // B3：本类聚焦导入业务逻辑，关闭二级认证；二级认证拦截由 SensitiveSafeCheckIntegrationTest 覆盖
+        "lab.security.sensitive-safe-check=false"
 }, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import(SpaceImportIntegrationTest.TestAuthConfig.class)
 @Sql(scripts = {

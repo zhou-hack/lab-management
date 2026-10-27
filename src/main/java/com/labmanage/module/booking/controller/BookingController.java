@@ -4,6 +4,7 @@ import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.labmanage.common.exception.BusinessException;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
+import com.labmanage.config.SensitiveOperationGuard;
 import com.labmanage.module.booking.dto.BatchApproveDTO;
 import com.labmanage.module.booking.dto.BookingCancelDTO;
 import com.labmanage.module.booking.dto.BookingCheckoutDTO;
@@ -46,8 +47,11 @@ public class BookingController {
 
     private final BookingService bookingService;
 
-    public BookingController(BookingService bookingService) {
+    private final SensitiveOperationGuard sensitiveGuard;
+
+    public BookingController(BookingService bookingService, SensitiveOperationGuard sensitiveGuard) {
         this.bookingService = bookingService;
+        this.sensitiveGuard = sensitiveGuard;
     }
 
     @PostMapping
@@ -66,6 +70,18 @@ public class BookingController {
     @SaCheckPermission("booking:lab:approve")
     public Result<PageResult<BookingVO>> pageAll(@Valid @ModelAttribute BookingPageQuery query) {
         return Result.success(bookingService.pageAll(query));
+    }
+
+    /**
+     * 管理员强制取消（A2）：仅 APPROVED 单；释放占用槽、记 FORCE_CANCEL 事件，
+     * 原因必填留痕。待审批单请使用驳回终止（语义不重叠）。
+     */
+    @PostMapping("/{id}/force_cancel")
+    @SaCheckPermission("booking:lab:approve")
+    public Result<Void> forceCancel(@PathVariable Long id, @Valid @RequestBody BookingCancelDTO dto) {
+        sensitiveGuard.checkSafe("预约强制取消");
+        bookingService.forceCancel(id, dto);
+        return Result.success();
     }
 
     /**
@@ -137,6 +153,7 @@ public class BookingController {
     @PostMapping("/{id}/approve")
     @SaCheckPermission("booking:lab:approve")
     public Result<Void> approve(@PathVariable Long id) {
+        sensitiveGuard.checkSafe("预约批准");
         bookingService.approve(id);
         return Result.success();
     }
@@ -148,6 +165,7 @@ public class BookingController {
     @PostMapping("/batch_approve")
     @SaCheckPermission("booking:lab:approve")
     public Result<BatchApproveResultVO> batchApprove(@Valid @RequestBody BatchApproveDTO dto) {
+        sensitiveGuard.checkSafe("预约批量批准");
         java.util.List<String> approvedIds = new java.util.ArrayList<>();
         java.util.List<BatchApproveResultVO.FailedItem> failedItems = new java.util.ArrayList<>();
         for (Long id : dto.ids()) {
@@ -176,6 +194,7 @@ public class BookingController {
     @PostMapping("/{id}/reject")
     @SaCheckPermission("booking:lab:approve")
     public Result<Void> reject(@PathVariable Long id, @Valid @RequestBody BookingRejectDTO dto) {
+        sensitiveGuard.checkSafe("预约驳回");
         bookingService.reject(id, dto);
         return Result.success();
     }
@@ -187,6 +206,7 @@ public class BookingController {
     @PostMapping("/{id}/checkin")
     @SaCheckPermission("booking:lab:approve")
     public Result<Void> checkin(@PathVariable Long id) {
+        sensitiveGuard.checkSafe("开门签到");
         bookingService.checkin(id);
         return Result.success();
     }
@@ -199,6 +219,7 @@ public class BookingController {
     @SaCheckPermission("booking:lab:approve")
     public Result<Void> checkout(@PathVariable Long id,
                                  @Valid @RequestBody(required = false) BookingCheckoutDTO dto) {
+        sensitiveGuard.checkSafe("结束清点");
         bookingService.checkout(id, dto);
         return Result.success();
     }

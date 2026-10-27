@@ -1,0 +1,28 @@
+# 生产环境配置（B2/B13）：文档端点整体关闭；数据源凭据无兜底，缺失即启动失败。
+# 使用方式：--spring.profiles.active=prod，并通过环境变量注入 DB_* 与 CORS_ORIGINS。
+spring:
+  datasource:
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT:3306}/${DB_NAME}?useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&preserveInstants=true&serverTimezone=UTC
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    open-in-view: false
+
+sa-token:
+  is-log: false
+
+# B2：生产环境不暴露接口文档（Swagger/Knife4j 端点不注册）
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+knife4j:
+  enable: false
+
+app:
+  cors:
+    # 生产跨域白名单由环境变量注入（逗号分隔），不内置任何本机地址
+    allowed-origins: ${CORS_ORIGINS}

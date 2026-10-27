@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>实验室场地预约_业务流程图（v2.2 · 2026-10-26 全量修复实施版）</title>
+<style>
+  body{margin:0;background:#e9ebee;color:#1a1a1a;font-family:"Microsoft YaHei","SimSun","PingFang SC",sans-serif;}
+  .page{max-width:1340px;margin:0 auto;padding:24px 20px 56px;}
+  h2{font-size:17px;margin:34px 0 8px;}
+  .meta{color:#555;font-size:12.5px;margin-bottom:6px;}
+  .card{background:#fff;border:1px solid #999;padding:14px;overflow-x:auto;}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12.5px;color:#333;margin:8px 0 0;}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .sw{display:inline-block;width:26px;height:16px;background:#fff;border:1.5px solid #333;}
+  .sw.dec{transform:rotate(45deg) scale(.75);width:14px;height:14px;}
+  .sw.ell{border-radius:50%;}
+  .sw.doc{clip-path:polygon(0 0,80% 0,100% 25%,100% 100%,0 100%);}
+  .sw.ann{border-style:dashed;}
+  .sw.ln{border:none;border-top:1.6px solid #333;height:0;}
+  .sw.ln.d{border-top-style:dashed;}
+  table{border-collapse:collapse;width:100%;font-size:13px;margin-top:8px;}
+  th,td{border:1px solid #888;padding:7px 10px;text-align:left;vertical-align:top;}
+  th{background:#f0f0f0;}
+  tr:nth-child(even) td{background:#fafafa;}
+  .tag{display:inline-block;padding:1px 8px;border:1px solid #666;border-radius:9px;font-size:11.5px;margin-right:4px;background:#fff;}
+  .note{font-size:12.5px;color:#444;margin-top:8px;line-height:1.7;}
+  svg text{font-family:inherit;}
+</style>
+</head>
+<body>
+<div class="page">
+  <h2>实验室场地预约 · 业务流程图集（v2.2）</h2>
+  <div class="meta">依据：docs/智联教室PRD.md（流程五、4.5.10、附录 B.3）、docs/流程清单.md、docs/场地模块开发文档清单.md、docs/数据库设计.md、docs/场地流程图.md v1.1、sql/booking_flow_deploy_说明.md 及 module/space、module/booking 源码整理 ｜ 版本：v2.2（2026-10-26 按《项目整体审核问题清单 v1.5》全量修复实施同步）</div>
+  <div class="legend">
+    <span><i class="sw ell"></i>开始 / 结束</span>
+    <span><i class="sw"></i>处理节点</span>
+    <span><i class="sw dec"></i>判断分支</span>
+    <span><i class="sw doc"></i>数据 / 单据</span>
+    <span><i class="sw ann"></i>注释 / 派生</span>
+    <span><i class="sw ln"></i>主流程</span>
+    <span><i class="sw ln d"></i>异常 / 异步 / 派生分支</span>
+  </div>
+  <div class="note">
+    v2 修订要点：① 图一补齐「未签到但已进入时段 → IN_USE（派生）」路径（C1）；② 图一撤销节点改为「无时间限制」并标注已签到亦可撤销的缺口（B22）；③ 图二只读访问措辞改为「经 list/read 授权」（B21）；④ 图三占用槽红字修正为「仅结束清点 / 本人撤销会写入 released_at，超时取消只作用于无槽的 PENDING 单」（C2）；⑤ 三图相互指引（C3）；⑥ 附表新增 B22-B24 与 C1-C3 登记。<br>
+    v2.1 修正（2026-10-26 源码复核）：⑦ 图二移除「一键复制 / 名称实时查重 check_name」节点与「名称归一化」表述——清单 v1.2 第四章登记的这些功能在当前代码中不存在（SpaceController 无对应端点），属登记有误；⑧ 附表更正 B17/B18 为「待修」（代码中无对应修复：导入分钟未校验、DuplicateKeyException 无 40900 映射）；⑨ 图三 runtimePhase 按代码判定顺序精确化（有 CHECKOUT 恒 FINISHED、有 CHECKIN 恒 IN_USE，仅无事件时按时间窗派生）；⑩ 图一「通知」泳道更正为「通知·留痕」（一期无消息推送模块）；⑪ 修复两处标签压线。<br>
+    v2.1 补丁（2026-10-26 修复实施后）：⑫ B1/B22/B17/B18/B19 真实落地并验证（编译 + 50/50 集成测试 + ESLint 0 错误），图一撤销节点、附表对应行与图二注释同步改为「已修」口径。<br>
+    v2.2 同步（2026-10-26 全量修复实施）：⑬ A1 落地——定时任务对超 end_at 未清点的 APPROVED 单自动完结（AUTO_FINISH 事件 + 幂等释放占用槽，宽限 2 小时可配），图一「占用未释放」节点与图三释放口径同步更新；⑭ A2 落地——管理员强制取消（POST /{id}/force_cancel，原因必填，事件记 FORCE_CANCEL，前端列表已加入口），图三 CANCELLED 来源补 FORCE；⑮ B23/B24 落地——清点不得早于 startAt、超过 endAt 不可签到；⑯ 附表 A1/B23/B24 行与审核提示同步改为「已修」口径；⑰ P2 修复——图三红字残留旧口径已全部清除。
+  </div>
+
+  <h2>图一 · 实验室场地预约_业务流程图（主流程泳道图）</h2>
+  <div class="meta">阶段自上而下：申请 → 审批 → 使用与归档；泳道按角色/系统划分。学生为只读身份，不能发起预约（见注释）。</div>
+  <div class="card" id="d1"></div>
+
+  <h2>图二 · 场地台账管理流程（lab 单表 · module/space）</h2>
+  <div class="meta">只有 AVAILABLE 场地可被预约；删除前做三重引用检查（LAB 授权 + 未结预约 + 未释放占用）；停用联动详见图一审批分支。</div>
+  <div class="card" id="d2"></div>
+
+  <h2>图三 · 场地预约单状态机与占用槽（lab_slot）生命周期</h2>
+  <div class="meta">主状态落库四态：PENDING / APPROVED / REJECTED / CANCELLED；UPCOMING / IN_USE / FINISHED 为派生展示，不落库（派生规则以本图为准）。</div>
+  <div class="card" id="d3"></div>
+
+  <h2>附表 · 异常与边界处理路径汇总</h2>
+  <div class="card">
+    <table>
+      <tr><th style="width:200px">异常场景</th><th>触发节点</th><th>处理路径</th><th style="width:150px">错误码 / 去向</th></tr>
+      <tr><td>学生尝试发起/取消/审批/签到</td><td>全部写接口</td><td>前端按权限隐藏入口，服务端身份门禁兜底拦截（学生纯只读）</td><td><span class="tag">40300</span></td></tr>
+      <tr><td>场地非 AVAILABLE（维护中/已关闭）</td><td>提交校验、批准复核</td><td>提交与批准两处均校验场地状态，停用期间新预约被拦截</td><td><span class="tag">40900</span></td></tr>
+      <tr><td>人数超容量 / 时间非法（早于当前、跨天、超出开放窗口、节次不一致）</td><td>提交校验链</td><td>逐条拦截并提示具体原因；节次须与起止时间推导一致（上海节次→UTC）</td><td><span class="tag">40000</span></td></tr>
+      <tr><td>时段冲突（提交时）</td><td>lab_slot 冲突预检</td><td>半开区间 [start,end) 重叠判定，仅未释放占用参与；端点相接不算冲突</td><td><span class="tag">40900</span> 返回改时段</td></tr>
+      <tr><td>审批并发双通过</td><td>批准（前置复核）</td><td>场地行 SELECT ... FOR UPDATE 串行化 + 锁内二次冲突校验，后批者拒绝不抢占</td><td><span class="tag">40900</span></td></tr>
+      <tr><td>申请人审自己的单</td><td>批准</td><td>拦截并提示交由其他管理员核对</td><td><span class="tag">40300</span></td></tr>
+      <tr><td>start_at 已过仍未核对</td><td>定时任务（每 10 分钟）</td><td>自动取消，记 TIMEOUT_CANCEL 事件（AUTO_EXPIRED），逐条独立事务失败不阻断整批</td><td>CANCELLED 自动</td></tr>
+      <tr><td>周期规则已结束仍未被核对</td><td>定时任务（周期扫描）</td><td>按 cycle_end_date 整单自动取消（AUTO_EXPIRED），未生成任何子单</td><td>CANCELLED 自动</td></tr>
+      <tr><td>批量批准部分失败</td><td>批量批准（≤100 条）</td><td>逐单独立事务，成功入 approvedIds，失败附原因入 failedItems（状态已变更/时段冲突），不整体回滚</td><td>部分成功</td></tr>
+      <tr><td>APPROVED 预约超过结束时间仍未清点</td><td>定时任务（每 10 分钟）</td><td><b>A1 已修（2026-10-26 v1.5）</b>：超 end_at + 宽限（默认 2 小时，lab.booking.auto-finish-delay-hours 可配）仍未清点的 APPROVED 单自动完结——记 AUTO_FINISH 事件、幂等释放占用槽（已有清点事件的跳过），逐条独立事务失败不阻断整批</td><td>自动完结 · 已修</td></tr>
+      <tr><td><b>B22 已签到（IN_USE）后仍被撤销</b></td><td>本人撤销</td><td>修复前 cancel 不查 CHECKIN 事件：占用槽立即释放、清点环节被跳过。<b>2026-10-26 已修</b>：已签到单撤销返回 40900，须先由管理员结束清点</td><td><span class="tag">40900</span> 已修</td></tr>
+      <tr><td><b>B23 结束清点早于实际开始</b></td><td>结束清点</td><td><b>2026-10-26 已修</b>：清点时间不得早于 startAt，违反返回 40900「未到预约开始时间，无法结束清点」，杜绝「秒签秒清」提前释放占用</td><td><span class="tag">40900</span> 已修</td></tr>
+      <tr><td><b>B24 长期未签到仍可签到</b></td><td>开门签到</td><td><b>2026-10-26 已修</b>：超过 endAt 不可签到（40900「预约结束时间已过」）；配合 A1 超时自动完结，滞留 APPROVED 单由定时任务清点释放，不再存在「滞留单激活后再撤销」路径</td><td><span class="tag">40900</span> 已修</td></tr>
+      <tr><td>已结束清点的预约仍被撤销</td><td>本人撤销</td><td>修复前：清点后主状态仍为 APPROVED，撤销条件仅判 PENDING/APPROVED。<b>2026-10-26 随 B22 一并消除</b>：已清点单存在 CHECKIN 事件，撤销返回 40900</td><td><span class="tag">40900</span> 已修</td></tr>
+      <tr><td>场地停用（CLOSED）后的存量单</td><td>提交 / 批准 / 删除</td><td>新提交与新批准均被场地状态拦截；存量 PENDING 到 start_at 后自动取消；存量 APPROVED 保留且占用不释放，需人工撤销；删除被引用检查拦截</td><td>40900 / 自动取消</td></tr>
+      <tr><td>重复签到 / 未签到先清点 / 重复清点 / 提前签到</td><td>开门签到、结束清点</td><td>按 document_event 事件查重，幂等拦截</td><td><span class="tag">40900</span></td></tr>
+      <tr><td>非本人取消 / 无权限看详情</td><td>取消、详情</td><td>仅申请人本人可取消；详情须本人或持 approve/view 权限</td><td><span class="tag">40300</span></td></tr>
+      <tr><td>周期预约重复提交 / 段冲突</td><td>周期建单</td><td>幂等键防重；逐段预检冲突命中列冲突日期；批准时锁内重检，冲突整单拒绝</td><td><span class="tag">40900</span></td></tr>
+      <tr><td>删除场地存在引用</td><td>场地删除</td><td>LAB 级授权 + 未结预约（PENDING/APPROVED）+ 未释放占用，命中即拒绝</td><td><span class="tag">40900</span></td></tr>
+      <tr><td>场地重名（含已删除记录）</td><td>新增 / 编辑 / 导入</td><td>名称全局唯一且删除后不复用，服务层前置校验（含逻辑删除）拦截；并发撞名由 uk_lab_name 兜底</td><td><span class="tag">40900</span></td></tr>
+      <tr><td>并发创建/导入同名场地</td><td>新增 / 导入</td><td>服务层查重为 check-then-act，并发时由 DB 唯一键 uk_lab_name 兜底；DuplicateKeyException 已全局映射 40900（B18 已修）</td><td><span class="tag">40900</span> 已修</td></tr>
+      <tr><td>导入开放时段非法（如 08:99）</td><td>批量导入</td><td>行级校验：小时≤23、分钟≤59、开始早于结束，非法行记入失败明细（B17 已修，不再触发 500）</td><td><span class="tag">40000</span> 行级提示 · 已修</td></tr>
+      <tr><td>PRD 二期登记项（未实施）</td><td>—</td><td>学生申请+老师背书（PENDING_ENDORSE）、强制结束 FORCE_FINISH、lab_usage 台账、自动 IN_USE/FINISHED 落库、签到环境照，均为二期预留</td><td>—</td></tr>
+      <tr><td><b>C1 图一 IN_USE 派生路径</b></td><td>图一 / 图三</td><td>v2 已补「未签到但已进入时段 → IN_USE（派生）」虚线路径，与图三 runtimePhase 规则一致</td><td>图档已修</td></tr>
+      <tr><td><b>C2 图三占用槽释放口径</b></td><td>图三</td><td>v2 已改为「超时取消只作用于无槽的 PENDING 单」；v2.2 随 A1/A2 落地补全四条写入路径：结束清点 / 本人撤销 / 管理员强制取消 / 超时自动完结</td><td>图档已修</td></tr>
+      <tr><td><b>C3 台账与预约联动指引</b></td><td>图一 / 图二</td><td>v2 在图二停用分支加「详见图一审批分支」指引，图一保留停用影响说明</td><td>图档已修</td></tr>
+    </table>
+    <div class="note">
+      口径说明：PRD（4.5.10）与流程清单中的"学生发起 + 老师背书 + 到点自动 IN_USE/FINISHED"为产品设计目标；当前实现按 booking_flow_deploy 说明收口为权级流程——教师发起、管理员核对、管理员开门签到/结束清点、学生只读，IN_USE/FINISHED 由签到清点事件与时间派生展示。本图以实际实现为准，PRD 差异项在上表末几行登记。<br>
+      审核提示（详见《项目整体审核问题清单 v1.5》）：① 占用滞留风险（A1）已修——超时自动完结调度落地；② 管理员强制取消通道（A2）已修——force_cancel 接口 + 前端按钮；③ 已签到禁撤销（B22，已修）；④ 清点下界（B23）、签到上限（B24）均已修。本期审核问题除 B3（二级认证 UI 改造，单列排期）外全部闭环。
+    </div>
+  </div>
+</div>
+
+<script>
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,p){const n=document.createElementNS(NS,t);for(const k in a)n.setAttribute(k,a[k]);if(p)p.appendChild(n);return n;}
+function txt(svg,x,y,lines,{size=13,fill='#1a1a1a',bold=false,anchor='middle',lh=16}={}){
+  const t=el('text',{x,y,'text-anchor':anchor,'font-size':size,fill,...(bold?{'font-weight':'600'}:{})},svg);
+  lines.forEach((s,i)=>{const sp=el('tspan',{x,dy:i===0?0:lh},t);sp.textContent=s;});
+  return t;
+}
+function defs(svg){
+  const d=el('defs',{},svg);
+  const m=el('marker',{id:'ar',viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:8,markerHeight:8,orient:'auto-start-reverse'},d);
+  el('path',{d:'M0,0L10,5L0,10z',fill:'#1a1a1a'},m);
+}
+function edge(svg,pts,{dash=false,label=null,lx=null,ly=null,lsize=12,color='#1a1a1a'}={}){
+  const p=pts.map((q,i)=>(i?'L':'M')+q[0]+','+q[1]).join('');
+  el('path',{d:p,fill:'none',stroke:color,'stroke-width':1.4,
+    ...(dash?{'stroke-dasharray':'6 4'}:{}),'marker-end':'url(#ar)'},svg);
+  if(label)txt(svg,lx??((pts[0][0]+pts[pts.length-1][0])/2),ly??((pts[0][1]+pts[pts.length-1][1])/2-6),
+    Array.isArray(label)?label:[label],{size:lsize,bold:true});
+}
+const N={};
+function rect(svg,id,cx,cy,w,h,title,subs=[],{dash=false}={}){
+  const x=cx-w/2,y=cy-h/2,g=el('g',{},svg);
+  el('rect',{x,y,width:w,height:h,fill:'#fff',stroke:'#1a1a1a','stroke-width':1.4,...(dash?{'stroke-dasharray':'6 4'}:{})},g);
+  const lines=[title,...subs],lh=16;let y0=cy-(lines.length-1)*lh/2+4;
+  txt(g,cx,y0,[title],{size:13});
+  subs.forEach((s,i)=>txt(g,cx,y0+(i+1)*lh,[s],{size:11,fill:'#333'}));
+  N[id]={cx,cy,w,h,t:cy-h/2,b:cy+h/2,l:cx-w/2,r:cx+w/2};
+}
+function diamond(svg,id,cx,cy,w,h,label){
+  el('path',{d:`M${cx},${cy-h/2}L${cx+w/2},${cy}L${cx},${cy+h/2}L${cx-w/2},${cy}Z`,fill:'#fff',stroke:'#1a1a1a','stroke-width':1.4},svg);
+  txt(svg,cx,cy+4,Array.isArray(label)?label:[label],{size:12.5});
+  N[id]={cx,cy,w,h,t:cy-h/2,b:cy+h/2,l:cx-w/2,r:cx+w/2};
+}
+function ellipse(svg,id,cx,cy,label){
+  el('ellipse',{cx,cy,rx:48,ry:22,fill:'#fff',stroke:'#1a1a1a','stroke-width':1.4},svg);
+  txt(svg,cx,cy+4,[label],{size:13});
+  N[id]={cx,cy,w:96,h:44,t:cy-22,b:cy+22,l:cx-48,r:cx+48};
+}
+function doc(svg,id,cx,cy,w,h,lines){
+  const x=cx-w/2,y=cy-h/2,f=14;
+  el('path',{d:`M${x},${y}h${w-f}l${f},${f}v${h-f}h${-w}Z`,fill:'#fff',stroke:'#1a1a1a','stroke-width':1.4},svg);
+  el('path',{d:`M${x+w-f},${y}v${f}h${f}`,fill:'none',stroke:'#1a1a1a','stroke-width':1.2},svg);
+  txt(svg,cx-4,cy-(lines.length-1)*7+3,lines,{size:11,lh:15});
+  N[id]={cx,cy,w,h,t:cy-h/2,b:cy+h/2,l:cx-w/2,r:cx+w/2};
+}
+function swimlane(svg,W,lanes,stages,title){
+  const laneLabelW=70,laneW=(W-2-laneLabelW)/lanes.length,titleH=36,headH=36,Y0=titleH+headH;
+  const stageY=[];let acc=Y0;stages.forEach(s=>{stageY.push(acc);acc+=s.h;});const H=acc+2;
+  el('rect',{x:1,y:1,width:W-2,height:H-2,fill:'#fff',stroke:'#1a1a1a','stroke-width':1.6},svg);
+  el('line',{x1:1,y1:titleH,x2:W-1,y2:titleH,stroke:'#1a1a1a','stroke-width':1.4},svg);
+  txt(svg,W/2,24,[title],{size:15,bold:true});
+  el('line',{x1:1,y1:Y0,x2:W-1,y2:Y0,stroke:'#1a1a1a','stroke-width':1.4},svg);
+  txt(svg,laneLabelW/2,titleH+23,['阶段'],{size:13,bold:true});
+  lanes.forEach((n,i)=>{
+    const x=laneLabelW+i*laneW;
+    el('line',{x1:x,y1:titleH,x2:x,y2:H-1,stroke:'#1a1a1a','stroke-width':1.2},svg);
+    txt(svg,x+laneW/2,titleH+23,[n],{size:13,bold:true});
+  });
+  stageY.forEach((y,i)=>{
+    el('line',{x1:1,y1:y,x2:W-1,y2:y,stroke:'#1a1a1a','stroke-width':1.2},svg);
+    const chars=stages[i].n.split('');
+    txt(svg,laneLabelW/2,y+stages[i].h/2-(chars.length-1)*10,chars,{size:14,bold:true,lh:20});
+  });
+  return {stageY,laneC:i=>laneLabelW+i*laneW+laneW/2,H};
+}
+
+/* ============ 图一：实验室场地预约_业务流程图 ============ */
+(function(){
+  const W=1272;
+  const svg=el('svg',{width:W,height:1094,viewBox:`0 0 ${W} 1094`},document.getElementById('d1'));
+  defs(svg);
+  const {stageY,laneC}=swimlane(svg,W,
+    ['申请人（教师）','预约申请','审批（管理员）','系统（占用·台账）','通知·留痕'],
+    [{n:'申请',h:320},{n:'审批',h:360},{n:'使用与归档',h:340}],
+    '实验室场地预约_业务流程图');
+  const s0=stageY[0],s1=stageY[1],s2=stageY[2];
+  const L1=laneC(0),L2=laneC(1),L3=laneC(2),L4=laneC(3),L5=laneC(4);
+
+  // 申请
+  ellipse(svg,'start',L1,s0+35,'开始');
+  rect(svg,'view',L1,s0+100,150,44,'场地列表·占用总览');
+  rect(svg,'submit',L1,s0+170,150,44,'提交预约申请');
+  doc(svg,'docN',L1,s0+262,150,58,['场地·日期·节次','人数·课程·事由','（周期：每周几+节次）']);
+  diamond(svg,'dValid',L2,s0+170,196,92,'校验与冲突检查？');
+  rect(svg,'failN',L5,s0+100,170,56,'校验拦截·原因提示',['40000 / 40300 / 40900']);
+  rect(svg,'stuNote',L2,s0+290,190,50,'学生为只读身份',['（背书链为二期预留）'],{dash:true});
+
+  edge(svg,[[N.start.cx,N.start.b],[N.view.cx,N.view.t]]);
+  edge(svg,[[N.view.cx,N.view.b],[N.submit.cx,N.submit.t]]);
+  edge(svg,[[N.submit.cx,N.submit.b],[N.docN.cx,N.docN.t]]);
+  edge(svg,[[N.submit.r,N.submit.cy],[N.dValid.l,N.dValid.cy]]);
+  edge(svg,[[N.dValid.r,N.dValid.cy],[L5,N.dValid.cy],[L5,N.failN.b]],{label:'否',lx:N.dValid.r+22,ly:N.dValid.cy-8});
+  edge(svg,[[N.dValid.cx,N.dValid.b],[N.dValid.cx,s1+60],[L3-85,s1+60]],{label:'是',lx:580,ly:s1+50});
+
+  // 审批
+  rect(svg,'review',L3,s1+60,170,50,'管理员核对',['待办 ADMIN_REVIEW']);
+  diamond(svg,'dPass',L3,s1+175,150,84,'是否通过？');
+  rect(svg,'rejectN',L5,s1+60,160,44,'驳回留痕（原因必填）');
+  rect(svg,'slot',L4,s1+175,180,56,'批准（单条 / 批量）',['写占用槽 lab_slot · APPROVED','批量≤100 条 · 周期规则一次批准']);
+  rect(svg,'passN',L5,s1+175,170,44,'审批结果留痕可见');
+  rect(svg,'timeoutN',L4,s1+285,180,56,'超时自动取消',['每10分钟扫描·start_at已过']);
+  rect(svg,'cancelNotice',L5,s1+285,170,44,'取消 / 超时 / 强制取消留痕');
+  // v2.1：撤销无时间限制（不写「开始前」），已签到后禁撤销（B22 已修）
+  rect(svg,'cancelSelf',L1,s1+285,190,56,'本人撤销（无时间限制）',['同步释放占用 · 已签到禁撤销（B22 已修）']);
+  rect(svg,'seriesNote',L2,s1+230,190,50,'周期预约规则（教师）',['星期+节次+周期起止 · 幂等键防重','批准后逐周生成单，逐单签到/清点'],{dash:true});
+
+  edge(svg,[[N.review.cx,N.review.b],[N.dPass.cx,N.dPass.t]]);
+  edge(svg,[[N.dPass.r,N.dPass.cy],[790,N.dPass.cy],[790,s1+113],[L5,s1+113],[L5,N.rejectN.b]],{label:'否',lx:N.dPass.r+20,ly:N.dPass.cy-8});
+  edge(svg,[[N.dPass.cx,N.dPass.b],[L4,N.dPass.b],[L4,N.slot.b]],{label:'是',lx:N.dPass.cx+18,ly:N.dPass.b+16});
+  edge(svg,[[N.slot.r,N.slot.cy],[N.passN.l,N.passN.cy]]);
+  edge(svg,[[N.review.r,N.review.cy],[810,N.review.cy],[810,N.timeoutN.cy],[N.timeoutN.l,N.timeoutN.cy]],{dash:true,label:'start_at 已过未核对',lx:806,ly:s1+130,lsize:11});
+  edge(svg,[[N.timeoutN.r,N.timeoutN.cy],[N.cancelNotice.l,N.cancelNotice.cy]],{dash:true});
+  // v2：撤销可从批准单直接到达，标为「任意时刻可撤销」
+  edge(svg,[[N.slot.cx,N.slot.b],[N.slot.cx,s1+238],[L1,s1+238],[L1,N.cancelSelf.t]],{dash:true,label:'任意时刻可撤销',lx:585,ly:s1+226,lsize:11});
+  edge(svg,[[N.passN.cx,N.passN.b],[N.passN.cx,s1+338],[L3,s1+338],[L3,s2+38]]);
+  edge(svg,[[N.failN.r,N.failN.cy],[1245,N.failN.cy]]);
+  edge(svg,[[N.rejectN.r,N.rejectN.cy],[1245,N.rejectN.cy]]);
+  edge(svg,[[N.cancelNotice.r,N.cancelNotice.cy],[1245,N.cancelNotice.cy]]);
+  edge(svg,[[1245,N.failN.cy],[1245,s2+310],[L1+48,s2+310]]);
+
+  // 使用与归档（v2：补「未签到但已进入时段 → IN_USE」派生路径 C1）
+  rect(svg,'checkin',L3,s2+60,170,50,'开门签到 CHECKIN',['到 start_at 后 · 不可重复']);
+  rect(svg,'inuse',L4,s2+70,180,48,'占用中 IN_USE（派生）');
+  rect(svg,'useN',L1,s2+60,170,48,'按预约时段使用场地');
+  rect(svg,'phaseNote',L4,s2+26,290,26,'未签到但已进入时段 → IN_USE（派生）',[],{dash:true});
+  rect(svg,'checkout',L3,s2+180,170,50,'结束清点 CHECKOUT',['须先签到 · 可填备注']);
+  diamond(svg,'dOk',L4,s2+180,150,84,'是否结束清点？');
+  rect(svg,'exc',L5,s2+180,150,48,'占用未释放',['超时自动完结（A1 已修）']);
+  rect(svg,'releaseN',L4,s2+262,180,48,'释放占用 · 台账完结');
+  rect(svg,'board',L5,s2+262,150,48,'预约情况 board',['教师/学生只读可见']);
+  ellipse(svg,'end',L1,s2+310,'结束');
+
+  edge(svg,[[N.checkin.cx,N.checkin.b],[N.checkout.cx,N.checkout.t]]);
+  edge(svg,[[N.checkout.r,N.checkout.cy],[N.dOk.l,N.dOk.cy]]);
+  edge(svg,[[N.dOk.cx,N.dOk.b],[N.releaseN.cx,N.releaseN.t]],{label:'是',lx:N.dOk.cx+16,ly:N.dOk.b+16});
+  edge(svg,[[N.dOk.r,N.dOk.cy],[N.exc.l,N.exc.cy]],{label:'否',lx:N.dOk.r+22,ly:N.dOk.cy-8});
+  edge(svg,[[N.exc.cx,N.exc.b],[N.exc.cx,s2+310]]);
+  edge(svg,[[N.releaseN.cx,N.releaseN.b],[N.releaseN.cx,s2+310]]);
+  // v2 C1：签到 → IN_USE；未签到（仅时段内）→ IN_USE 派生
+  edge(svg,[[N.checkin.r,N.checkin.cy],[N.inuse.l-40,N.checkin.cy],[N.inuse.l-40,N.inuse.cy],[N.inuse.l,N.inuse.cy]]);
+  edge(svg,[[N.phaseNote.cx,N.phaseNote.b],[N.phaseNote.cx,N.inuse.t]],{dash:true});
+  // 使用完毕 → 结束清点（沿左侧绕行，避免穿越判断框）
+  edge(svg,[[N.useN.r,N.useN.cy],[N.useN.r+25,N.useN.cy],[N.useN.r+25,N.checkout.cy],[N.checkout.l,N.checkout.cy]],{dash:true,color:'#666'});
+  // 占用中 → 是否结束清点判断
+  edge(svg,[[N.inuse.cx,N.inuse.b],[N.dOk.cx,N.dOk.t]],{dash:true,color:'#666'});
+  edge(svg,[[N.cancelNotice.r,N.cancelNotice.cy],[1230,s1+285],[1230,s2+262],[N.board.r,s2+262]],{dash:true});
+  edge(svg,[[N.cancelSelf.l,N.cancelSelf.cy],[88,N.cancelSelf.cy],[88,s2+310],[N.end.l,N.end.cy]],{dash:true});
+})();
+
+/* ============ 图二：场地台账管理流程（v2.1：修正只读口径 B21、停用指引 C3；移除未落地的复制/查重节点） ============ */
+(function(){
+  const W=1272,H=640;
+  const svg=el('svg',{width:W,height:H,viewBox:`0 0 ${W} ${H}`},document.getElementById('d2'));
+  defs(svg);
+  el('rect',{x:1,y:1,width:W-2,height:H-2,fill:'#fff',stroke:'#1a1a1a','stroke-width':1.6},svg);
+  el('line',{x1:1,y1:36,x2:W-1,y2:36,stroke:'#1a1a1a','stroke-width':1.4},svg);
+  txt(svg,W/2,24,['场地台账管理流程（/api/v1/space/spaces · v2.2）'],{size:15,bold:true});
+  el('line',{x1:1,y1:470,x2:W-1,y2:470,stroke:'#1a1a1a','stroke-width':1.2},svg);
+  el('line',{x1:70,y1:36,x2:70,y2:H-1,stroke:'#1a1a1a','stroke-width':1.2},svg);
+  txt(svg,35,250,['管','理','员'],{size:14,bold:true,lh:22});
+  txt(svg,35,556,['教','师','/','学','生'],{size:14,bold:true,lh:20});
+
+  ellipse(svg,'s',150,235,'开始');
+  rect(svg,'auth',300,235,170,56,'权限校验',['space:space:* · 无权限 40300']);
+  diamond(svg,'op',480,235,130,66,'操作类型？');
+  const branches=[
+    ['add','新增场地',['名称全局唯一（含已删除）· 容量 1-9999','时段缺省 08:00-21:00 · 状态 AVAILABLE']],
+    ['imp','批量导入',['CSV/XLS/XLSX ≤10MB · ≤5000行','行级校验 · 部分成功 · 失败明细可重传']],
+    ['edit','编辑场地',['时段/状态空值保留原值','重名 40900 · 可置 MAINTAINING']],
+    ['tog','启用 / 停用（批量≤100）',['停用前影响评估 pending_impact','AVAILABLE⇄CLOSED · 停用后新预约被拦截']],
+    ['del','删除场地',['逻辑删除 · 引用检查','LAB授权+未结预约+未释放占用 → 40900']],
+  ];
+  branches.forEach((b,i)=>{
+    const cy=60+i*68;
+    rect(svg,b[0],800,cy,340,54,b[1],b[2]);
+    edge(svg,[[545,235],[590,235],[590,cy],[630,cy]]);
+    edge(svg,[[970,cy],[1010,cy],[1010,235],[1048,235]]);
+  });
+  rect(svg,'write',1130,235,150,56,'写入 lab 表',['审计字段 · UTC 毫秒']);
+  ellipse(svg,'e',1130,350,'结束');
+  edge(svg,[[198,235],[215,235]]);
+  edge(svg,[[N.auth.r,N.auth.cy],[N.op.l,N.op.cy]]);
+  edge(svg,[[N.write.cx,N.write.b],[N.e.cx,N.e.t]]);
+  txt(svg,800,432,['任一校验失败 → 40000 / 40900 逐条提示；删除后名称不可复用'],{size:11.5,fill:'#333'});
+  txt(svg,800,449,['停用联动：停用后其 PENDING 单无法批准（start_at 过期自动取消），APPROVED 占用不自动释放，删除被引用检查拦截 —— 详见图一审批分支'],{size:11,fill:'#555'});
+  txt(svg,800,466,['并发重名由 DB 唯一键 uk_lab_name 兜底拦截并映射 40900（B18 已修）'],{size:11,fill:'#555'});
+
+  // v2：只读访问措辞修正（B21）
+  rect(svg,'read',420,556,480,90,'只读访问（space:space:list/read 授权）',['分页查询：名称/位置模糊 · 类型 · 状态 · 容量区间','详情 / options 下拉（availableOnly 仅 AVAILABLE）','stats 统计（状态计数+类型分布）· CSV 导出 ≤10000 行']);
+  rect(svg,'use2',920,556,300,66,'下游模块引用 lab.id',['预约 lab_booking / lab_slot','数据范围 · 助理授权 · 资产'],{dash:true});
+  edge(svg,[[660,556],[770,556]],{dash:true,label:'提供空间主档',lx:715,ly:544,lsize:11});
+})();
+
+/* ============ 图三：状态机与占用槽生命周期（v2：修正释放口径 C2） ============ */
+(function(){
+  const W=1272,H=532;
+  const svg=el('svg',{width:W,height:H,viewBox:`0 0 ${W} ${H}`},document.getElementById('d3'));
+  defs(svg);
+  el('rect',{x:1,y:1,width:W-2,height:H-2,fill:'#fff',stroke:'#1a1a1a','stroke-width':1.6},svg);
+  el('line',{x1:1,y1:36,x2:W-1,y2:36,stroke:'#1a1a1a','stroke-width':1.4},svg);
+  txt(svg,W/2,24,['lab_booking 状态机（落库四态 + 派生阶段）与 lab_slot 占用槽生命周期（v2.2）'],{size:15,bold:true});
+
+  ellipse(svg,'st',110,140,'提交');
+  rect(svg,'P',300,140,180,54,'PENDING 待核对',['approval_task READY']);
+  rect(svg,'A',640,140,180,54,'APPROVED 已批准',['写 lab_slot 占用']);
+  rect(svg,'R',300,310,180,54,'REJECTED 已驳回',['原因必填 · 留档可见']);
+  rect(svg,'X',640,310,200,54,'CANCELLED 已取消',['MANUAL 撤销 / FORCE 强制取消 / AUTO_EXPIRED 超时']);
+  edge(svg,[[158,140],[210,140]]);
+  edge(svg,[[390,140],[550,140]],{label:'管理员批准（行锁+复核）',lx:470,ly:126,lsize:11.5});
+  edge(svg,[[300,167],[300,283]],{label:'整单驳回',lx:352,ly:225,lsize:11.5});
+  edge(svg,[[390,158],[470,158],[470,310],[540,310]],{dash:true,label:'本人撤销 / 超时自动取消',lx:470,ly:286,lsize:11});
+  // v2.1：撤销标注无时间限制 + 已签到后禁撤销（B22 已修）
+  edge(svg,[[640,167],[640,283]],{dash:true,label:'本人撤销（无时间限制 · 已签到后禁撤销）',lx:736,ly:232,lsize:11});
+
+  rect(svg,'D',1020,140,330,140,'派生阶段 runtimePhase（不落库）',['UPCOMING：无事件且未到 start_at','IN_USE：已 CHECKIN 未清点，或无事件且处于时段内','FINISHED：已 CHECKOUT，或无事件且已过 end_at'],{dash:true});
+  edge(svg,[[730,140],[855,140]],{label:'签到/清点 + 时间驱动',lx:792,ly:126,lsize:11.5});
+
+  txt(svg,90,392,['lab_slot 占用槽生命周期：'],{size:13.5,bold:true,anchor:'start'});
+  rect(svg,'L1',340,450,260,54,'创建（批准时写入）',['lab_id + booking_id + start/end']);
+  rect(svg,'L2',680,450,260,54,'占用中（released_at 为空）',['参与冲突判定 · 占用总览可见']);
+  rect(svg,'L3',1020,450,270,54,'释放（released_at 写入）',['结束清点 / 本人撤销 / 强制取消 / 超时完结 · 同时段可再约']);
+  edge(svg,[[470,450],[550,450]]);
+  edge(svg,[[810,450],[885,450]]);
+  // v2 C2：红字口径修正
+  txt(svg,636,498,['提示：写入 released_at 的路径——结束清点 / 本人撤销 / 管理员强制取消 / 超时自动完结（A1）；超时取消只作用于无槽的 PENDING 单。'],{size:11.5,fill:'#a33'});
+  txt(svg,636,514,['已签到（IN_USE）后撤销已被拦截 40900（B22 已修，须先由管理员结束清点）；清点不得早于 startAt、签到不得晚于 endAt（B23/B24 已修）'],{size:11,fill:'#a33'});
+})();
+</script>
+</body>
+</html>

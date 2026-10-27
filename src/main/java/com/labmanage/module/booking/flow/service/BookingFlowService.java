@@ -2,6 +2,7 @@ package com.labmanage.module.booking.flow.service;
 
 import com.labmanage.module.booking.entity.LabBooking;
 import com.labmanage.module.booking.entity.LabBookingSeries;
+import com.labmanage.module.booking.enums.CancelType;
 import com.labmanage.module.booking.flow.entity.ApprovalTask;
 import com.labmanage.module.booking.flow.entity.BizDocument;
 import com.labmanage.module.booking.flow.entity.DocumentEvent;
@@ -148,10 +149,11 @@ public class BookingFlowService {
     }
 
     /**
-     * 撤销/超时取消：任务 CANCELLED + 事件。
+     * 撤销/超时取消/强制取消：任务 CANCELLED + 事件。
      *
      * @param system true=定时任务超时自动取消（TIMEOUT_CANCEL/SYSTEM）；
-     *               false=申请人本人撤销（CANCEL/USER）
+     *               false=申请人本人撤销（CANCEL/USER）或管理员强制取消
+     *               （FORCE_CANCEL，按 booking.cancelType==FORCE 区分）
      */
     @Transactional(rollbackFor = Exception.class)
     public void onCancel(BizDocument doc, LabBooking booking, Long actorId, boolean system, String reason) {
@@ -165,12 +167,24 @@ public class BookingFlowService {
         task.setDecisionComment(reason);
         taskMapper.updateById(task);
 
-        DocumentEventType type = system ? DocumentEventType.TIMEOUT_CANCEL : DocumentEventType.CANCEL;
+        DocumentEventType type = system ? DocumentEventType.TIMEOUT_CANCEL
+                : (booking.getCancelType() == CancelType.FORCE ? DocumentEventType.FORCE_CANCEL : DocumentEventType.CANCEL);
         ActorType actorType = system ? ActorType.SYSTEM : ActorType.USER;
         appendEvent(doc.getId(), booking.getId(), type,
                 booking.getStatus() == null ? null : booking.getStatus().name(),
                 "CANCELLED", system ? null : actorId, actorType,
                 now, reason, task.getId());
+    }
+
+    /**
+     * 超时自动完结（A1）：APPROVED 单超过结束时间仍未清点，定时任务释放占用
+     * 并写 AUTO_FINISH 事件（主状态保持 APPROVED，FINISHED 由事件/时间派生）。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void onAutoFinish(BizDocument doc, LabBooking booking, Instant now) {
+        appendEvent(doc.getId(), booking.getId(), DocumentEventType.AUTO_FINISH,
+                "APPROVED", "FINISHED", null, ActorType.SYSTEM,
+                now, "超过结束时间未清点，系统自动完结并释放占用", null);
     }
 
     /** 开门签到：CHECKIN 事件（to_status=IN_USE 派生态，不落 lab_booking 状态）。 */

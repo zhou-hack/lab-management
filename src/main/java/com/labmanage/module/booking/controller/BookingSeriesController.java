@@ -4,6 +4,7 @@ import cn.dev33.satoken.annotation.SaCheckPermission;
 import cn.dev33.satoken.annotation.SaMode;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
+import com.labmanage.config.SensitiveOperationGuard;
 import com.labmanage.module.booking.dto.BookingCancelDTO;
 import com.labmanage.module.booking.dto.BookingRejectDTO;
 import com.labmanage.module.booking.dto.SeriesCreateDTO;
@@ -39,8 +40,11 @@ public class BookingSeriesController {
 
     private final BookingSeriesService seriesService;
 
-    public BookingSeriesController(BookingSeriesService seriesService) {
+    private final SensitiveOperationGuard sensitiveGuard;
+
+    public BookingSeriesController(BookingSeriesService seriesService, SensitiveOperationGuard sensitiveGuard) {
         this.seriesService = seriesService;
+        this.sensitiveGuard = sensitiveGuard;
     }
 
     /** 已启用节次列表（时间轴节次小卡片数据源；任意预约权限可读） */
@@ -92,6 +96,7 @@ public class BookingSeriesController {
     @PostMapping("/series/{id}/approve")
     @SaCheckPermission("booking:lab:approve")
     public Result<Void> approveSeries(@PathVariable Long id) {
+        sensitiveGuard.checkSafe("周期预约批准");
         seriesService.approve(id);
         return Result.success();
     }
@@ -100,6 +105,7 @@ public class BookingSeriesController {
     @PostMapping("/series/{id}/reject")
     @SaCheckPermission("booking:lab:approve")
     public Result<Void> rejectSeries(@PathVariable Long id, @Valid @RequestBody BookingRejectDTO dto) {
+        sensitiveGuard.checkSafe("周期预约驳回");
         seriesService.reject(id, dto);
         return Result.success();
     }

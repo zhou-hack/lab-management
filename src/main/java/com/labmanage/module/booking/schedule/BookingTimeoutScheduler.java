@@ -13,6 +13,8 @@ import org.springframework.stereotype.Component;
  * 每 10 分钟扫描一次：start_time 已过仍处于 PENDING（待管理员核对）的预约，
  * 自动流转 CANCELLED(AUTO_EXPIRED) 并写 TIMEOUT_CANCEL 事件；同时扫描周期
  * 已结束仍未核对的 PENDING 周期预约规则整单取消。
+ * 同一轮次附带扫描（A1）：end_at 已过宽限仍未清点的 APPROVED 单自动完结
+ * 并释放占用槽（AUTO_FINISH 事件，主状态不变）。
  * 单条独立事务失败不阻断整批。应用启动后延迟 1 分钟首次执行。
  */
 @Component
@@ -35,12 +37,14 @@ public class BookingTimeoutScheduler {
         try {
             int cancelled = bookingService.autoCancelExpired();
             int seriesCancelled = seriesService.autoCancelExpired();
-            if (cancelled > 0 || seriesCancelled > 0) {
-                log.info("[定时任务] 超时未核对自动取消完成：单次预约 {} 条，周期预约 {} 条", cancelled, seriesCancelled);
+            int finished = bookingService.autoFinishStale();
+            if (cancelled > 0 || seriesCancelled > 0 || finished > 0) {
+                log.info("[定时任务] 超时扫描完成：单次取消 {} 条，周期取消 {} 条，超时自动完结 {} 条",
+                        cancelled, seriesCancelled, finished);
             }
         } catch (Exception e) {
             // 调度方法内异常不能抛出，否则 Scheduled 任务将停止后续调度
-            log.error("[定时任务] 超时未核对预约扫描异常：{}", e.getMessage(), e);
+            log.error("[定时任务] 超时预约扫描异常：{}", e.getMessage(), e);
         }
     }
 }

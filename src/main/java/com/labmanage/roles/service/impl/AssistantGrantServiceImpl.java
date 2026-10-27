@@ -151,7 +151,10 @@ public class AssistantGrantServiceImpl implements AssistantGrantService {
             throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "授权有效期最长一学年");
         }
 
-        // 防重：同一老师对同一学生仅允许一条生效中授权（调整请先撤销再新建）
+        // 防重：同一老师对同一学生仅允许一条生效中授权（调整请先撤销再新建）。
+        // B5：此处先查后插存在并发竞态，数据库层由生成列唯一键
+        // uk_assistant_grant_active_pair 兜底（sql/migrations/assistant_grant_active_unique.sql），
+        // 并发双写时第二笔落库报重复键，由全局异常处理映射为 40900
         Long activeCount = grantMapper.selectCount(new LambdaQueryWrapper<AssistantGrant>()
                 .eq(AssistantGrant::getTeacherId, teacherId)
                 .eq(AssistantGrant::getStudentId, student.getId())

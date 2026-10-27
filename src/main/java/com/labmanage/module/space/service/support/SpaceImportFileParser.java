@@ -161,6 +161,11 @@ public class SpaceImportFileParser {
             double value = cell.getNumericCellValue();
             if (value >= 0 && value < 1) {
                 int secondsOfDay = (int) Math.round(value * 24 * 60 * 60);
+                // B20：23:59:59.6 这类临界值四舍五入后可能得到 86400，越界会导致
+                // LocalTime.ofSecondOfDay 抛异常；钳制到当天最后一秒
+                if (secondsOfDay >= 24 * 60 * 60) {
+                    secondsOfDay = 24 * 60 * 60 - 1;
+                }
                 return LocalTime.ofSecondOfDay(secondsOfDay).format(HH_MM);
             }
         }

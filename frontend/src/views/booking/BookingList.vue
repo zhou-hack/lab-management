@@ -71,6 +71,7 @@
             :disabled-date="disablePast"
             class="tl__date"
             @change="onDateChanged"
+            @visible-change="onDatePanelToggle"
           />
         </el-form-item>
         <el-form-item label="节次筛选">
@@ -245,7 +246,25 @@
           v-if="!overview.length && !overviewLoading"
           class="t-hint tl__periods_empty"
         >
-          {{ isPeriodMode ? '该节次暂无空闲场地，可切换其他节次查看' : '请先选择日期，查看当日场地占用情况' }}
+          <template v-if="overviewFailed">
+            场地占用总览加载失败，请检查网络连接
+            <el-button
+              link
+              type="primary"
+              @click="loadOverview"
+            >
+              点击重试
+            </el-button>
+          </template>
+          <template v-else-if="isPeriodMode">
+            该节次暂无空闲场地，可切换其他节次查看
+          </template>
+          <template v-else-if="dateSelected && filter.date">
+            {{ filter.date }} 暂无场地数据，可切换其他日期查看
+          </template>
+          <template v-else>
+            请先选择日期，查看当日场地占用情况
+          </template>
         </p>
       </div>
     </div>
@@ -524,7 +543,13 @@ const listLoading = ref(false)
 // 场地占用总览：全部分档 + 请求序号防过期响应覆盖
 const overview = ref([])
 const overviewLoading = ref(false)
+/** 总览加载失败标记：区分「未选日期/暂无数据」与「接口失败」空态文案 */
+const overviewFailed = ref(false)
 let overviewSeq = 0
+/** 最近一次成功加载的窗口 key：相同窗口重复触发（重选同一天/面板关闭连发）跳过 */
+let lastOverviewKey = ''
+/** 正在请求中的窗口 key：请求在飞时重复触发直接跳过，防连发重复请求 */
+let pendingOverviewKey = ''
 // 是否已显式点击选择过日期：未操作前总览保持空白，不预加载全量场地
 const dateSelected = ref(false)
 // 四态派生时钟：每分钟自动重算，实现状态随课程时间节点自动流转
@@ -539,10 +564,12 @@ const detailVisible = ref(false)
 const detailId = ref('')
 
 // 顶部筛选：场地 Typeahead + 日期 + 节次筛选
+// date 初始为空：日期必须由用户显式选择（空→有值必触发 @change），
+// 避免「初始已填今天、重选同一天不触发 change」导致总览永远不加载
 const filter = reactive({
   keyword: '',
   spaceId: '',
-  date: today,
+  date: '',
   periodNo: null
 })
 
@@ -599,6 +626,19 @@ function onDateChanged() {
   }
 }
 
+/**
+ * 日期面板关闭兜底：重选同一天时值未变、@change 不触发，
+ * 关闭面板视为一次显式确认，确保「点日期必能看到场地」（重复 key 由 loadOverview 去重）。
+ */
+function onDatePanelToggle(visible) {
+  if (visible || !filter.date) return
+  if (!dateSelected.value) {
+    onDateChanged()
+    return
+  }
+  loadOverview()
+}
+
 function onPeriodFiltered() {
   // 节次筛选：高亮对应卡片；总览切换为该节次空闲场地归类视图
   console.log('[占用总览] 节次筛选变更：periodNo =', filter.periodNo ?? '（已清空，回到全天视图）')
@@ -623,16 +663,17 @@ function isOccupied(period) {
   })
 }
 
-/** 节次卡片三色派生（前端按当前时间计算，不落库） */
+/** 节次卡片三色派生（前端按当前时间计算，不落库）；未选日期时按今天展示 */
 const cards = computed(() => {
+  const d = filter.date || today
   const nowClock = nowShanghaiClock()
   const nowMin = toMin(nowClock)
   return periods.value.map((p, idx) => {
     const endMin = toMin(p.endClock)
     let state
-    if (filter.date < today) {
+    if (d < today) {
       state = 'past'
-    } else if (filter.date === today && endMin <= nowMin) {
+    } else if (d === today && endMin <= nowMin) {
       state = 'past'
     } else if (isOccupied(p)) {
       state = 'occupied'
@@ -657,6 +698,7 @@ function onPeriodClick(card) {
   }
   if (!selectedRange.value.length) {
     selectedRange.value = [card.periodNo, card.periodNo]
+    syncOverviewFromRange()
     return
   }
   const [start] = selectedRange.value
@@ -669,14 +711,24 @@ function onPeriodClick(card) {
   if (!rangeOk) {
     ElMessage.warning('所选区间包含已占用节次，请重新选择')
     selectedRange.value = [card.periodNo, card.periodNo]
+    syncOverviewFromRange()
     return
   }
   selectedRange.value = [min, max]
+  syncOverviewFromRange()
 }
 
-/** 取消节次区间选择（仅影响预约点选，不影响场地占用总览） */
+/** 节次点选联动总览：已选日期后，总览实时切换为该节次（区间）窗口场地 */
+function syncOverviewFromRange() {
+  if (dateSelected.value && filter.date) {
+    loadOverview()
+  }
+}
+
+/** 取消节次区间选择：总览回到全天（或节次筛选）窗口 */
 function clearRange() {
   selectedRange.value = []
+  syncOverviewFromRange()
 }
 
 const selectionTip = computed(() => {
@@ -687,9 +739,27 @@ const selectionTip = computed(() => {
   return `${p[0].periodName} ~ ${p[p.length - 1].periodName}（${p[0].startClock} - ${p[p.length - 1].endClock}）`
 })
 
-/** 总览窗口推导：显式点选日期后才加载；再选节次则切换为该节次窗口 */
+/**
+ * 总览窗口推导：显式点选日期后才加载。
+ * 窗口优先级：节次卡片点选区间（预约联动）> 节次筛选下拉（单节查看）> 全天。
+ */
 const overviewWindow = computed(() => {
   if (!dateSelected.value || !filter.date) return null
+  if (selectedRange.value.length) {
+    const [startNo, endNo] = selectedRange.value
+    const sp = periods.value.find((item) => Number(item.periodNo) === Number(startNo))
+    const ep = periods.value.find((item) => Number(item.periodNo) === Number(endNo))
+    if (sp && ep) {
+      return {
+        date: filter.date,
+        startPeriodId: sp.id,
+        endPeriodId: ep.id,
+        label: sp.id === ep.id
+          ? `${sp.periodName}（${sp.startClock} - ${sp.endClock}）`
+          : `${sp.periodName} ~ ${ep.periodName}（${sp.startClock} - ${ep.endClock}）`
+      }
+    }
+  }
   if (filter.periodNo) {
     const p = periods.value.find((item) => Number(item.periodNo) === Number(filter.periodNo))
     if (!p) return null
@@ -703,8 +773,10 @@ const overviewWindow = computed(() => {
   return { date: filter.date }
 })
 
-/** 节次归类模式：已选日期 + 节次 → 仅展示该节次空闲场地 */
-const isPeriodMode = computed(() => Boolean(dateSelected.value && filter.date && filter.periodNo))
+/** 节次归类模式：已选日期 + （节次筛选或卡片区间）→ 仅展示该窗口空闲场地 */
+const isPeriodMode = computed(
+  () => Boolean(dateSelected.value && filter.date && (filter.periodNo || selectedRange.value.length))
+)
 
 const overviewTip = computed(() => {
   const w = overviewWindow.value
@@ -792,16 +864,26 @@ async function loadOverview() {
   if (!w) {
     console.log('[占用总览] 未显式选择日期，保持空白初始态，不发起请求')
     overview.value = []
+    overviewFailed.value = false
+    return
+  }
+  const params = { date: w.date }
+  if (w.startPeriodId) {
+    params.startPeriodId = w.startPeriodId
+    params.endPeriodId = w.endPeriodId
+  }
+  // 去重：同窗口已有数据（重选同一天/面板关闭连发）或同窗口请求在飞，直接跳过。
+  // 必须在递增 overviewSeq 之前判断：否则跳过会作废在飞请求的序号，导致其响应被误丢弃、
+  // pendingOverviewKey/overviewLoading 永不复位（总览卡死加载中）
+  const reqKey = JSON.stringify(params)
+  if (reqKey === pendingOverviewKey || (reqKey === lastOverviewKey && overview.value.length)) {
+    console.log('[占用总览] 窗口未变化（', reqKey, '），跳过重复请求')
     return
   }
   const seq = ++overviewSeq
+  pendingOverviewKey = reqKey
   overviewLoading.value = true
   try {
-    const params = { date: w.date }
-    if (w.startPeriodId) {
-      params.startPeriodId = w.startPeriodId
-      params.endPeriodId = w.endPeriodId
-    }
     const useMock = isOccupancyMockEnabled()
     console.log('[占用总览] 触发加载：日期=', w.date, w.label ? `节次=${w.label}` : '（全天窗口）', ' 请求参数=', params, ' mock=', useMock)
     const list = useMock ? buildMockOccupancy(params) : await getLabOccupancy(params)
@@ -809,6 +891,8 @@ async function loadOverview() {
       console.log('[占用总览] 响应已过期（序号', seq, '），丢弃')
       return
     }
+    lastOverviewKey = reqKey
+    overviewFailed.value = false
     // 分档排序：空闲 → 已占用 → 维护/关闭（节次模式下前端再过滤仅空闲并归类）
     overview.value = (list || []).slice().sort((a, b) => labRank(a) - labRank(b))
     console.log('[占用总览] 加载完成：日期=', w.date, ' 模式=', isPeriodMode.value ? '节次空闲归类' : '全天总览',
@@ -816,9 +900,17 @@ async function loadOverview() {
       isPeriodMode.value ? '' : ' 占用=' + JSON.stringify(overview.value.filter((l) => l.occupied).map((l) => `${l.labName}(${l.teacherName || l.applicantName})`)))
   } catch (e) {
     console.warn('[占用总览] 加载失败：', e)
-    if (seq === overviewSeq) overview.value = []
+    if (seq === overviewSeq) {
+      overview.value = []
+      overviewFailed.value = true
+      lastOverviewKey = ''
+      ElMessage.error('场地占用总览加载失败，请检查网络后重新选择日期')
+    }
   } finally {
-    if (seq === overviewSeq) overviewLoading.value = false
+    if (seq === overviewSeq) {
+      pendingOverviewKey = ''
+      overviewLoading.value = false
+    }
   }
 }
 

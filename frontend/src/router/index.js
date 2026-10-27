@@ -64,13 +64,11 @@ router.beforeEach(async (to) => {
     return store.homePath
   }
 
-  if (to.meta && to.meta.perms && !store.perms.includes(to.meta.perms)) {
-    return { path: '/404' }
-  }
-
   // 业务规则：场地预约学生为纯只读（时间轴查看）——菜单由后端仅下发「预约情况」，
   // 页面内发起/撤销/审批按钮按 v-permission 与身份隐藏，写接口由后端权限与身份门禁拦截。
   // 不再按 userType 硬封锁 /booking/ 路径。
+  // （B9：原 to.meta.perms 守卫为死分支——动态路由由本地白名单映射注册，从不写入
+  //  meta.perms，权限显隐与拦截由 v-permission 指令 + 后端 @SaCheckPermission 承担）
 
   return true
 })

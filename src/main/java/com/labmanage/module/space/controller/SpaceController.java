@@ -4,6 +4,7 @@ import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.labmanage.common.exception.BusinessException;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
+import com.labmanage.config.SensitiveOperationGuard;
 import com.labmanage.common.result.ResultCode;
 import com.labmanage.module.space.dto.SpaceBatchStatusDTO;
 import com.labmanage.module.space.dto.SpaceCreateDTO;
@@ -46,8 +47,11 @@ public class SpaceController {
 
     private final SpaceService spaceService;
 
-    public SpaceController(SpaceService spaceService) {
+    private final SensitiveOperationGuard sensitiveGuard;
+
+    public SpaceController(SpaceService spaceService, SensitiveOperationGuard sensitiveGuard) {
         this.spaceService = spaceService;
+        this.sensitiveGuard = sensitiveGuard;
     }
 
     @GetMapping
@@ -68,10 +72,11 @@ public class SpaceController {
                 .body(csv);
     }
 
-    /** 批量启停（target 仅 AVAILABLE/CLOSED；停用为危险操作，前端需二次确认） */
+    /** 批量启停（target 仅 AVAILABLE/CLOSED；停用为危险操作，前端需二次确认；B3 二级认证） */
     @PostMapping("/batch_status")
     @SaCheckPermission("space:space:update")
     public Result<SpaceBatchStatusVO> batchStatus(@Valid @RequestBody SpaceBatchStatusDTO dto) {
+        sensitiveGuard.checkSafe("场地批量启停");
         return Result.success(spaceService.batchStatus(dto));
     }
 
@@ -94,6 +99,7 @@ public class SpaceController {
     @PostMapping("/import")
     @SaCheckPermission("space:space:create")
     public Result<SpaceImportVO> importSpaces(@RequestParam("file") MultipartFile file) {
+        sensitiveGuard.checkSafe("场地批量导入");
         return Result.success(spaceService.importSpaces(file));
     }
 
@@ -145,6 +151,7 @@ public class SpaceController {
     @PostMapping("/{id}/disable")
     @SaCheckPermission("space:space:update")
     public Result<Void> disable(@PathVariable Long id) {
+        sensitiveGuard.checkSafe("场地停用");
         spaceService.disable(id);
         return Result.success();
     }
@@ -162,6 +169,7 @@ public class SpaceController {
     @DeleteMapping("/{id}")
     @SaCheckPermission("space:space:delete")
     public Result<Void> delete(@PathVariable Long id) {
+        sensitiveGuard.checkSafe("场地删除");
         spaceService.delete(id);
         return Result.success();
     }
