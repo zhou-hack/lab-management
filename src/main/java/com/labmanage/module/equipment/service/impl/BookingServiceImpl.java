@@ -27,6 +27,7 @@ import com.labmanage.module.equipment.enums.ValueLevel;
 import com.labmanage.module.equipment.mapper.EquipmentAssetMapper;
 import com.labmanage.module.equipment.mapper.EquipmentBookingMapper;
 import com.labmanage.module.equipment.mapper.EquipmentUsageMapper;
+import com.labmanage.module.equipment.mapper.UserBookingRestrictionMapper;
 import com.labmanage.module.equipment.service.BookingService;
 import com.labmanage.module.equipment.vo.BookingVO;
 import com.labmanage.module.equipment.vo.TeacherOptionVO;
@@ -42,11 +43,11 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * 设备使用申请实现（学生单教师初审通过即生效；教师本人申请免初审；
- * 超 24h 管理员代批；复用保留表结构，零改表）
+ * 设备使用申请实现（学生单：教师初审 → 管理员终审；教师单：仅管理员终审；
+ * 到期未还惰性推进 OVERDUE 并冻结申请人 7 天；复用保留表结构，零改表）
  * <p>
- * 冲突协议：申请/审批/借出统一「先锁 equipment_asset 行再校验时段」；
- * 时段重叠以 [start_at, end_at) 与 APPROVED/CHECKED_OUT 单相交判定。
+ * 冲突协议：申请期放开时段互斥，占用校验在管理员终审（requireNoOverlap）
+ * 与借出登记（countOverlap）时按先到先得执行。
  */
 @Service
 public class BookingServiceImpl implements BookingService {
@@ -54,8 +55,8 @@ public class BookingServiceImpl implements BookingService {
     /** 统一单据类型：设备使用申请 */
     private static final String DOC_TYPE_EQUIPMENT_BOOKING = "EQUIPMENT_BOOKING";
 
-    /** 学生单教师初审超时（PRD：超 24h 管理员可代批） */
-    private static final Duration TEACHER_REVIEW_TIMEOUT = Duration.ofHours(24);
+    /** 逾期冻结时长：进入 OVERDUE 时冻结申请人申请权限 7 天 */
+    private static final Duration OVERDUE_FREEZE_DAYS = Duration.ofDays(7);
 
     private final EquipmentAssetMapper assetMapper;
     private final EquipmentBookingMapper bookingMapper;
@@ -63,19 +64,22 @@ public class BookingServiceImpl implements BookingService {
     private final BizDocumentMapper documentMapper;
     private final DocumentEventMapper eventMapper;
     private final SysUserMapper userMapper;
+    private final UserBookingRestrictionMapper restrictionMapper;
 
     public BookingServiceImpl(EquipmentAssetMapper assetMapper,
                                EquipmentBookingMapper bookingMapper,
                                EquipmentUsageMapper usageMapper,
                                BizDocumentMapper documentMapper,
                                DocumentEventMapper eventMapper,
-                               SysUserMapper userMapper) {
+                               SysUserMapper userMapper,
+                               UserBookingRestrictionMapper restrictionMapper) {
         this.assetMapper = assetMapper;
         this.bookingMapper = bookingMapper;
         this.usageMapper = usageMapper;
         this.documentMapper = documentMapper;
         this.eventMapper = eventMapper;
         this.userMapper = userMapper;
+        this.restrictionMapper = restrictionMapper;
     }
 
     @Override
@@ -90,6 +94,16 @@ public class BookingServiceImpl implements BookingService {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "仅学生/教师可提交设备使用申请");
         }
         boolean isStudent = "STUDENT".equals(userType);
+
+        // 惰性推进逾期未还单（置 OVERDUE + 冻结），保持状态机先行
+        advanceOverdue();
+
+        // 冻结拦截：逾期未还冻结期内禁止提交新申请
+        Instant restrictedUntil = restrictionMapper.selectActiveRestrictionEndAt(userId);
+        if (restrictedUntil != null) {
+            throw new BusinessException(ResultCode.CONFLICT.getCode(),
+                    "因逾期未还设备，申请权限已冻结至 " + restrictedUntil + "，请先归还后再申请");
+        }
 
         Instant startAt = request.startAt();
         Instant endAt = request.endAt();
@@ -115,7 +129,7 @@ public class BookingServiceImpl implements BookingService {
 
         // 冲突协议：先锁设备行，校验在架与启用状态；
         // 申请期不校验时段互斥（学生/教师可同时段提交申请），
-        // 实际占用在教师初审/管理员终审（requireNoOverlap）与借出登记时按先到先得校验
+        // 实际占用在管理员终审（requireNoOverlap）与借出登记时按先到先得校验
         EquipmentAsset asset = assetMapper.selectByIdForUpdate(Ids.parse(request.assetId()));
         if (asset == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "设备不存在");
@@ -137,10 +151,10 @@ public class BookingServiceImpl implements BookingService {
         document.setIdempotencyKey(UUID.randomUUID().toString());
         documentMapper.insert(document);
 
-        // 状态分流：学生单待教师初审；教师本人申请免初审直接通过
+        // 状态分流：学生单待教师初审 → 管理员终审；教师单直接待管理员终审
         BookingStatus status = isStudent
                 ? BookingStatus.PENDING_TEACHER
-                : BookingStatus.APPROVED;
+                : BookingStatus.PENDING_ADMIN;
 
         EquipmentBooking booking = new EquipmentBooking();
         booking.setDocumentId(document.getId());
@@ -155,21 +169,13 @@ public class BookingServiceImpl implements BookingService {
         booking.setStatus(status);
         bookingMapper.insert(booking);
 
-        if (status == BookingStatus.APPROVED) {
-            // 教师免初审直接通过即生效占用：与其他已生效申请时段冲突则整单回滚，
-            // 避免产生重叠 APPROVED 单导致借出登记被占用拦截
-            requireNoOverlap(booking);
-        }
-
         writeEvent(document.getId(), "SUBMIT", null, status.name(), userId, "USER", null);
-        if (status == BookingStatus.APPROVED) {
-            writeEvent(document.getId(), "APPROVE", status.name(), status.name(), null, "SYSTEM",
-                    "教师本人申请，免初审直接通过");
-        }
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public PageResult<BookingVO> myBookings(BookingPageQuery query) {
+        advanceOverdue();
         query.setApplicantId(StpUtil.getLoginIdAsLong());
         query.setTeacherId(null);
         return PageUtils.toPageResult(bookingMapper.selectBookingPage(toPage(query), query));
@@ -225,12 +231,10 @@ public class BookingServiceImpl implements BookingService {
 
         BookingStatus from = booking.getStatus();
         if (approve) {
-            // 锁设备行串行化同设备并发审批，避免两条同槽单同时通过产生重叠 APPROVED
-            assetMapper.selectByIdForUpdate(booking.getAssetId());
-            requireNoOverlap(booking);
-            booking.setStatus(BookingStatus.APPROVED);
+            // 教师初审通过 → 转管理员终审（不占用时段，冲突校验在管理员终审执行）
+            booking.setStatus(BookingStatus.PENDING_ADMIN);
             bookingMapper.updateById(booking);
-            writeEvent(booking.getDocumentId(), "APPROVE", from.name(), BookingStatus.APPROVED.name(),
+            writeEvent(booking.getDocumentId(), "APPROVE", from.name(), BookingStatus.PENDING_ADMIN.name(),
                     reviewerId, "USER", request.comment());
         } else {
             booking.setStatus(BookingStatus.REJECTED);
@@ -241,7 +245,9 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public PageResult<BookingVO> allBookings(BookingPageQuery query) {
+        advanceOverdue();
         query.setApplicantId(null);
         query.setTeacherId(null);
         return PageUtils.toPageResult(bookingMapper.selectBookingPage(toPage(query), query));
@@ -260,27 +266,20 @@ public class BookingServiceImpl implements BookingService {
             throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "驳回必须填写审批意见");
         }
 
-        if (booking.getStatus() == BookingStatus.PENDING_ADMIN) {
-            // 历史遗留 PENDING_ADMIN 单终审（价值分级已移除，新单不再产生）
-        } else if (booking.getStatus() == BookingStatus.PENDING_TEACHER) {
-            // 代批：学生单教师初审超时 24h，管理员可代批
-            if (booking.getCreateTime() == null
-                    || booking.getCreateTime().isAfter(Instant.now().minus(TEACHER_REVIEW_TIMEOUT))) {
-                throw new BusinessException(ResultCode.CONFLICT.getCode(), "学生单需超时 24 小时后管理员方可代批");
-            }
-        } else {
+        // 管理员终审为必经环节：仅待终审单可审（学生单两级链第二级 / 教师单唯一审批）
+        if (booking.getStatus() != BookingStatus.PENDING_ADMIN) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "申请单不在待审批状态");
         }
 
         BookingStatus from = booking.getStatus();
         if (approve) {
-            // 锁设备行串行化同设备并发终审/代批，避免两条同槽单同时通过
+            // 锁设备行串行化同设备并发终审，避免两条同槽单同时通过
             assetMapper.selectByIdForUpdate(booking.getAssetId());
             requireNoOverlap(booking);
             booking.setStatus(BookingStatus.APPROVED);
             bookingMapper.updateById(booking);
             writeEvent(booking.getDocumentId(), "APPROVE", from.name(), BookingStatus.APPROVED.name(),
-                    reviewerId, "USER", from == BookingStatus.PENDING_TEACHER ? "管理员代批通过" : request.comment());
+                    reviewerId, "USER", request.comment());
         } else {
             booking.setStatus(BookingStatus.REJECTED);
             bookingMapper.updateById(booking);
@@ -293,6 +292,7 @@ public class BookingServiceImpl implements BookingService {
     @Transactional(rollbackFor = Exception.class)
     public void checkout(String id) {
         long operatorId = StpUtil.getLoginIdAsLong();
+        advanceOverdue();
         // 锁序与申请一致：先设备行后申请单，避免死锁
         EquipmentBooking booking = bookingMapper.selectByIdForUpdate(Ids.parse(id));
         if (booking == null) {
@@ -342,6 +342,7 @@ public class BookingServiceImpl implements BookingService {
     @Transactional(rollbackFor = Exception.class)
     public void returnAsset(String id, BookingReturnRequest request) {
         long operatorId = StpUtil.getLoginIdAsLong();
+        advanceOverdue();
         EquipmentBooking booking = bookingMapper.selectByIdForUpdate(Ids.parse(id));
         if (booking == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "申请单不存在");
@@ -350,7 +351,8 @@ public class BookingServiceImpl implements BookingService {
         if (asset == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "设备不存在");
         }
-        if (booking.getStatus() != BookingStatus.CHECKED_OUT) {
+        if (booking.getStatus() != BookingStatus.CHECKED_OUT
+                && booking.getStatus() != BookingStatus.OVERDUE) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "申请单不在借出状态");
         }
         EquipmentUsage usage = usageMapper.selectByBookingId(booking.getId());
@@ -361,6 +363,7 @@ public class BookingServiceImpl implements BookingService {
         if (damaged && (request.note() == null || request.note().isBlank())) {
             throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "归还损坏必须填写备注说明");
         }
+        BookingStatus from = booking.getStatus();
 
         usage.setReturnOperatorId(operatorId);
         usage.setReturnedAt(Instant.now());
@@ -376,7 +379,7 @@ public class BookingServiceImpl implements BookingService {
         asset.setStatus(damaged ? EquipmentStatus.MAINTAINING : EquipmentStatus.IDLE);
         assetMapper.updateById(asset);
 
-        writeEvent(booking.getDocumentId(), "RETURN", BookingStatus.CHECKED_OUT.name(),
+        writeEvent(booking.getDocumentId(), "RETURN", from.name(),
                 BookingStatus.RETURNED.name(), operatorId, "USER", request.note());
     }
 
@@ -386,6 +389,23 @@ public class BookingServiceImpl implements BookingService {
     }
 
     /* ---------------- 内部工具 ---------------- */
+
+    /**
+     * 惰性推进逾期未还单：到期仍未归还的 CHECKED_OUT 单置 OVERDUE，
+     * 并对新增逾期单幂等冻结申请人 7 天申请权限（唯一键防重复，不延长）。
+     * 在申请/列表/借出/归还路径的入口调用，无需定时任务。
+     */
+    private void advanceOverdue() {
+        List<EquipmentBooking> candidates = bookingMapper.selectOverdueCandidates();
+        if (candidates.isEmpty()) {
+            return;
+        }
+        bookingMapper.advanceOverdueByIds(
+                candidates.stream().map(EquipmentBooking::getId).toList());
+        for (EquipmentBooking booking : candidates) {
+            restrictionMapper.insertOverdueFreeze(IdWorker.getId(), booking.getApplicantId(), booking.getDocumentId());
+        }
+    }
 
     private void requireNoOverlap(EquipmentBooking booking) {
         if (bookingMapper.countOverlap(booking.getAssetId(), booking.getStartAt(), booking.getEndAt(),

@@ -174,7 +174,7 @@ class BookingFlowTest {
 
     @Test
     @Order(6)
-    void shouldTeacherReviewAndApprove() throws Exception {
+    void shouldTeacherReviewPassToAdminReview() throws Exception {
         // 待审单不占时段：同设备同槽可再提交一张并存待审单
         assertOk(post(studentToken, BOOKINGS, applyBody(ASSET_NORMAL)));
         String duplicateId = findMyBookingIdByAsset(String.valueOf(ASSET_NORMAL));
@@ -183,34 +183,33 @@ class BookingFlowTest {
         JsonNode pending = json(get(teacherToken, BOOKINGS + "/teacher_pending")).path("data").path("records");
         assertTrue(pending.size() >= 3, "教师待办应至少 3 条，实际：" + pending);
 
-        // 初审通过 → 直接 APPROVED
+        // 初审通过 → 转管理员终审（不再直接生效）
         assertOk(put(teacherToken, BOOKINGS + "/" + normalBookingId + "/teacher_review",
                 Map.of("action", "approve")));
-        assertEquals("APPROVED", bookingStatus(normalBookingId));
+        assertEquals("PENDING_ADMIN", bookingStatus(normalBookingId));
 
-        // 错时段单初审通过 → APPROVED
+        // 错时段单初审通过 → PENDING_ADMIN
         assertOk(put(teacherToken, BOOKINGS + "/" + otherBookingId + "/teacher_review",
                 Map.of("action", "approve")));
-        assertEquals("APPROVED", bookingStatus(otherBookingId));
+        assertEquals("PENDING_ADMIN", bookingStatus(otherBookingId));
 
-        // 教师免初审直接通过即占用：同槽教师申请被拒（不产生重叠 APPROVED 单）
-        assertError(post(teacherToken, BOOKINGS, applyBody(ASSET_NORMAL)), 409, 40900);
+        // 教师本人申请：免教师初审，提交即待管理员终审；同时段申请不被占用拦截（占用在终审校验）
+        assertOk(post(teacherToken, BOOKINGS, applyBody(ASSET_NORMAL)));
+        String teacherBookingId = findMyBookingIdByAssetFor(teacherToken, String.valueOf(ASSET_NORMAL));
+        assertEquals("PENDING_ADMIN", bookingStatus(teacherBookingId));
+        // 教师撤销清理本人同槽单
+        assertOk(put(teacherToken, BOOKINGS + "/" + teacherBookingId + "/cancel", Map.of("reason", "测试清理")));
 
-        // 申请期放开互斥：已有 APPROVED 单的同槽新申请仍可提交（占用在借出登记时校验），随后撤销清理
+        // 申请期放开互斥：已有待终审单的同槽新申请仍可提交，随后撤销清理
         assertOk(post(studentToken, BOOKINGS, applyBody(ASSET_NORMAL)));
         String extraId = findMyBookingIdByAsset(String.valueOf(ASSET_NORMAL));
         assertOk(put(studentToken, BOOKINGS + "/" + extraId + "/cancel", Map.of("reason", "测试清理")));
-
-        // 同槽并存单后批准 → 最后批准者冲突被拒，单据保持待审
-        assertError(put(teacherToken, BOOKINGS + "/" + duplicateId + "/teacher_review",
-                Map.of("action", "approve")), 409, 40900);
-        assertEquals("PENDING_TEACHER", bookingStatus(duplicateId));
 
         // 驳回必须填写意见；带意见驳回并存单 → REJECTED
         assertError(put(teacherToken, BOOKINGS + "/" + duplicateId + "/teacher_review",
                 Map.of("action", "reject")), 400, 40000);
         assertOk(put(teacherToken, BOOKINGS + "/" + duplicateId + "/teacher_review",
-                Map.of("action", "reject", "comment", "与已批准申请时段冲突")));
+                Map.of("action", "reject", "comment", "初审不通过")));
         assertEquals("REJECTED", bookingStatus(duplicateId));
 
         // 重复初审已流转单 → 冲突
@@ -218,66 +217,119 @@ class BookingFlowTest {
                 Map.of("action", "approve")), 409, 40900);
     }
 
-    // ------------------------------------------------------------------
-    // 管理员终审、借出与归还
-    // ------------------------------------------------------------------
-
     @Test
-    @Order(8)
-    void shouldAdminActOnOverdueBooking() throws Exception {
-        // 学生单未超 24h 不可代批（新造一张待审单验证）
-        Map<String, Object> body = applyBodyOffset(ASSET_NORMAL, 3600 * 48);
+    @Order(7)
+    void shouldAdminFinalReview() throws Exception {
+        // 管理员终审（必经）：学生单第二级 → APPROVED
+        assertOk(put(adminToken, BOOKINGS + "/" + normalBookingId + "/admin_review",
+                Map.of("action", "approve")));
+        assertEquals("APPROVED", bookingStatus(normalBookingId));
+        assertOk(put(adminToken, BOOKINGS + "/" + otherBookingId + "/admin_review",
+                Map.of("action", "approve")));
+        assertEquals("APPROVED", bookingStatus(otherBookingId));
+
+        // 待教师初审单不可终审（须先经教师初审）
+        Map<String, Object> body = applyBodyOffset(ASSET_OTHER, 3600 * 48);
         assertOk(post(studentToken, BOOKINGS, body));
-        String freshId = findMyBookingIdByAsset(String.valueOf(ASSET_NORMAL));
+        String freshId = findMyBookingIdByAsset(String.valueOf(ASSET_OTHER));
+        assertEquals("PENDING_TEACHER", bookingStatus(freshId));
         assertError(put(adminToken, BOOKINGS + "/" + freshId + "/admin_review",
                 Map.of("action", "approve")), 409, 40900);
-        // 超时 24h 后可代批：直接回填单据创建时间模拟超时
-        jdbcTemplate.update(
-                "UPDATE equipment_booking SET create_time = UTC_TIMESTAMP(3) - INTERVAL 25 HOUR WHERE id = ?",
-                Long.parseLong(freshId));
-        assertOk(put(adminToken, BOOKINGS + "/" + freshId + "/admin_review",
-                Map.of("action", "approve", "comment", "教师超时未审，管理员代批")));
-        assertEquals("APPROVED", bookingStatus(freshId));
-        // 代批后撤销该单，避免影响后续借出用例
         assertOk(put(studentToken, BOOKINGS + "/" + freshId + "/cancel", Map.of("reason", "测试清理")));
-        assertEquals("CANCELLED", bookingStatus(freshId));
+
+        // 终审冲突：与已生效 APPROVED 单同槽的并存单，终审时被拒且保持 PENDING_ADMIN
+        assertOk(post(studentToken, BOOKINGS, applyBody(ASSET_NORMAL)));
+        String conflictId = findMyBookingIdByAsset(String.valueOf(ASSET_NORMAL));
+        assertOk(put(teacherToken, BOOKINGS + "/" + conflictId + "/teacher_review",
+                Map.of("action", "approve")));
+        assertEquals("PENDING_ADMIN", bookingStatus(conflictId));
+        assertError(put(adminToken, BOOKINGS + "/" + conflictId + "/admin_review",
+                Map.of("action", "approve")), 409, 40900);
+        assertEquals("PENDING_ADMIN", bookingStatus(conflictId));
+        assertOk(put(studentToken, BOOKINGS + "/" + conflictId + "/cancel", Map.of("reason", "测试清理")));
+
+        // 终审驳回必填意见
+        assertOk(post(studentToken, BOOKINGS, applyBody(ASSET_NORMAL)));
+        String rejectId = findMyBookingIdByAsset(String.valueOf(ASSET_NORMAL));
+        assertOk(put(teacherToken, BOOKINGS + "/" + rejectId + "/teacher_review",
+                Map.of("action", "approve")));
+        assertError(put(adminToken, BOOKINGS + "/" + rejectId + "/admin_review",
+                Map.of("action", "reject")), 400, 40000);
+        assertOk(put(adminToken, BOOKINGS + "/" + rejectId + "/admin_review",
+                Map.of("action", "reject", "comment", "终审不通过")));
+        assertEquals("REJECTED", bookingStatus(rejectId));
     }
 
     @Test
-    @Order(9)
-    void shouldCheckoutAndForbidDeleteWhileInUse() throws Exception {
+    @Order(8)
+    void shouldOverdueAdvanceAndFreeze() throws Exception {
+        // 借出发放 → CHECKED_OUT / IN_USE / usage CHECKED_OUT
         assertOk(put(adminToken, BOOKINGS + "/" + normalBookingId + "/checkout", null));
         assertEquals("CHECKED_OUT", bookingStatus(normalBookingId));
         assertEquals("IN_USE", assetStatus(ASSET_NORMAL), "借出后设备应为 IN_USE");
         assertEquals("CHECKED_OUT", usageStatus(normalBookingId));
 
-        // 重复借出 → 冲突
+        // 重复借出 → 冲突；借出中设备禁止删除、不可再申请
         assertError(put(adminToken, BOOKINGS + "/" + normalBookingId + "/checkout", null), 409, 40900);
-        // 借出中设备禁止删除
         assertError(delete(adminToken, ASSETS + "/" + ASSET_NORMAL), 409, 40900);
-        // 借出中设备不可再申请（设备不在架，409）
         assertError(post(studentToken, BOOKINGS, applyBody(ASSET_NORMAL)), 409, 40900);
-        // 非本人教师初审 → 禁止
-        Map<String, Object> other = applyBodyOffset(ASSET_OTHER, 3600 * 48);
-        assertOk(post(studentToken, BOOKINGS, other));
-        String otherId = findMyBookingIdByAsset(String.valueOf(ASSET_OTHER));
-        // 该单指定审批教师是 teacher1，由学生本人无法初审（无权限）
-        assertError(put(studentToken, BOOKINGS + "/" + otherId + "/teacher_review",
-                Map.of("action", "approve")), 403, 40300);
-        // 清理：撤销该单
-        assertOk(put(studentToken, BOOKINGS + "/" + otherId + "/cancel", Map.of("reason", "测试清理")));
-    }
 
-    @Test
-    @Order(10)
-    void shouldReturnNormalAndDamaged() throws Exception {
-        // 完好归还 → 单据 RETURNED、设备恢复 IDLE
+        // 模拟到期未还：整体回填时段为已过期（start_at -2d / end_at -1d，满足 start_at < end_at 约束）
+        jdbcTemplate.update(
+                "UPDATE equipment_booking SET start_at = UTC_TIMESTAMP(3) - INTERVAL 2 DAY,"
+                        + " end_at = UTC_TIMESTAMP(3) - INTERVAL 1 DAY WHERE id = ?",
+                Long.parseLong(normalBookingId));
+
+        // 列表查询触发惰性推进 → 置 OVERDUE 并冻结申请人 7 天
+        assertOk(get(studentToken, BOOKINGS + "/my"));
+        assertEquals("OVERDUE", bookingStatus(normalBookingId));
+        Integer freezeCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM user_booking_restriction WHERE source_document_id ="
+                        + " (SELECT document_id FROM equipment_booking WHERE id = ?)"
+                        + " AND restriction_type = 'ALL' AND deleted = 0",
+                Integer.class, Long.parseLong(normalBookingId));
+        assertEquals(1, freezeCount, "逾期应写入一条冻结记录");
+        Long freezeEndMillis = jdbcTemplate.queryForObject(
+                "SELECT UNIX_TIMESTAMP(end_at) * 1000 FROM user_booking_restriction WHERE source_document_id ="
+                        + " (SELECT document_id FROM equipment_booking WHERE id = ?)"
+                        + " AND restriction_type = 'ALL' AND deleted = 0",
+                Long.class, Long.parseLong(normalBookingId));
+        assertNotNull(freezeEndMillis);
+        assertTrue(freezeEndMillis > Instant.now().plusSeconds(6L * 24 * 3600).toEpochMilli(),
+                "冻结应约 7 天，实际毫秒：" + freezeEndMillis);
+
+        // 幂等：重复触发不重复冻结、不延长
+        assertOk(get(studentToken, BOOKINGS + "/my"));
+        Integer freezeCount2 = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM user_booking_restriction WHERE source_document_id ="
+                        + " (SELECT document_id FROM equipment_booking WHERE id = ?)"
+                        + " AND restriction_type = 'ALL' AND deleted = 0",
+                Integer.class, Long.parseLong(normalBookingId));
+        assertEquals(1, freezeCount2, "重复推进不得重复冻结");
+        Long freezeEndMillis2 = jdbcTemplate.queryForObject(
+                "SELECT UNIX_TIMESTAMP(end_at) * 1000 FROM user_booking_restriction WHERE source_document_id ="
+                        + " (SELECT document_id FROM equipment_booking WHERE id = ?)"
+                        + " AND restriction_type = 'ALL' AND deleted = 0",
+                Long.class, Long.parseLong(normalBookingId));
+        assertEquals(freezeEndMillis, freezeEndMillis2, "冻结 end_at 不得随重跑延长");
+
+        // 冻结期学生提交新申请 → 409
+        assertError(post(studentToken, BOOKINGS, applyBodyOffset(ASSET_OTHER, 3600 * 24)), 409, 40900);
+
+        // OVERDUE 单不可借出
+        assertError(put(adminToken, BOOKINGS + "/" + normalBookingId + "/checkout", null), 409, 40900);
+
+        // 逾期归还补登记（完好）→ RETURNED / 设备 IDLE
         assertOk(put(adminToken, BOOKINGS + "/" + normalBookingId + "/return",
                 Map.of("condition", "NORMAL")));
         assertEquals("RETURNED", bookingStatus(normalBookingId));
         assertEquals("IDLE", assetStatus(ASSET_NORMAL));
         assertEquals("RETURNED", usageStatus(normalBookingId));
+    }
 
+    @Test
+    @Order(9)
+    void shouldCheckoutOtherAndReturnDamaged() throws Exception {
         // 第二台设备借出后损坏归还：备注必填 → 校验 400；带备注后设备转 MAINTAINING
         assertOk(put(adminToken, BOOKINGS + "/" + otherBookingId + "/checkout", null));
         assertError(put(adminToken, BOOKINGS + "/" + otherBookingId + "/return",
@@ -349,6 +401,17 @@ class BookingFlowTest {
 
     private String findMyBookingIdByAsset(String assetId) throws Exception {
         return findMyBookingIdByAsset(assetId, 0);
+    }
+
+    /** 按指定用户本人申请查询设备最新一张单（教师撤销本人单用） */
+    private String findMyBookingIdByAssetFor(String token, String assetId) throws Exception {
+        JsonNode records = json(get(token, BOOKINGS + "/my")).path("data").path("records");
+        for (JsonNode row : records) {
+            if (assetId.equals(row.path("assetId").asText())) {
+                return row.path("id").asText();
+            }
+        }
+        throw new AssertionError("本人申请中未找到设备 " + assetId);
     }
 
     private String bookingStatus(String bookingId) {
@@ -440,6 +503,8 @@ class BookingFlowTest {
             return;
         }
         String placeholders = String.join(",", java.util.Collections.nCopies(documentIds.size(), "?"));
+        jdbcTemplate.update("DELETE FROM user_booking_restriction WHERE source_document_id IN (" + placeholders + ")",
+                documentIds.toArray());
         jdbcTemplate.update("DELETE FROM document_event WHERE document_id IN (" + placeholders + ")",
                 documentIds.toArray());
         jdbcTemplate.update("DELETE FROM equipment_usage WHERE booking_id IN"

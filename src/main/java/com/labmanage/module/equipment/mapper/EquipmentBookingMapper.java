@@ -9,6 +9,7 @@ import com.labmanage.module.equipment.vo.TeacherOptionVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.time.Instant;
 import java.util.List;
@@ -87,4 +88,28 @@ public interface EquipmentBookingMapper extends BaseMapper<EquipmentBooking> {
             ORDER BY u.id
             """)
     List<TeacherOptionVO> selectTeacherOptions();
+
+    /**
+     * 逾期未还候选单：到期仍未归还的 CHECKED_OUT 单（惰性推进置 OVERDUE 用）。
+     */
+    @Select("""
+            SELECT id, document_id, applicant_id
+            FROM equipment_booking
+            WHERE status = 'CHECKED_OUT'
+              AND end_at < UTC_TIMESTAMP(3)
+              AND deleted = 0
+            """)
+    List<EquipmentBooking> selectOverdueCandidates();
+
+    /**
+     * 批量置 OVERDUE（仅作用于仍为 CHECKED_OUT 的单，单向一次，避免重复冻结）。
+     */
+    @Update("""
+            <script>
+            UPDATE equipment_booking SET status = 'OVERDUE'
+            WHERE status = 'CHECKED_OUT' AND deleted = 0 AND id IN
+            <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+            </script>
+            """)
+    int advanceOverdueByIds(@Param("ids") List<Long> ids);
 }
