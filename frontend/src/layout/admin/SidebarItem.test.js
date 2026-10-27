@@ -3,7 +3,7 @@ import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import SidebarItem from './SidebarItem.vue'
 
-/** 设备管理菜单（DB 中为单页 C 型；子菜单「设备使用审批」挂其下，前端虚拟折叠收纳设备库存/设备台账） */
+/** 设备管理菜单（DB 中为单页 C 型；子菜单「设备使用审批」挂其下，前端虚拟折叠收纳设备台账；「设备库存」2026-10-26 起暂时移除入口） */
 const equipmentMenu = {
   menuId: 210,
   menuName: '设备管理',
@@ -32,17 +32,17 @@ const mountItem = () =>
   )
 
 describe('侧栏「设备管理」折叠子菜单', () => {
-  it('渲染为折叠子菜单，主标题为「设备管理」，含「设备库存」「设备台账」「设备使用审批」三个子项', () => {
+  it('渲染为折叠子菜单，主标题为「设备管理」，含「设备台账」「设备使用审批」两个子项（设备库存入口已移除）', () => {
     const wrapper = mountItem()
     const subMenu = wrapper.find('.el-sub-menu')
     expect(subMenu.exists()).toBe(true)
     expect(subMenu.find('.el-sub-menu__title').text()).toContain('设备管理')
 
     const items = wrapper.findAllComponents({ name: 'ElMenuItem' })
-    expect(items).toHaveLength(3)
-    expect(items[0].text()).toContain('设备库存')
-    expect(items[1].text()).toContain('设备台账')
-    expect(items[2].text()).toContain('设备使用审批')
+    expect(items).toHaveLength(2)
+    expect(items[0].text()).toContain('设备台账')
+    expect(items[0].text()).not.toContain('设备库存')
+    expect(items[1].text()).toContain('设备使用审批')
     wrapper.unmount()
   })
 
@@ -60,11 +60,11 @@ describe('侧栏「设备管理」折叠子菜单', () => {
     wrapper.unmount()
   })
 
-  it('子项路由 index 指向设备库存/设备台账/设备使用审批（model、asset、bookings）', () => {
+  it('子项路由 index 指向设备台账/设备使用审批（asset、bookings；model 已移除）', () => {
     const wrapper = mountItem()
     const items = wrapper.findAllComponents({ name: 'ElMenuItem' })
     const indexes = items.map((i) => i.props('index'))
-    expect(indexes).toContain('/admin/equipment/model')
+    expect(indexes).not.toContain('/admin/equipment/model')
     expect(indexes).toContain('/admin/equipment/asset')
     expect(indexes).toContain('/admin/equipment/bookings')
     wrapper.unmount()

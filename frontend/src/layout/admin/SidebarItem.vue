@@ -70,10 +70,11 @@ const hasChildren = computed(() => visibleChildren.value.length > 0)
  * 虚拟子菜单：单页聚合菜单折叠收纳区块子项（2026-10-22）。
  * 设备管理拆分为「设备库存」「设备台账」两个独立页面，侧栏折叠收纳并跳转对应页面；
  * 仅前端结构，不新增数据库菜单。路由与 dynamic.js EQUIPMENT_SECTION_ROUTES 对应。
+ * 「设备库存」2026-10-26 起暂时移除入口（保留代码，恢复时取消注释该项）。
  */
 const VIRTUAL_SUBMENUS = {
   '/admin/equipment': [
-    { label: '设备库存', route: '/admin/equipment/model' },
+    // { label: '设备库存', route: '/admin/equipment/model' },
     { label: '设备台账', route: '/admin/equipment/asset' }
   ]
 }

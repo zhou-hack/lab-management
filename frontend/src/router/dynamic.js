@@ -22,14 +22,17 @@ const viewModules = {
 /**
  * 设备管理拆分页（2026-10-22）：「设备库存」「设备台账」为两个独立页面，
  * 不在菜单树中，作为设备管理子路由显式注册；meta.perms 与页面清单权限一致。
+ *
+ * 「设备库存」2026-10-26 起暂时移除入口（组件/接口/权限均保留），
+ * 需要恢复时取消下方被注释的 model 条目并同步 redirect 即可。
  */
 const EQUIPMENT_SECTION_ROUTES = [
-  {
-    path: '/admin/equipment/model',
-    name: 'dyn_equipment_model',
-    component: () => import('@/views/admin/equipment/ModelPage.vue'),
-    meta: { title: '设备库存', icon: null, perms: 'equipment:model:list', menuId: 'equipment_model' }
-  },
+  // {
+  //   path: '/admin/equipment/model',
+  //   name: 'dyn_equipment_model',
+  //   component: () => import('@/views/admin/equipment/ModelPage.vue'),
+  //   meta: { title: '设备库存', icon: null, perms: 'equipment:model:list', menuId: 'equipment_model' }
+  // },
   {
     path: '/admin/equipment/asset',
     name: 'dyn_equipment_asset',
@@ -84,15 +87,15 @@ export function registerDynamicRoutes(menus) {
     })
   }
 
-  // 设备管理拆页（2026-10-22）：DB 菜单项 /admin/equipment 改写为重定向到「设备库存」页，
-  // 「设备库存」「设备台账」两个区块页面作为设备管理子路由显式追加
+  // 设备管理拆页（2026-10-22）：DB 菜单项 /admin/equipment 改写为重定向（2026-10-26 起指向「设备台账」，
+  // 「设备库存」暂时移除入口）；拆页区块页面作为设备管理子路由显式追加
   const equipIdx = children.findIndex((r) => r.path === '/admin/equipment')
   if (equipIdx >= 0) {
     const parent = children[equipIdx]
     children[equipIdx] = {
       path: parent.path,
       name: parent.name,
-      redirect: '/admin/equipment/model',
+      redirect: '/admin/equipment/asset',
       meta: parent.meta
     }
     children.push(...EQUIPMENT_SECTION_ROUTES)
