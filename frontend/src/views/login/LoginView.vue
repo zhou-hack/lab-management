@@ -80,7 +80,7 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Lock, Monitor, User } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
@@ -126,6 +126,15 @@ function fillAccount(account) {
   form.username = account.username
   form.password = account.password
 }
+
+/** 一键启动直入系统：URL 带 auto=1&account=xxx&password=xxx 时自动登录（开发演示用） */
+onMounted(() => {
+  if (route.query.auto === '1' && route.query.account && route.query.password) {
+    form.username = String(route.query.account)
+    form.password = String(route.query.password)
+    submit()
+  }
+})
 </script>
 
 <style scoped>
