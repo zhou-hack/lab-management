@@ -69,7 +69,7 @@ public interface SpaceService {
     List<SpaceOptionVO> options(SpaceType labType, Integer minCapacity, Boolean availableOnly, String keyword, int limit);
 
     /**
-     * 新建场地（状态缺省 AVAILABLE，开放时段缺省 08:00-21:00）。
+     * 新建场地（状态缺省 AVAILABLE，开放时段缺省 08:00-21:45）。
      */
     SpaceDetailVO create(SpaceCreateDTO dto);
 

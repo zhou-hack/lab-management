@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>实验室场地预约_业务流程图（v2.2 · 2026-10-26 全量修复实施版）</title>
+<title>实验室场地预约_业务流程图（v2.3 · 2026-10-28 已知差异收口版）</title>
 <style>
   body{margin:0;background:#e9ebee;color:#1a1a1a;font-family:"Microsoft YaHei","SimSun","PingFang SC",sans-serif;}
   .page{max-width:1340px;margin:0 auto;padding:24px 20px 56px;}
@@ -30,8 +30,8 @@
 </head>
 <body>
 <div class="page">
-  <h2>实验室场地预约 · 业务流程图集（v2.2）</h2>
-  <div class="meta">依据：docs/智联教室PRD.md（流程五、4.5.10、附录 B.3）、docs/流程清单.md、docs/场地模块开发文档清单.md、docs/数据库设计.md、docs/场地流程图.md v1.1、sql/booking_flow_deploy_说明.md 及 module/space、module/booking 源码整理 ｜ 版本：v2.2（2026-10-26 按《项目整体审核问题清单 v1.5》全量修复实施同步）</div>
+  <h2>实验室场地预约 · 业务流程图集（v2.3）</h2>
+  <div class="meta">依据：docs/智联教室PRD.md（流程五、4.5.10、附录 B.3）、docs/流程清单.md、docs/场地模块开发文档清单.md、docs/数据库设计.md、docs/场地流程图.md v1.2、sql/booking_flow_deploy_说明.md 及 module/space、module/booking 源码整理 ｜ 版本：v2.3（2026-10-28 收口《场地流程图.md》第 12 节两条已知差异）</div>
   <div class="legend">
     <span><i class="sw ell"></i>开始 / 结束</span>
     <span><i class="sw"></i>处理节点</span>
@@ -45,7 +45,8 @@
     v2 修订要点：① 图一补齐「未签到但已进入时段 → IN_USE（派生）」路径（C1）；② 图一撤销节点改为「无时间限制」并标注已签到亦可撤销的缺口（B22）；③ 图二只读访问措辞改为「经 list/read 授权」（B21）；④ 图三占用槽红字修正为「仅结束清点 / 本人撤销会写入 released_at，超时取消只作用于无槽的 PENDING 单」（C2）；⑤ 三图相互指引（C3）；⑥ 附表新增 B22-B24 与 C1-C3 登记。<br>
     v2.1 修正（2026-10-26 源码复核）：⑦ 图二移除「一键复制 / 名称实时查重 check_name」节点与「名称归一化」表述——清单 v1.2 第四章登记的这些功能在当前代码中不存在（SpaceController 无对应端点），属登记有误；⑧ 附表更正 B17/B18 为「待修」（代码中无对应修复：导入分钟未校验、DuplicateKeyException 无 40900 映射）；⑨ 图三 runtimePhase 按代码判定顺序精确化（有 CHECKOUT 恒 FINISHED、有 CHECKIN 恒 IN_USE，仅无事件时按时间窗派生）；⑩ 图一「通知」泳道更正为「通知·留痕」（一期无消息推送模块）；⑪ 修复两处标签压线。<br>
     v2.1 补丁（2026-10-26 修复实施后）：⑫ B1/B22/B17/B18/B19 真实落地并验证（编译 + 50/50 集成测试 + ESLint 0 错误），图一撤销节点、附表对应行与图二注释同步改为「已修」口径。<br>
-    v2.2 同步（2026-10-26 全量修复实施）：⑬ A1 落地——定时任务对超 end_at 未清点的 APPROVED 单自动完结（AUTO_FINISH 事件 + 幂等释放占用槽，宽限 2 小时可配），图一「占用未释放」节点与图三释放口径同步更新；⑭ A2 落地——管理员强制取消（POST /{id}/force_cancel，原因必填，事件记 FORCE_CANCEL，前端列表已加入口），图三 CANCELLED 来源补 FORCE；⑮ B23/B24 落地——清点不得早于 startAt、超过 endAt 不可签到；⑯ 附表 A1/B23/B24 行与审核提示同步改为「已修」口径；⑰ P2 修复——图三红字残留旧口径已全部清除。
+    v2.2 同步（2026-10-26 全量修复实施）：⑬ A1 落地——定时任务对超 end_at 未清点的 APPROVED 单自动完结（AUTO_FINISH 事件 + 幂等释放占用槽，宽限 2 小时可配），图一「占用未释放」节点与图三释放口径同步更新；⑭ A2 落地——管理员强制取消（POST /{id}/force_cancel，原因必填，事件记 FORCE_CANCEL，前端列表已加入口），图三 CANCELLED 来源补 FORCE；⑮ B23/B24 落地——清点不得早于 startAt、超过 endAt 不可签到；⑯ 附表 A1/B23/B24 行与审核提示同步改为「已修」口径；⑰ P2 修复——图三红字残留旧口径已全部清除。<br>
+    v2.3 同步（2026-10-28 已知差异收口）：⑱ 图二「时段缺省 08:00-21:00」更正为「08:00-21:45」——代码常量 DEFAULT_OPEN_END 对齐 DB 列默认与第 12 节课（21:00-21:45），《场地流程图.md》第 12 节「新增场地默认开放时段」差异闭环；⑲ 第 12 节「登录态时长」核实闭环——登录时按用户类型取策略表 SESSION_TIMEOUT_ADMIN=28800 / SESSION_TIMEOUT_STUDENT_TEACHER=7200 按 token 设置，全局 sa-token.timeout=86400 仅为兜底。
   </div>
 
   <h2>图一 · 实验室场地预约_业务流程图（主流程泳道图）</h2>
@@ -255,7 +256,7 @@ function swimlane(svg,W,lanes,stages,title){
   defs(svg);
   el('rect',{x:1,y:1,width:W-2,height:H-2,fill:'#fff',stroke:'#1a1a1a','stroke-width':1.6},svg);
   el('line',{x1:1,y1:36,x2:W-1,y2:36,stroke:'#1a1a1a','stroke-width':1.4},svg);
-  txt(svg,W/2,24,['场地台账管理流程（/api/v1/space/spaces · v2.2）'],{size:15,bold:true});
+  txt(svg,W/2,24,['场地台账管理流程（/api/v1/space/spaces · v2.3）'],{size:15,bold:true});
   el('line',{x1:1,y1:470,x2:W-1,y2:470,stroke:'#1a1a1a','stroke-width':1.2},svg);
   el('line',{x1:70,y1:36,x2:70,y2:H-1,stroke:'#1a1a1a','stroke-width':1.2},svg);
   txt(svg,35,250,['管','理','员'],{size:14,bold:true,lh:22});
@@ -265,7 +266,7 @@ function swimlane(svg,W,lanes,stages,title){
   rect(svg,'auth',300,235,170,56,'权限校验',['space:space:* · 无权限 40300']);
   diamond(svg,'op',480,235,130,66,'操作类型？');
   const branches=[
-    ['add','新增场地',['名称全局唯一（含已删除）· 容量 1-9999','时段缺省 08:00-21:00 · 状态 AVAILABLE']],
+    ['add','新增场地',['名称全局唯一（含已删除）· 容量 1-9999','时段缺省 08:00-21:45 · 状态 AVAILABLE']],
     ['imp','批量导入',['CSV/XLS/XLSX ≤10MB · ≤5000行','行级校验 · 部分成功 · 失败明细可重传']],
     ['edit','编辑场地',['时段/状态空值保留原值','重名 40900 · 可置 MAINTAINING']],
     ['tog','启用 / 停用（批量≤100）',['停用前影响评估 pending_impact','AVAILABLE⇄CLOSED · 停用后新预约被拦截']],
@@ -299,7 +300,7 @@ function swimlane(svg,W,lanes,stages,title){
   defs(svg);
   el('rect',{x:1,y:1,width:W-2,height:H-2,fill:'#fff',stroke:'#1a1a1a','stroke-width':1.6},svg);
   el('line',{x1:1,y1:36,x2:W-1,y2:36,stroke:'#1a1a1a','stroke-width':1.4},svg);
-  txt(svg,W/2,24,['lab_booking 状态机（落库四态 + 派生阶段）与 lab_slot 占用槽生命周期（v2.2）'],{size:15,bold:true});
+  txt(svg,W/2,24,['lab_booking 状态机（落库四态 + 派生阶段）与 lab_slot 占用槽生命周期（v2.3）'],{size:15,bold:true});
 
   ellipse(svg,'st',110,140,'提交');
   rect(svg,'P',300,140,180,54,'PENDING 待核对',['approval_task READY']);

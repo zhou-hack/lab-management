@@ -290,7 +290,7 @@ class SpaceImportIntegrationTest {
         JsonNode record = page.path("data").path("records").get(0);
         assertThat(record.path("status").asText()).isEqualTo("CLOSED");
         assertThat(record.path("openStart").asText()).isEqualTo("08:00");
-        assertThat(record.path("openEnd").asText()).isEqualTo("21:00");
+        assertThat(record.path("openEnd").asText()).isEqualTo("21:45");
     }
 
     @Test

@@ -25,6 +25,8 @@ mybatis-plus:
 sa-token:
   token-name: Authorization
   token-prefix: Bearer
+  # 全局兜底 24h；实际会话超时按用户类型由策略表 SESSION_TIMEOUT_ADMIN（8h）/
+  # SESSION_TIMEOUT_STUDENT_TEACHER（2h）在登录时按 token 设置，覆盖本值
   timeout: 86400
   is-concurrent: true
   is-share: false

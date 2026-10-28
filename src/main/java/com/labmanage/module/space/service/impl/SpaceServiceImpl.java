@@ -74,7 +74,8 @@ public class SpaceServiceImpl implements SpaceService {
 
     /** 开放时段缺省值与 HH:mm 输入/输出格式（上海时间，无时区换算） */
     private static final LocalTime DEFAULT_OPEN_START = LocalTime.of(8, 0);
-    private static final LocalTime DEFAULT_OPEN_END = LocalTime.of(21, 0);
+    // 与 DB 列默认及第 12 节课（21:00-21:45）对齐，见 sql/migrations/class_period_official_12.sql
+    private static final LocalTime DEFAULT_OPEN_END = LocalTime.of(21, 45);
     private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
 
     /** 导出与展示用业务时区（AGENTS：页面展示按上海日历） */
@@ -428,8 +429,8 @@ public class SpaceServiceImpl implements SpaceService {
     }
 
     /**
-     * 导入开放时段解析：空值取默认 08:00~21:00；否则须恰好含两个 HH:mm，
-     * 且开始早于结束。分隔符任意（导出格式为 08:00~21:00）。
+     * 导入开放时段解析：空值取默认 08:00~21:45；否则须恰好含两个 HH:mm，
+     * 且开始早于结束。分隔符任意（导出格式为 08:00~21:45）。
      */
     private LocalTime[] parseImportWindow(String raw, List<String> errors) {
         String value = raw == null ? "" : raw.trim();
@@ -452,7 +453,7 @@ public class SpaceServiceImpl implements SpaceService {
             times.add(LocalTime.of(hour, minute));
         }
         if (times.size() != 2) {
-            errors.add("开放时段格式须为「HH:mm~HH:mm」（如 08:00~21:00）");
+            errors.add("开放时段格式须为「HH:mm~HH:mm」（如 08:00~21:45）");
             return null;
         }
         LocalTime start = times.get(0);

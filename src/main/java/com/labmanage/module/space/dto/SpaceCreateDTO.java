@@ -13,7 +13,7 @@ import jakarta.validation.constraints.Size;
  * 新建场地入参。
  * <p>
  * 客户端不可指定 id/审计字段，由服务端写入；
- * openStart/openEnd 可空，缺省分别取 08:00 / 21:00；
+ * openStart/openEnd 可空，缺省分别取 08:00 / 21:45；
  * status 可空，缺省 AVAILABLE。
  */
 public record SpaceCreateDTO(

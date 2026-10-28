@@ -154,7 +154,7 @@
 实施规则：
 
 1. 连续 5 次密码错误锁定 30 分钟（`failed_login_count`/`locked_until`）；验证码 6 位数字、5 分钟有效、错误 5 次作废。
-2. 会话有效期按用户类型区分：学生/老师 2 小时、管理员 8 小时，登录时 `StpUtil.login(id, SaLoginParameter.setTimeout(...))` 设置。注意当前 `sa-token.timeout: 86400` 全局默认值与本规则不一致，roles 模块落地时修正。
+2. 会话有效期按用户类型区分：学生/老师 2 小时、管理员 8 小时，登录时 `StpUtil.login(id, SaLoginParameter.setTimeout(...))` 设置。**✅ 已落地（2026-10-28 核实）**：`AuthServiceImpl.doLogin` 按 userType 读策略表 `SESSION_TIMEOUT_ADMIN`=28800 / `SESSION_TIMEOUT_STUDENT_TEACHER`=7200（种子见 [sql/sys_policy.sql](../sql/sys_policy.sql)），per-token 超时覆盖全局 `sa-token.timeout: 86400` 兜底值。
 3. 90 天强制换密依据 `password_changed_at`；登录响应 `passwordChangeRequired=true` 时前端强制跳转改密页。
 4. 首登建档事务：匹配有效名单（学工号+手机号）→ 创建 sys_user → 写入主身份 sys_user_role，角色由名单 `person_type` 派生，客户端不得指定。
 

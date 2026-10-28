@@ -36,7 +36,7 @@ public class BizSpace extends BaseEntity {
     /** 每日开放开始（上海时间，默认 08:00） */
     private LocalTime openStart;
 
-    /** 每日开放结束（上海时间，默认 21:00，须晚于 openStart） */
+    /** 每日开放结束（上海时间，默认 21:45，须晚于 openStart） */
     private LocalTime openEnd;
 
     /** 状态：AVAILABLE/MAINTAINING/CLOSED（落库） */
