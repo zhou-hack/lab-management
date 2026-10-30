@@ -13,6 +13,7 @@ import com.labmanage.module.item.transfer.FileFormat;
 import com.labmanage.module.item.transfer.TransferFile;
 import com.labmanage.module.item.vo.ImportResultVO;
 import com.labmanage.module.item.vo.MaterialSkuVO;
+import com.labmanage.module.item.vo.SkuOptionVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -33,6 +34,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 /**
  * 物料档案管理
@@ -55,6 +57,16 @@ public class MaterialSkuController {
     @GetMapping("/page")
     public Result<PageResult<MaterialSkuVO>> page(@Valid MaterialSkuQuery query) {
         return Result.success(skuService.page(query));
+    }
+
+    @Operation(summary = "物料选项（申领表单选择器用）",
+            description = "关键字同时模糊匹配 SKU 码与物料名称，仅返回启用物料，最多 20 条；"
+                    + "轻量视图不暴露成本等档案字段，供老师/学生申领选择")
+    @RequirePermission("item:request:create")
+    @GetMapping("/options")
+    public Result<List<SkuOptionVO>> options(
+            @Parameter(description = "SKU 码或物料名称片段（均模糊匹配）") @RequestParam(required = false) String keyword) {
+        return Result.success(skuService.listOptions(keyword));
     }
 
     @Operation(summary = "物料详情")

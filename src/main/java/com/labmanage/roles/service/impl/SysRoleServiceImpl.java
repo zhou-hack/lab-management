@@ -8,19 +8,23 @@ import com.labmanage.roles.entity.SysPermission;
 import com.labmanage.roles.entity.SysRole;
 import com.labmanage.roles.entity.SysRoleMenu;
 import com.labmanage.roles.entity.SysRolePermission;
+import com.labmanage.roles.entity.SysUser;
 import com.labmanage.roles.entity.SysUserRole;
 import com.labmanage.roles.enums.RoleCode;
 import com.labmanage.roles.mapper.AssistantGrantMapper;
+import com.labmanage.roles.mapper.SysDepartmentMapper;
 import com.labmanage.roles.mapper.SysMenuMapper;
 import com.labmanage.roles.mapper.SysPermissionMapper;
 import com.labmanage.roles.mapper.SysRoleMapper;
 import com.labmanage.roles.mapper.SysRoleMenuMapper;
 import com.labmanage.roles.mapper.SysRolePermissionMapper;
+import com.labmanage.roles.mapper.SysUserMapper;
 import com.labmanage.roles.mapper.SysUserRoleMapper;
 import com.labmanage.roles.service.AuthService;
 import com.labmanage.roles.service.SysRoleService;
 import com.labmanage.roles.vo.PermissionOptionVO;
 import com.labmanage.roles.vo.RoleDetailVO;
+import com.labmanage.roles.vo.RoleUserItemVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,12 +59,17 @@ public class SysRoleServiceImpl implements SysRoleService {
 
     private final AssistantGrantMapper grantMapper;
 
+    private final SysUserMapper userMapper;
+
+    private final SysDepartmentMapper departmentMapper;
+
     private final AuthService authService;
 
     public SysRoleServiceImpl(SysRoleMapper roleMapper, SysRolePermissionMapper rolePermissionMapper,
                               SysRoleMenuMapper roleMenuMapper, SysPermissionMapper permissionMapper,
                               SysMenuMapper menuMapper, SysUserRoleMapper userRoleMapper,
-                              AssistantGrantMapper grantMapper, AuthService authService) {
+                              AssistantGrantMapper grantMapper, SysUserMapper userMapper,
+                              SysDepartmentMapper departmentMapper, AuthService authService) {
         this.roleMapper = roleMapper;
         this.rolePermissionMapper = rolePermissionMapper;
         this.roleMenuMapper = roleMenuMapper;
@@ -68,6 +77,8 @@ public class SysRoleServiceImpl implements SysRoleService {
         this.menuMapper = menuMapper;
         this.userRoleMapper = userRoleMapper;
         this.grantMapper = grantMapper;
+        this.userMapper = userMapper;
+        this.departmentMapper = departmentMapper;
         this.authService = authService;
     }
 
@@ -131,6 +142,41 @@ public class SysRoleServiceImpl implements SysRoleService {
                         .orderByAsc(SysPermission::getId)).stream()
                 .map(p -> new PermissionOptionVO(String.valueOf(p.getId()), p.getPermissionCode(),
                         p.getPermissionName(), p.getModuleCode()))
+                .toList();
+    }
+
+    @Override
+    public List<RoleUserItemVO> listRoleUsers(Long roleId) {
+        SysRole role = roleMapper.selectById(roleId);
+        if (role == null) {
+            throw new BusinessException(40400, "角色不存在");
+        }
+        // ASSISTANT 不持久化绑定，由有效助理授权动态计算；其余角色读 sys_user_role
+        Set<Long> userIds;
+        if (RoleCode.ASSISTANT.name().equals(role.getRoleCode())) {
+            userIds = new HashSet<>(grantMapper.selectValidStudentIds(Instant.now()));
+        } else {
+            userIds = userRoleMapper.selectList(Wrappers.<SysUserRole>lambdaQuery()
+                            .eq(SysUserRole::getRoleId, roleId)).stream()
+                    .map(SysUserRole::getUserId).collect(Collectors.toSet());
+        }
+        if (userIds.isEmpty()) {
+            return List.of();
+        }
+        List<SysUser> users = userMapper.selectList(Wrappers.<SysUser>lambdaQuery()
+                .in(SysUser::getId, userIds)
+                .orderByAsc(SysUser::getId));
+        Map<Long, String> departmentNames = departmentMapper.selectList(null).stream()
+                .collect(Collectors.toMap(d -> d.getId(), d -> d.getDepartmentName()));
+        return users.stream()
+                .map(u -> new RoleUserItemVO(
+                        String.valueOf(u.getId()),
+                        u.getUserType(),
+                        u.getRealName(),
+                        u.getAccountName(),
+                        u.getPersonNo(),
+                        u.getDepartmentId() == null ? null : departmentNames.get(u.getDepartmentId()),
+                        u.getEnabled()))
                 .toList();
     }
 

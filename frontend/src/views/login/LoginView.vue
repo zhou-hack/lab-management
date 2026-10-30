@@ -131,9 +131,10 @@ const quickAccounts = import.meta.env.DEV
   ? [
       { label: '管理员', account: 'admin', password: 'Admin123456' },
       { label: '运维管理员', account: 'opsadmin', password: 'Admin123456' },
-      { label: '老师', account: 'teacher1', password: 'Admin123456' },
-      { label: '学生', account: 'student1', password: 'admin123' },
-      { label: '学生代理', account: 'student2', password: 'admin123' }
+      { label: '老师', account: 'T20240101', password: 'Admin123456' },
+      { label: '学生', account: 'S20240101', password: 'Admin123456' },
+      // 种子库仅 1 个学生账号，其持有生效中的助理授权，登录即含 ASSISTANT 角色
+      { label: '学生代理', account: 'S20240101', password: 'Admin123456' }
     ]
   : []
 

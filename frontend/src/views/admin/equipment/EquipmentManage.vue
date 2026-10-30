@@ -6,7 +6,7 @@
           设备管理
         </h2>
         <p class="t-sub">
-          型号按分类分组（分类目录已并入型号面板）· 台账按设备型号分组；默认双面板展开，点击面板头部可收起
+          型号按分类分组（分类目录已并入型号面板）· 台账按设备型号分组；默认收起，点击面板头部展开
         </p>
       </div>
       <el-button
@@ -74,7 +74,7 @@ import AssetSection from '@/views/admin/equipment/AssetManage.vue'
  * - 分类目录已并入型号面板的「管理分类」抽屉，不再单独成页
  * - 型号按所属分类分组折叠，台账按设备型号分组折叠；面板可各自展开收起、允许同时展开，
  *   收起时子组件 DOM 保留，查询条件与分页状态不丢失
- * - 侧栏单菜单 /admin/equipment 直达本页，默认双面板全展开
+ * - 侧栏单菜单 /admin/equipment 直达本页，面板默认收起，点击展开
  * - 子组件首次展开才请求数据（懒加载），计数由子组件上报展示于面板头
  */
 
@@ -100,8 +100,8 @@ const panels = [
 /** 面板计数（子组件上报；null 表示未加载） */
 const counts = reactive({ model: null, asset: null })
 
-/** 单页承载型号与台账，默认双面板全展开 */
-const activePanels = ref(panels.map((p) => p.key))
+/** 单页承载型号与台账，默认收起，点开才展开（懒加载由子组件 active 驱动） */
+const activePanels = ref([])
 
 const allOpen = computed(() => activePanels.value.length === panels.length)
 

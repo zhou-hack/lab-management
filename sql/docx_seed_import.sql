@@ -27,10 +27,10 @@
 INSERT INTO lab (id, lab_name, lab_type, location_detail, capacity, facilities,
                  open_start, open_end, status, create_user_id, update_user_id)
 VALUES
-(4, '嵌入式实训室', 'TRAINING_ROOM', NULL, 45, NULL, '08:00', '21:00', 'AVAILABLE', 1, 1),
-(5, 'A303 软件工程实训室', 'TRAINING_ROOM', 'A303', 61, NULL, '08:00', '21:00', 'AVAILABLE', 1, 1),
-(6, '综合工程实训室', 'TRAINING_ROOM', NULL, 45, NULL, '08:00', '21:00', 'AVAILABLE', 1, 1),
-(7, '公共库房', 'TRAINING_ROOM', NULL, 10, '公共物资集中存放', '08:00', '21:00', 'AVAILABLE', 1, 1);
+(4, '嵌入式实训室', 'TRAINING_ROOM', NULL, 45, NULL, '08:00', '22:00', 'AVAILABLE', 1, 1),
+(5, 'A303 软件工程实训室', 'TRAINING_ROOM', 'A303', 61, NULL, '08:00', '22:00', 'AVAILABLE', 1, 1),
+(6, '综合工程实训室', 'TRAINING_ROOM', NULL, 45, NULL, '08:00', '22:00', 'AVAILABLE', 1, 1),
+(7, '公共库房', 'TRAINING_ROOM', NULL, 10, '公共物资集中存放', '08:00', '22:00', 'AVAILABLE', 1, 1);
 
 -- ----------------------------------------------------------------------------
 -- 2. 设备分类（11 个根分类，按 DOCX“大类”）

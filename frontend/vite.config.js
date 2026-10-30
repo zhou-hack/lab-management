@@ -5,8 +5,9 @@ import { fileURLToPath, URL } from 'node:url'
 export default defineConfig(({ mode }) => {
   // 后端地址可用 VITE_API_TARGET 覆盖（.env.local 或 shell 环境变量），
   // 如本机 8080 被占用时指向 http://localhost:8081
+  // 注：loadEnv 只读 .env 文件，shell 注入的变量须走 process.env
   const env = loadEnv(mode, process.cwd(), '')
-  const apiTarget = env.VITE_API_TARGET || 'http://localhost:8080'
+  const apiTarget = env.VITE_API_TARGET || process.env.VITE_API_TARGET || 'http://localhost:8080'
 
   return {
     plugins: [vue()],

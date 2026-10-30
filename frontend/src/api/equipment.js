@@ -56,6 +56,11 @@ export function custodianOptions() {
   return request.get('/equipment/assets/custodian-options')
 }
 
+/** 设备进行中与未来的被约时段（目录「被约时间」明细） */
+export function listAssetFutureBookings(id) {
+  return request.get(`/equipment/assets/${id}/future_bookings`)
+}
+
 /** 新增台账 */
 export function createAsset(data) {
   return request.post('/equipment/assets', data)

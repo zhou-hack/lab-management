@@ -26,9 +26,6 @@ public class StockBalance extends BaseEntity {
     /** 补货目标库存（≥ 安全库存） */
     private BigDecimal targetQty;
 
-    /** 移动加权平均成本 */
-    private BigDecimal movingAveragePrice;
-
     /** 乐观锁版本 */
     private Integer version;
 
@@ -70,14 +67,6 @@ public class StockBalance extends BaseEntity {
 
     public void setTargetQty(BigDecimal targetQty) {
         this.targetQty = targetQty;
-    }
-
-    public BigDecimal getMovingAveragePrice() {
-        return movingAveragePrice;
-    }
-
-    public void setMovingAveragePrice(BigDecimal movingAveragePrice) {
-        this.movingAveragePrice = movingAveragePrice;
     }
 
     public Integer getVersion() {

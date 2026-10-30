@@ -91,8 +91,8 @@ class StockTransferServiceImplTest {
     void importOpeningCreatesDraftDocument() throws IOException {
         MockMultipartFile file = file("opening.csv", csvBytes(
                 ImportColumns.BALANCE_OPENING_HEADER.toArray(new String[0]),
-                new String[]{"LOC-A", "SKU-ETHANOL", "10.5", "25.5"},
-                new String[]{"LOC-A", "SKU-BEAKER", "3", ""}));
+                new String[]{"LOC-A", "SKU-ETHANOL", "10.5"},
+                new String[]{"LOC-A", "SKU-BEAKER", "3"}));
         when(locationMapper.selectOne(any())).thenReturn(location(10L, "LOC-A", 1));
         when(skuMapper.selectOne(any())).thenReturn(sku(101L, "SKU-ETHANOL", 2), sku(102L, "SKU-BEAKER", 0));
         when(balanceMapper.selectCount(any())).thenReturn(0L);
@@ -114,9 +114,8 @@ class StockTransferServiceImplTest {
         assertNull(dto.lines().get(0).fromLocationId());
         assertEquals("10", dto.lines().get(0).toLocationId());
         assertEquals(new BigDecimal("10.5"), dto.lines().get(0).quantity());
-        assertEquals(new BigDecimal("25.5"), dto.lines().get(0).unitPrice());
         assertEquals("102", dto.lines().get(1).skuId());
-        assertNull(dto.lines().get(1).unitPrice());
+        assertEquals(new BigDecimal("3"), dto.lines().get(1).quantity());
         assertTrue(dto.reason().contains("期初批量导入"));
     }
 
@@ -124,10 +123,10 @@ class StockTransferServiceImplTest {
     void importOpeningRecordsFailuresAndContinues() throws IOException {
         MockMultipartFile file = file("opening.csv", csvBytes(
                 ImportColumns.BALANCE_OPENING_HEADER.toArray(new String[0]),
-                new String[]{"LOC-XXX", "SKU-ETHANOL", "10", ""},
-                new String[]{"LOC-A", "SKU-XXX", "10", ""},
-                new String[]{"LOC-A", "SKU-ETHANOL", "0", ""},
-                new String[]{"LOC-A", "SKU-ETHANOL", "10", ""}));
+                new String[]{"LOC-XXX", "SKU-ETHANOL", "10"},
+                new String[]{"LOC-A", "SKU-XXX", "10"},
+                new String[]{"LOC-A", "SKU-ETHANOL", "0"},
+                new String[]{"LOC-A", "SKU-ETHANOL", "10"}));
         StockLocation loc = location(10L, "LOC-A", 1);
         MaterialSku skuA = sku(101L, "SKU-ETHANOL", 2);
         when(locationMapper.selectOne(any())).thenReturn(null, loc, loc);
@@ -153,8 +152,8 @@ class StockTransferServiceImplTest {
     void importOpeningRejectsDuplicatePairWithinFile() throws IOException {
         MockMultipartFile file = file("opening.csv", csvBytes(
                 ImportColumns.BALANCE_OPENING_HEADER.toArray(new String[0]),
-                new String[]{"LOC-A", "SKU-ETHANOL", "10", ""},
-                new String[]{"LOC-A", "SKU-ETHANOL", "5", ""}));
+                new String[]{"LOC-A", "SKU-ETHANOL", "10"},
+                new String[]{"LOC-A", "SKU-ETHANOL", "5"}));
         when(locationMapper.selectOne(any())).thenReturn(location(10L, "LOC-A", 1));
         when(skuMapper.selectOne(any())).thenReturn(sku(101L, "SKU-ETHANOL", 2));
         when(balanceMapper.selectCount(any())).thenReturn(0L);
@@ -172,7 +171,7 @@ class StockTransferServiceImplTest {
     void importOpeningRejectsExistingBalance() throws IOException {
         MockMultipartFile file = file("opening.csv", csvBytes(
                 ImportColumns.BALANCE_OPENING_HEADER.toArray(new String[0]),
-                new String[]{"LOC-A", "SKU-ETHANOL", "10", ""}));
+                new String[]{"LOC-A", "SKU-ETHANOL", "10"}));
         when(locationMapper.selectOne(any())).thenReturn(location(10L, "LOC-A", 1));
         when(skuMapper.selectOne(any())).thenReturn(sku(101L, "SKU-ETHANOL", 2));
         when(balanceMapper.selectCount(any())).thenReturn(1L);
@@ -191,7 +190,7 @@ class StockTransferServiceImplTest {
     void importOpeningRejectsDisabledLocationAndSku() throws IOException {
         MockMultipartFile locFile = file("opening.csv", csvBytes(
                 ImportColumns.BALANCE_OPENING_HEADER.toArray(new String[0]),
-                new String[]{"LOC-A", "SKU-ETHANOL", "10", ""}));
+                new String[]{"LOC-A", "SKU-ETHANOL", "10"}));
         when(locationMapper.selectOne(any())).thenReturn(location(10L, "LOC-A", 0));
 
         ImportResultVO locResult = service.importOpeningBalances(locFile);
@@ -200,7 +199,7 @@ class StockTransferServiceImplTest {
 
         MockMultipartFile skuFile = file("opening.csv", csvBytes(
                 ImportColumns.BALANCE_OPENING_HEADER.toArray(new String[0]),
-                new String[]{"LOC-A", "SKU-ETHANOL", "10", ""}));
+                new String[]{"LOC-A", "SKU-ETHANOL", "10"}));
         when(locationMapper.selectOne(any())).thenReturn(location(10L, "LOC-A", 1));
         when(skuMapper.selectOne(any())).thenReturn(sku(101L, "SKU-ETHANOL", 2, 0));
 
@@ -210,29 +209,27 @@ class StockTransferServiceImplTest {
     }
 
     @Test
-    void importOpeningRejectsPrecisionAndDigitsOverflow() throws IOException {
+    void importOpeningRejectsQuantityPrecisionOverflow() throws IOException {
         MockMultipartFile file = file("opening.csv", csvBytes(
                 ImportColumns.BALANCE_OPENING_HEADER.toArray(new String[0]),
-                new String[]{"LOC-A", "SKU-ETHANOL", "10.555", ""},
-                new String[]{"LOC-A", "SKU-ETHANOL", "5", "25.12345"}));
+                new String[]{"LOC-A", "SKU-ETHANOL", "10.555"}));
         when(locationMapper.selectOne(any())).thenReturn(location(10L, "LOC-A", 1));
         when(skuMapper.selectOne(any())).thenReturn(sku(101L, "SKU-ETHANOL", 2));
 
         ImportResultVO result = service.importOpeningBalances(file);
 
-        assertEquals(2, result.total());
+        assertEquals(1, result.total());
         assertEquals(0, result.successCount());
-        assertEquals(2, result.failures().size());
+        assertEquals(1, result.failures().size());
         assertTrue(result.failures().get(0).reason().contains("数量精度超过物料限制"));
-        assertTrue(result.failures().get(1).reason().contains("单价小数位不能超过"));
         verify(stockDocumentService, never()).create(any());
     }
 
     @Test
     void importOpeningRejectsMismatchedHeader() throws IOException {
         MockMultipartFile file = file("opening.csv", csvBytes(
-                new String[]{"错误表头", "SKU码", "数量", "单价"},
-                new String[]{"LOC-A", "SKU-ETHANOL", "10", ""}));
+                new String[]{"错误表头", "SKU码", "数量"},
+                new String[]{"LOC-A", "SKU-ETHANOL", "10"}));
 
         BusinessException ex = assertThrows(BusinessException.class, () -> service.importOpeningBalances(file));
 
@@ -255,7 +252,7 @@ class StockTransferServiceImplTest {
     void importOpeningSupportsXlsx() throws IOException {
         MockMultipartFile file = file("opening.xlsx", xlsxBytes(
                 ImportColumns.BALANCE_OPENING_HEADER.toArray(new String[0]),
-                new String[]{"LOC-A", "SKU-ETHANOL", "10", "25.5"}));
+                new String[]{"LOC-A", "SKU-ETHANOL", "10"}));
         when(locationMapper.selectOne(any())).thenReturn(location(10L, "LOC-A", 1));
         when(skuMapper.selectOne(any())).thenReturn(sku(101L, "SKU-ETHANOL", 2));
         when(balanceMapper.selectCount(any())).thenReturn(0L);
@@ -272,9 +269,9 @@ class StockTransferServiceImplTest {
     @Test
     void exportBalancesWritesCsvWithHeaderAndRows() throws IOException {
         StockBalanceVO warning = balanceVO("1", "10", "一号柜", "101", "SKU-ETHANOL", "无水乙醇",
-                "8.5", "10", "20", "25.5", "WARNING");
+                "8.5", "10", "20", "WARNING");
         StockBalanceVO outOfStock = balanceVO("2", "99", "二号柜", "102", "SKU-BEAKER", "烧杯",
-                "0", "5", "10", "3", "OUT_OF_STOCK");
+                "0", "5", "10", "OUT_OF_STOCK");
         when(stockQueryService.listBalanceForExport(any())).thenReturn(List.of(warning, outOfStock));
         when(locationMapper.selectByIds(any())).thenReturn(List.of(location(10L, "LOC-A", 1)));
         StockBalanceExportQuery query = new StockBalanceExportQuery();
@@ -286,16 +283,16 @@ class StockTransferServiceImplTest {
         assertTrue(file.fileName().startsWith("库存余额导出_"));
         assertTrue(file.fileName().endsWith(".csv"));
         List<List<String>> rows = new CsvRowReader().read(new ByteArrayInputStream(file.content()), 10);
-        assertEquals(List.of("库位编码", "SKU码", "物料名称", "库存量", "安全库存", "补货目标", "移动均价", "预警状态"),
+        assertEquals(List.of("库位编码", "SKU码", "物料名称", "库存量", "安全库存", "补货目标", "预警状态"),
                 rows.get(0));
-        assertEquals(List.of("LOC-A", "SKU-ETHANOL", "无水乙醇", "8.5", "10", "20", "25.5", "预警"), rows.get(1));
-        assertEquals(List.of("", "SKU-BEAKER", "烧杯", "0", "5", "10", "3", "缺货"), rows.get(2));
+        assertEquals(List.of("LOC-A", "SKU-ETHANOL", "无水乙醇", "8.5", "10", "20", "预警"), rows.get(1));
+        assertEquals(List.of("", "SKU-BEAKER", "烧杯", "0", "5", "10", "缺货"), rows.get(2));
     }
 
     @Test
     void exportBalancesSupportsXlsx() throws IOException {
         StockBalanceVO vo = balanceVO("1", "10", "一号柜", "101", "SKU-ETHANOL", "无水乙醇",
-                "8.5", "10", "20", "25.5", "NORMAL");
+                "8.5", "10", "20", "NORMAL");
         when(stockQueryService.listBalanceForExport(any())).thenReturn(List.of(vo));
         when(locationMapper.selectByIds(any())).thenReturn(List.of(location(10L, "LOC-A", 1)));
         StockBalanceExportQuery query = new StockBalanceExportQuery();
@@ -306,13 +303,13 @@ class StockTransferServiceImplTest {
         assertTrue(file.fileName().endsWith(".xlsx"));
         List<List<String>> rows = new XlsxRowReader().read(new ByteArrayInputStream(file.content()), 10);
         assertEquals(2, rows.size());
-        assertEquals("正常", rows.get(1).get(7));
+        assertEquals("正常", rows.get(1).get(6));
     }
 
     @Test
     void exportBalancesRejectsWhenExceedsLimit() {
         StockBalanceVO vo = balanceVO("1", "10", "一号柜", "101", "SKU-ETHANOL", "无水乙醇",
-                "1", "1", "1", "1", "NORMAL");
+                "1", "1", "1", "NORMAL");
         when(stockQueryService.listBalanceForExport(any())).thenReturn(Collections.nCopies(10001, vo));
         StockBalanceExportQuery query = new StockBalanceExportQuery();
         query.setFormat("csv");
@@ -399,10 +396,10 @@ class StockTransferServiceImplTest {
 
     private StockBalanceVO balanceVO(String id, String locationId, String locationName, String skuId,
                                      String skuCode, String skuName, String stockQty, String safeQty,
-                                     String targetQty, String price, String warningLevel) {
+                                     String targetQty, String warningLevel) {
         return new StockBalanceVO(id, locationId, locationName, skuId, skuCode, skuName, "瓶",
                 new BigDecimal(stockQty), new BigDecimal(safeQty), new BigDecimal(targetQty),
-                new BigDecimal(price), null, warningLevel, 1,
+                null, warningLevel, 1,
                 Instant.parse("2026-10-17T01:00:00Z"));
     }
 }

@@ -5,6 +5,9 @@ import com.labmanage.module.item.dto.MaterialSkuCreateDTO;
 import com.labmanage.module.item.dto.MaterialSkuQuery;
 import com.labmanage.module.item.dto.MaterialSkuUpdateDTO;
 import com.labmanage.module.item.vo.MaterialSkuVO;
+import com.labmanage.module.item.vo.SkuOptionVO;
+
+import java.util.List;
 
 /**
  * 物料 SKU 服务
@@ -13,6 +16,9 @@ public interface MaterialSkuService {
 
     /** 分页查询 */
     PageResult<MaterialSkuVO> page(MaterialSkuQuery query);
+
+    /** 物料选项（申领表单选择器用；关键字同时匹配 SKU 码前缀与名称模糊，仅启用，最多 20 条） */
+    List<SkuOptionVO> listOptions(String keyword);
 
     /** 详情 */
     MaterialSkuVO get(String id);

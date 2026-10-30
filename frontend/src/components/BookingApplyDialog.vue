@@ -7,7 +7,7 @@
   >
     <el-alert
       class="booking_apply__alert"
-      title="审批通过即生效；提交与审批均校验时段占用"
+      title="教师初审 + 管理员终审通过后生效；提交与审批均校验时段占用"
       type="info"
       :closable="false"
     />
@@ -117,8 +117,8 @@ import { useUserStore } from '@/store/user'
  * 设备使用申请弹窗（设备目录 / 我的设备申请共用）。
  * - preset 传入时申请指定设备（目录行入口）；否则展示远程搜索下拉，
  *   按关键字查在架目录（服务端收敛为 IDLE 启用视图）
- * - 学生单（非代理）须指定审批教师；学生代理（有效助理授权）与老师同级别，
- *   跳过初审直接交设备管理员，不显示审批教师项（2026-10-22 产品定稿）
+ * - 学生单（含学生代理）须指定审批教师：初审通过后统一转管理员终审，
+ *   管理员批准后方可借出（2026-10-24 起两级审批，代理不再直通）
  * - 提交成功后 emit('success')，由调用方刷新列表
  */
 const props = defineProps({
@@ -129,8 +129,7 @@ const emit = defineEmits(['success'])
 
 const store = useUserStore()
 const isStudent = store.user?.userType === 'STUDENT'
-const isAssistant = (store.roles || []).includes('ASSISTANT')
-const needTeacher = isStudent && !isAssistant
+const needTeacher = isStudent
 
 const visible = ref(false)
 const saving = ref(false)
@@ -182,13 +181,26 @@ const assetLoading = ref(false)
 async function searchEquipment(keyword = '') {
   assetLoading.value = true
   try {
-    const params = { pageNum: 1, pageSize: 20 }
     const text = (keyword || '').trim()
-    if (text) {
-      params.keyword = text
+    if (!text) {
+      const data = await pageAssets({ pageNum: 1, pageSize: 20 })
+      assetOptions.value = data.records || []
+      return
     }
-    const data = await pageAssets(params)
-    assetOptions.value = data.records || []
+    // 后端查询参数已按字段拆分：编号与名称各查一次，合并去重保持单框搜索体验
+    const [byCode, byName] = await Promise.all([
+      pageAssets({ pageNum: 1, pageSize: 20, assetCode: text }),
+      pageAssets({ pageNum: 1, pageSize: 20, equipmentName: text })
+    ])
+    const seen = new Set()
+    const merged = []
+    for (const row of [...(byCode.records || []), ...(byName.records || [])]) {
+      if (!seen.has(row.id)) {
+        seen.add(row.id)
+        merged.push(row)
+      }
+    }
+    assetOptions.value = merged.slice(0, 20)
   } catch {
     // 失败提示由请求拦截器统一处理
   } finally {

@@ -3,6 +3,7 @@ package com.labmanage.module.item.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.labmanage.common.core.BaseEntity;
 import com.labmanage.module.item.enums.MaterialRequestStatus;
+import com.labmanage.module.item.enums.PickupMode;
 import com.labmanage.module.item.enums.RequestType;
 
 import java.time.Instant;
@@ -45,6 +46,9 @@ public class MaterialRequest extends BaseEntity {
 
     /** 用途 */
     private String purpose;
+
+    /** 领取方式：SELF_PICKUP 本人领取 / PROXY_PICKUP 学生代理领取（仅老师本人申领单可选） */
+    private PickupMode pickupMode;
 
     /** 申领类型：SELF 本人申领 / PROXY 学生代理代领 */
     private RequestType requestType;
@@ -141,6 +145,14 @@ public class MaterialRequest extends BaseEntity {
 
     public void setPurpose(String purpose) {
         this.purpose = purpose;
+    }
+
+    public PickupMode getPickupMode() {
+        return pickupMode;
+    }
+
+    public void setPickupMode(PickupMode pickupMode) {
+        this.pickupMode = pickupMode;
     }
 
     public RequestType getRequestType() {

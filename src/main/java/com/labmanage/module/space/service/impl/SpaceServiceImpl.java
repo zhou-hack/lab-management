@@ -2,6 +2,7 @@ package com.labmanage.module.space.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.labmanage.common.exception.BusinessException;
 import com.labmanage.common.result.PageResult;
@@ -15,13 +16,16 @@ import com.labmanage.module.space.dto.SpaceCreateDTO;
 import com.labmanage.module.space.dto.SpacePageQuery;
 import com.labmanage.module.space.dto.SpaceUpdateDTO;
 import com.labmanage.module.space.entity.BizSpace;
+import com.labmanage.module.space.entity.LabMaintenanceWindow;
 import com.labmanage.module.space.enums.SpaceStatus;
 import com.labmanage.module.space.enums.SpaceType;
 import com.labmanage.module.space.mapper.BizSpaceMapper;
+import com.labmanage.module.space.mapper.LabMaintenanceWindowMapper;
 import com.labmanage.module.space.service.SpaceService;
 import com.labmanage.module.space.service.support.SpaceImportFileParser;
 import com.labmanage.module.space.service.support.SpaceImportFileParser.RawRow;
 import com.labmanage.module.space.vo.SpaceBatchStatusVO;
+import com.labmanage.module.space.vo.MaintenanceWindowVO;
 import com.labmanage.module.space.vo.SpaceImportVO;
 import com.labmanage.module.space.vo.SpaceDetailVO;
 import com.labmanage.module.space.vo.SpaceListVO;
@@ -74,7 +78,7 @@ public class SpaceServiceImpl implements SpaceService {
 
     /** 开放时段缺省值与 HH:mm 输入/输出格式（上海本地时间，无时区换算） */
     private static final LocalTime DEFAULT_OPEN_START = LocalTime.of(8, 0);
-    private static final LocalTime DEFAULT_OPEN_END = LocalTime.of(21, 0);
+    private static final LocalTime DEFAULT_OPEN_END = LocalTime.of(22, 0);
     private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
 
     /** 导出与展示用业务时区（AGENTS：页面展示按上海本地日历） */
@@ -94,17 +98,20 @@ public class SpaceServiceImpl implements SpaceService {
     private final BizSpaceMapper spaceMapper;
     private final LabBookingMapper bookingMapper;
     private final LabSlotMapper slotMapper;
+    private final LabMaintenanceWindowMapper maintenanceMapper;
     private final SpaceImportFileParser importFileParser;
     private final SqlSessionFactory sqlSessionFactory;
 
     public SpaceServiceImpl(BizSpaceMapper spaceMapper,
                             LabBookingMapper bookingMapper,
                             LabSlotMapper slotMapper,
+                            LabMaintenanceWindowMapper maintenanceMapper,
                             SpaceImportFileParser importFileParser,
                             SqlSessionFactory sqlSessionFactory) {
         this.spaceMapper = spaceMapper;
         this.bookingMapper = bookingMapper;
         this.slotMapper = slotMapper;
+        this.maintenanceMapper = maintenanceMapper;
         this.importFileParser = importFileParser;
         this.sqlSessionFactory = sqlSessionFactory;
     }
@@ -116,12 +123,35 @@ public class SpaceServiceImpl implements SpaceService {
         long begin = System.nanoTime();
         LambdaQueryWrapper<BizSpace> wrapper = buildWrapper(query);
         Page<BizSpace> page = spaceMapper.selectPage(PageUtils.toPage(query), wrapper);
-        List<SpaceListVO> records = page.getRecords().stream().map(this::toListVO).toList();
+        // 本页场地的生效中维修时段（含进行中与未来）一次查询内存分组
+        Map<Long, List<MaintenanceWindowVO>> maintenanceByLab = loadUpcomingMaintenance(
+                page.getRecords().stream().map(BizSpace::getId).toList());
+        List<SpaceListVO> records = page.getRecords().stream()
+                .map(s -> toListVO(s, maintenanceByLab.getOrDefault(s.getId(), List.of())))
+                .toList();
         log.info("[场地分页] 完成：操作人={}, 页码={}, 页大小={}, 条件=[{}], 命中总数={}, 返回行数={}, 耗时={}ms",
                 SecurityUtils.currentUserId(), query.getPageNum(), query.getPageSize(),
                 buildFilterSummary(query), page.getTotal(), records.size(),
                 (System.nanoTime() - begin) / 1_000_000);
         return PageResult.of(records, page.getTotal(), (int) page.getCurrent(), (int) page.getSize());
+    }
+
+    /** 本页场地生效中维修时段（end_at > now 未取消），按场地分组、开始时间升序 */
+    private Map<Long, List<MaintenanceWindowVO>> loadUpcomingMaintenance(List<Long> labIds) {
+        if (labIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<MaintenanceWindowVO>> byLab = new HashMap<>();
+        for (LabMaintenanceWindow w : maintenanceMapper.selectList(Wrappers.<LabMaintenanceWindow>lambdaQuery()
+                .in(LabMaintenanceWindow::getLabId, labIds)
+                .isNull(LabMaintenanceWindow::getCancelledAt)
+                .gt(LabMaintenanceWindow::getEndAt, Instant.now())
+                .orderByAsc(LabMaintenanceWindow::getStartAt))) {
+            byLab.computeIfAbsent(w.getLabId(), k -> new ArrayList<>())
+                    .add(new MaintenanceWindowVO(String.valueOf(w.getId()), String.valueOf(w.getLabId()),
+                            w.getStartAt(), w.getEndAt(), w.getReason()));
+        }
+        return byLab;
     }
 
     @Override
@@ -425,8 +455,8 @@ public class SpaceServiceImpl implements SpaceService {
     }
 
     /**
-     * 导入开放时段解析：空值取默认 08:00~21:00；否则须恰好含两个 HH:mm，
-     * 且开始早于结束。分隔符任意（导出格式为 08:00~21:00）。
+     * 导入开放时段解析：空值取默认 08:00~22:00；否则须恰好含两个 HH:mm，
+     * 且开始早于结束。分隔符任意（导出格式为 08:00~22:00）。
      */
     private LocalTime[] parseImportWindow(String raw, List<String> errors) {
         String value = raw == null ? "" : raw.trim();
@@ -445,7 +475,7 @@ public class SpaceServiceImpl implements SpaceService {
             times.add(LocalTime.of(hour, minute));
         }
         if (times.size() != 2) {
-            errors.add("开放时段格式须为「HH:mm~HH:mm」（如 08:00~21:00）");
+            errors.add("开放时段格式须为「HH:mm~HH:mm」（如 08:00~22:00）");
             return null;
         }
         LocalTime start = times.get(0);
@@ -661,7 +691,7 @@ public class SpaceServiceImpl implements SpaceService {
         return time == null ? "" : EXPORT_TIME.format(time);
     }
 
-    private SpaceListVO toListVO(BizSpace s) {
+    private SpaceListVO toListVO(BizSpace s, List<MaintenanceWindowVO> upcomingMaintenance) {
         return new SpaceListVO(
                 String.valueOf(s.getId()),
                 s.getLabName(),
@@ -673,7 +703,8 @@ public class SpaceServiceImpl implements SpaceService {
                 s.getStatus() == null ? null : s.getStatus().getDisplayName(),
                 formatTime(s.getOpenStart()),
                 formatTime(s.getOpenEnd()),
-                s.getUpdateTime()
+                s.getUpdateTime(),
+                upcomingMaintenance
         );
     }
 

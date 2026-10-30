@@ -7,11 +7,14 @@ import com.labmanage.module.item.dto.MaterialRequestApproveDTO;
 import com.labmanage.module.item.dto.MaterialRequestCreateDTO;
 import com.labmanage.module.item.dto.MaterialRequestIssueDTO;
 import com.labmanage.module.item.dto.MaterialRequestQuery;
+import com.labmanage.module.item.dto.MaterialRequestReturnDTO;
 import com.labmanage.module.item.service.MaterialRequestService;
 import com.labmanage.module.item.vo.MaterialRequestDetailVO;
 import com.labmanage.module.item.vo.MaterialRequestVO;
 import com.labmanage.module.item.vo.ProxyLineVO;
 import com.labmanage.module.item.vo.ProxySourceVO;
+import com.labmanage.module.item.vo.ReturnableLineVO;
+import com.labmanage.module.item.vo.TeacherOptionVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -41,11 +44,13 @@ public class MaterialRequestController {
     }
 
     @Operation(summary = "登记申领单（本人申领 / 学生代理代领）",
-            description = "requestType=SELF 本人申领登记草稿，自动取开课定额快照并计算定额量"
+            description = "requestType=SELF 本人申领：学生必填审批教师（ownerTeacherId）落草稿待老师初审，"
+                    + "老师直落老师已审核交管理员终审；自动取开课定额快照并计算定额量"
                     + "（参与人数 × 课时 × 每人每课时定额），超定额标记 requires_extra_approval，"
                     + "危险/高价值物料标记 requires_dual_sign；requestType=PROXY 学生代理代领"
                     + "必须指定老师已审核通过的源申领单（sourceRequestId），行上 sourceLineId"
-                    + " 绑定源申领行并校验不超过源行剩余可代领量（批准量 − 实发量 − 已占用量），"
+                    + " 绑定源申领行并校验不超过源行剩余可代领量（批准量 − 实发量 − 已占用量）；"
+                    + "代领人强制为当前登录学生，须持有源单归属老师的有效助理授权（命中授权留档 grant_id），"
                     + "创建即 TEACHER_APPROVED 直接交管理员终审；返回申领单 ID")
     @RequirePermission("item:request:create")
     @PostMapping
@@ -136,6 +141,14 @@ public class MaterialRequestController {
         return Result.success();
     }
 
+    @Operation(summary = "审批教师下拉选项（TEACHER 角色启用用户）",
+            description = "学生申领必填审批教师（初审人）；老师申领无需选择，服务端强制归属本人")
+    @RequirePermission("item:request:create")
+    @GetMapping("/teacher_options")
+    public Result<List<TeacherOptionVO>> teacherOptions() {
+        return Result.success(requestService.teacherOptions());
+    }
+
     @Operation(summary = "申领实发出库（生成出库单草稿）",
             description = "生成关联申领行的领用出库单（DRAFT），返回出库单 ID；"
                     + "后续经库存单据审批、过账完成扣库存并回写实发量，全部行发完自动推进 FULFILLED")
@@ -144,5 +157,25 @@ public class MaterialRequestController {
     public Result<String> issue(@Parameter(description = "申领单 ID") @PathVariable String id,
                                 @Valid @RequestBody MaterialRequestIssueDTO dto) {
         return Result.success(requestService.issue(id, dto));
+    }
+
+    @Operation(summary = "申领单可归还行",
+            description = "该申领单已过账出库行 + 累计已归还量 + 可归还量（出库量 − 已归还量）；"
+                    + "非管理员仅限本人经办单")
+    @RequirePermission("item:request:list")
+    @GetMapping("/{id}/returnable_lines")
+    public Result<List<ReturnableLineVO>> returnableLines(
+            @Parameter(description = "申领单 ID") @PathVariable String id) {
+        return Result.success(requestService.returnableLines(id));
+    }
+
+    @Operation(summary = "申领单归还（生成归还单草稿）",
+            description = "按原出库行生成 RETURN_IN 归还单（DRAFT）并关联申领单留档，返回归还单 ID；"
+                    + "后续经库存单据审批、过账回增库存并生成归还结算；非管理员仅限本人经办单")
+    @RequirePermission("item:request:return")
+    @PostMapping("/{id}/return")
+    public Result<String> returnRequest(@Parameter(description = "申领单 ID") @PathVariable String id,
+                                        @Valid @RequestBody MaterialRequestReturnDTO dto) {
+        return Result.success(requestService.returnRequest(id, dto));
     }
 }

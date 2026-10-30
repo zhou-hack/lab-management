@@ -122,7 +122,7 @@
           v-else-if="!scheduleGroups.length"
           class="space_detail__empty"
         >
-          未来 7 天暂无预约，场地各时段可用
+          未来 7 天暂无预约或维修安排，场地各时段可用
         </p>
         <div
           v-else
@@ -204,9 +204,12 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { SPACE_STATUS_MAP, SPACE_TYPE_MAP } from './space.constants'
 import { pageBoardBookings } from '@/api/booking'
+import { listMaintenanceWindows } from '@/api/space'
 import {
   addDaysShanghai,
   formatInstant,
+  formatRange,
+  formatShanghaiDate,
   nowShanghaiClock,
   todayShanghai
 } from '@/utils/datetime'
@@ -223,6 +226,7 @@ const emit = defineEmits(['close'])
 // 无权限时降级为仅展示档案，不影响基础信息）。
 // ---------------------------------------------------------------------------
 const bookings = ref([])
+const maintenance = ref([])
 const bookingsLoading = ref(false)
 const nowTick = ref(Date.now())
 let tickTimer = null
@@ -285,7 +289,7 @@ const upcoming = computed(() => {
     })
 })
 
-/** 按日期分组的排课/占用卡片 */
+/** 按日期分组的排课/占用/维修卡片（组按日期升序，组内按开始时间升序） */
 const scheduleGroups = computed(() => {
   const groups = new Map()
   for (const booking of upcoming.value) {
@@ -293,9 +297,44 @@ const scheduleGroups = computed(() => {
     if (!groups.has(key)) {
       groups.set(key, { date: key, label: dateLabel(key), items: [] })
     }
-    groups.get(key).items.push(toScheduleItem(booking))
+    groups.get(key).items.push({ ...toScheduleItem(booking), startMs: Date.parse(booking.startAt) })
   }
-  return [...groups.values()]
+  for (const item of maintenanceItems.value) {
+    if (!groups.has(item.date)) {
+      groups.set(item.date, { date: item.date, label: dateLabel(item.date), items: [] })
+    }
+    groups.get(item.date).items.push(item)
+  }
+  const sorted = [...groups.values()].sort((a, b) => a.date.localeCompare(b.date))
+  for (const group of sorted) {
+    group.items.sort((a, b) => a.startMs - b.startMs)
+  }
+  return sorted
+})
+
+/** 未来 7 天维修时段条目（进行中+未结束），按上海开始日期混入排课分组 */
+const maintenanceItems = computed(() => {
+  const now = nowTick.value
+  const endDate = addDaysShanghai(todayShanghai(), 7)
+  return maintenance.value
+    .filter((w) => Date.parse(w.endAt) > now)
+    .filter((w) => formatShanghaiDate(w.startAt) <= endDate)
+    .map((w) => {
+      const date = formatShanghaiDate(w.startAt)
+      const sameDay = date === formatShanghaiDate(w.endAt)
+      const s = formatInstant(w.startAt, { withDate: false })
+      const e = formatInstant(w.endAt, { withDate: false })
+      return {
+        id: `mw-${w.id}`,
+        date,
+        startMs: Date.parse(w.startAt),
+        timeText: sameDay ? `${s}-${e}` : formatRange(w.startAt, w.endAt),
+        title: '维修时段',
+        sub: w.reason || '维修期间暂停预约',
+        statusText: Date.parse(w.startAt) <= now ? '维修中' : '维修安排',
+        pill: 'pill--danger'
+      }
+    })
 })
 
 /** 最近使用记录：已批准且已结束的预约，按开始时间倒序取 5 条 */
@@ -380,13 +419,14 @@ function stopTick() {
 // 请求序号：快速切换场地或关闭抽屉时丢弃过期响应，避免旧数据覆盖新数据
 let loadSeq = 0
 
-/** 抽屉打开且已确定场地时加载预约数据；关闭时清空并停止刷新 */
+/** 抽屉打开且已确定场地时加载预约与维修数据；关闭时清空并停止刷新 */
 watch(
   () => [props.modelValue, props.space?.id],
   async ([visible, spaceId]) => {
     const seq = ++loadSeq
     if (!visible || !spaceId) {
       bookings.value = []
+      maintenance.value = []
       bookingsLoading.value = false
       stopTick()
       return
@@ -394,9 +434,13 @@ watch(
     bookingsLoading.value = true
     startTick()
     try {
-      const page = await pageBoardBookings({ spaceId, pageNum: 1, pageSize: 100 }).catch(() => null)
+      const [page, windows] = await Promise.all([
+        pageBoardBookings({ spaceId, pageNum: 1, pageSize: 100 }).catch(() => null),
+        listMaintenanceWindows(spaceId).catch(() => [])
+      ])
       if (seq !== loadSeq) return
       bookings.value = page?.records || []
+      maintenance.value = windows || []
     } finally {
       if (seq === loadSeq) bookingsLoading.value = false
     }

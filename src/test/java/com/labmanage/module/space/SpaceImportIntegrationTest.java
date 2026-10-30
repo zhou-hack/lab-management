@@ -212,7 +212,7 @@ class SpaceImportIntegrationTest {
     @Test
     @DisplayName("导出文件往返：导出 CSV 原样导入，全部判重失败，零新增")
     void exportRoundTrip_allRowsRejectedAsDuplicate() throws Exception {
-        // 先取导出文件（含种子 3 条；状态为导出中文「关闭」，时段为 08:00~21:00）
+        // 先取导出文件（含种子 3 条；状态为导出中文「关闭」，时段为 08:00~22:00）
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(base() + "/api/v1/space/spaces/export"))
                 .header("Authorization", "Bearer " + token)
@@ -293,7 +293,7 @@ class SpaceImportIntegrationTest {
         JsonNode record = page.path("data").path("records").get(0);
         assertThat(record.path("status").asText()).isEqualTo("CLOSED");
         assertThat(record.path("openStart").asText()).isEqualTo("08:00");
-        assertThat(record.path("openEnd").asText()).isEqualTo("21:00");
+        assertThat(record.path("openEnd").asText()).isEqualTo("22:00");
     }
 
     @Test
@@ -328,7 +328,7 @@ class SpaceImportIntegrationTest {
         for (int i = 1; i <= 200; i++) {
             String code = String.format("%03d", i);
             sb.append("BATCH").append(code).append(" 批量实训室,实训室,B 楼 ").append(code)
-                    .append(",").append(10 + i).append(",08:00~21:00,可用,,\r\n");
+                    .append(",").append(10 + i).append(",08:00~22:00,可用,,\r\n");
         }
         JsonNode body = upload("batch.csv", "text/csv", sb.toString().getBytes(StandardCharsets.UTF_8));
 

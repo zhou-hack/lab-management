@@ -8,6 +8,7 @@ import com.labmanage.roles.dto.RolePermissionAssignDTO;
 import com.labmanage.roles.service.SysRoleService;
 import com.labmanage.roles.vo.PermissionOptionVO;
 import com.labmanage.roles.vo.RoleDetailVO;
+import com.labmanage.roles.vo.RoleUserItemVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -46,6 +47,13 @@ public class SystemRoleController {
     @GetMapping("/permissions")
     public Result<List<PermissionOptionVO>> permissionOptions() {
         return Result.success(roleService.listPermissionOptions());
+    }
+
+    @Operation(summary = "角色下用户名单（ASSISTANT 由有效助理授权动态计算）")
+    @RequirePermission("system:role:list")
+    @GetMapping("/{id}/users")
+    public Result<List<RoleUserItemVO>> roleUsers(@PathVariable Long id) {
+        return Result.success(roleService.listRoleUsers(id));
     }
 
     @Operation(summary = "整集替换角色权限绑定（OPS_ADMIN 锁定；踢出该角色持有者会话；敏感操作需二级认证）")

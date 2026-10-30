@@ -21,7 +21,7 @@
           @select="onMenuSelect"
         >
           <el-sub-menu
-            v-for="group in MENU"
+            v-for="group in MENU_VISIBLE"
             :key="group.key"
             :index="group.key"
           >
@@ -97,6 +97,7 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import { DataAnalysis, List, Setting, Tickets } from '@element-plus/icons-vue'
+import { useUserStore } from '@/store/user'
 import BalancePanel from './panels/BalancePanel.vue'
 import CategorySection from './panels/basic/CategorySection.vue'
 import DocumentPanel from './panels/DocumentPanel.vue'
@@ -115,6 +116,7 @@ import SkuSection from './panels/basic/SkuSection.vue'
  *   库存业务：库存单据 / 申领单
  *   定额核销：领用定额 / 物料核销
  * 面板懒挂载：首次进入才挂载（v-if），此后切回仅切换显示（v-show）保留筛选与分页状态
+ * 页签按接口权限过滤（2026-10-24：老师/学生仅见有权限页签，如无权限页签点击报 403）
  */
 const MENU = [
   {
@@ -122,9 +124,9 @@ const MENU = [
     label: '基础数据',
     icon: Setting,
     children: [
-      { key: 'basic_category', label: '物料分类' },
-      { key: 'basic_sku', label: '物料档案' },
-      { key: 'basic_location', label: '库位管理' }
+      { key: 'basic_category', label: '物料分类', perm: 'item:category:list' },
+      { key: 'basic_sku', label: '物料档案', perm: 'item:material:list' },
+      { key: 'basic_location', label: '库位管理', perm: 'item:location:list' }
     ]
   },
   {
@@ -132,8 +134,8 @@ const MENU = [
     label: '库存查询',
     icon: DataAnalysis,
     children: [
-      { key: 'balance', label: '库存余额' },
-      { key: 'movement', label: '库存流水' }
+      { key: 'balance', label: '库存余额', perm: 'item:balance:list' },
+      { key: 'movement', label: '库存流水', perm: 'item:ledger:list' }
     ]
   },
   {
@@ -141,8 +143,8 @@ const MENU = [
     label: '库存业务',
     icon: Tickets,
     children: [
-      { key: 'document', label: '库存单据' },
-      { key: 'request', label: '申领单' }
+      { key: 'document', label: '库存单据', perm: 'item:stock:list' },
+      { key: 'request', label: '申领单', perm: 'item:request:list' }
     ]
   },
   {
@@ -150,19 +152,47 @@ const MENU = [
     label: '定额核销',
     icon: List,
     children: [
-      { key: 'quota', label: '领用定额' },
-      { key: 'settlement', label: '物料核销' }
+      { key: 'quota', label: '领用定额', perm: 'item:quota:list' },
+      { key: 'settlement', label: '物料核销', perm: 'item:settlement:list' }
     ]
   }
 ]
 
+const store = useUserStore()
+
+/** 按接口权限过滤后的可见菜单（无权限页签隐藏，分组全空时整组隐藏） */
+const MENU_VISIBLE = computed(() =>
+  MENU
+    .map((group) => ({
+      ...group,
+      children: group.children.filter((leaf) => store.permissions.includes(leaf.perm))
+    }))
+    .filter((group) => group.children.length > 0)
+)
+
 /** 一级分组默认全部展开，二级页面直接可见 */
-const openGroups = MENU.map((group) => group.key)
+const openGroups = computed(() => MENU_VISIBLE.value.map((group) => group.key))
 
 const active = ref('balance')
 
 /** 已访问过的页面（懒挂载标记）：初始页随工作台挂载 */
 const visited = reactive({ balance: true })
+
+// 权限装配完成后校正落地页签：默认库存余额无权限时落到第一个可见页签
+watch(
+  () => store.permissions,
+  (perms) => {
+    if (!perms.length) return
+    const visible = MENU_VISIBLE.value.flatMap((g) => g.children.map((c) => c.key))
+    if (!visible.includes(active.value)) {
+      active.value = visible[0] || ''
+    }
+    if (active.value && !visited[active.value]) {
+      visited[active.value] = true
+    }
+  },
+  { immediate: true }
+)
 
 const balanceRef = ref(null)
 const movementRef = ref(null)

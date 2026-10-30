@@ -9,6 +9,7 @@ import com.labmanage.module.equipment.dto.AssetPageQuery;
 import com.labmanage.module.equipment.dto.AssetTransferRequest;
 import com.labmanage.module.equipment.dto.AssetUpdateRequest;
 import com.labmanage.module.equipment.service.AssetService;
+import com.labmanage.module.equipment.vo.AssetBookingSlotVO;
 import com.labmanage.module.equipment.vo.AssetImportResultVO;
 import com.labmanage.module.equipment.vo.AssetVO;
 import com.labmanage.module.equipment.vo.CustodianOptionVO;
@@ -62,6 +63,13 @@ public class AssetController {
     @GetMapping("/custodian-options")
     public Result<List<CustodianOptionVO>> custodianOptions() {
         return Result.success(assetService.custodianOptions());
+    }
+
+    @Operation(summary = "设备进行中与未来的被约时段（目录「被约时间」明细）")
+    @RequirePermission("equipment:asset:list")
+    @GetMapping("/{id}/future_bookings")
+    public Result<List<AssetBookingSlotVO>> futureBookings(@PathVariable String id) {
+        return Result.success(assetService.futureBookings(id));
     }
 
     @Operation(summary = "新增台账")

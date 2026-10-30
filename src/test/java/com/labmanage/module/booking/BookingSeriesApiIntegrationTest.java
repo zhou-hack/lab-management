@@ -25,7 +25,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -158,14 +160,15 @@ class BookingSeriesApiIntegrationTest {
     // ------------------------------------------------------------------ 节次
 
     @Test
-    @DisplayName("节次列表：返回 8 个启用节次，含节次号/名称/起止时刻")
+    @DisplayName("节次列表：返回 12 个启用节次，含节次号/名称/起止时刻")
     void periods_list() throws Exception {
         JsonNode body = get("/api/v1/booking/periods", studentToken);
         assertThat(body.path("code").asInt()).isZero();
-        assertThat(body.path("data")).hasSize(8);
+        assertThat(body.path("data")).hasSize(12);
         assertThat(body.path("data").get(0).path("periodNo").asInt()).isEqualTo(1);
         assertThat(body.path("data").get(0).path("startClock").asText()).isEqualTo("08:00");
         assertThat(body.path("data").get(7).path("endClock").asText()).isEqualTo("17:40");
+        assertThat(body.path("data").get(11).path("endClock").asText()).isEqualTo("21:45");
     }
 
     // ------------------------------------------------------------------ 周期创建
@@ -310,9 +313,19 @@ class BookingSeriesApiIntegrationTest {
     @Test
     @DisplayName("场地近期预约：未来 24h 内预约可见，远端未来预约为空")
     void recent_booking_within_24h() throws Exception {
-        // 近端：now+1h 起 1 小时
+        // 近端：now+1h 起 1 小时；落出开放时段（上海 08:00-22:00，即 now 早于 07:00
+        // 或晚于 20:00）时顺延到就近白天 10:00-11:00，保证任意时刻运行测试都合法
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'");
-        Instant base = Instant.now().plusSeconds(3600);
+        ZoneId shanghai = ZoneId.of("Asia/Shanghai");
+        ZonedDateTime nowSh = Instant.now().atZone(shanghai);
+        Instant base;
+        if (nowSh.getHour() < 7) {
+            base = nowSh.toLocalDate().atTime(10, 0).atZone(shanghai).toInstant();
+        } else if (nowSh.getHour() >= 20) {
+            base = nowSh.toLocalDate().plusDays(1).atTime(10, 0).atZone(shanghai).toInstant();
+        } else {
+            base = Instant.now().plusSeconds(3600);
+        }
         String start = base.atZone(ZoneOffset.UTC).format(fmt);
         String end = base.plusSeconds(3600).atZone(ZoneOffset.UTC).format(fmt);
         JsonNode body = post("/api/v1/booking/labs", """

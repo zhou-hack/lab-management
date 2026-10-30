@@ -33,3 +33,22 @@ CREATE TABLE lab (
 CREATE INDEX idx_lab_status ON lab (status);
 CREATE INDEX idx_lab_type ON lab (lab_type);
 CREATE INDEX idx_lab_capacity ON lab (capacity);
+
+-- 场地维修时段（对齐 lab_management_all.sql 1.3；分页列表带近期维修时段）
+DROP TABLE IF EXISTS lab_maintenance_window;
+
+CREATE TABLE lab_maintenance_window (
+    id             BIGINT        NOT NULL,
+    lab_id         BIGINT        NOT NULL,
+    start_at       TIMESTAMP(3)  NOT NULL,
+    end_at         TIMESTAMP(3)  NOT NULL,
+    reason         VARCHAR(512)  NULL,
+    cancelled_at   TIMESTAMP(3)  NULL,
+    create_time    TIMESTAMP(3)  NOT NULL,
+    update_time    TIMESTAMP(3)  NOT NULL,
+    deleted        TINYINT       NOT NULL DEFAULT 0,
+    create_user_id BIGINT        NULL,
+    update_user_id BIGINT        NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT chk_mw_time CHECK (start_at < end_at)
+);

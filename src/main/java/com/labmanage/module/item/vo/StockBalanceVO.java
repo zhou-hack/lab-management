@@ -40,9 +40,6 @@ public record StockBalanceVO(
         @Schema(description = "补货目标库存", example = "20")
         BigDecimal targetQty,
 
-        @Schema(description = "移动加权平均成本", example = "25.5000")
-        BigDecimal movingAveragePrice,
-
         @Schema(description = "建议补货量（max(0, 目标-可用)）", example = "12")
         BigDecimal suggestedQty,
 

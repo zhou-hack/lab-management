@@ -56,6 +56,20 @@
           </template>
         </el-table-column>
         <el-table-column
+          label="人员名单"
+          width="110"
+        >
+          <template #default="{ row }">
+            <el-button
+              link
+              type="primary"
+              @click="openRoster(row)"
+            >
+              查看详情
+            </el-button>
+          </template>
+        </el-table-column>
+        <el-table-column
           label="操作"
           width="190"
           fixed="right"
@@ -161,6 +175,79 @@
       </template>
     </el-dialog>
 
+    <!-- 角色人员名单 -->
+    <el-dialog
+      v-model="rosterVisible"
+      :title="rosterRole ? `人员名单：${rosterRole.roleName}（${rosterRole.roleCode}）` : '人员名单'"
+      width="720px"
+      destroy-on-close
+    >
+      <p
+        v-if="rosterRole && rosterRole.roleCode === 'ASSISTANT'"
+        class="role_page__assign_hint"
+      >
+        ASSISTANT 角色不做持久化绑定，以下为当前持有有效助理授权的学生。
+      </p>
+      <el-table
+        v-loading="rosterLoading"
+        :data="rosterUsers"
+        size="small"
+      >
+        <el-table-column
+          prop="accountName"
+          label="账号"
+          min-width="110"
+        />
+        <el-table-column
+          prop="realName"
+          label="姓名"
+          min-width="100"
+        />
+        <el-table-column
+          prop="personNo"
+          label="学工号"
+          min-width="110"
+        >
+          <template #default="{ row }">
+            {{ row.personNo || '—' }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="用户类型"
+          width="100"
+        >
+          <template #default="{ row }">
+            {{ { STUDENT: '学生', TEACHER: '老师', ADMIN: '管理员' }[row.userType] || row.userType }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="departmentName"
+          label="所属部门"
+          min-width="130"
+        >
+          <template #default="{ row }">
+            {{ row.departmentName || '—' }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="状态"
+          width="80"
+        >
+          <template #default="{ row }">
+            <el-tag
+              :type="row.enabled ? 'success' : 'warning'"
+              size="small"
+            >
+              {{ row.enabled ? '启用' : '停用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <template #empty>
+          <el-empty description="该角色下暂无用户" />
+        </template>
+      </el-table>
+    </el-dialog>
+
     <!-- 编辑角色权限 -->
     <el-dialog
       v-model="assignVisible"
@@ -199,7 +286,7 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { assignRolePermissions, listPermissionOptions, listRoles } from '@/api/system/role'
+import { assignRolePermissions, listPermissionOptions, listRoles, listRoleUsers } from '@/api/system/role'
 
 const roles = ref([])
 const loading = ref(false)
@@ -230,6 +317,24 @@ const groupedPermissions = computed(() => {
 function openDetail(row) {
   detail.value = row
   detailVisible.value = true
+}
+
+// ---------- 人员名单 ----------
+const rosterVisible = ref(false)
+const rosterLoading = ref(false)
+const rosterRole = ref(null)
+const rosterUsers = ref([])
+
+async function openRoster(row) {
+  rosterRole.value = row
+  rosterUsers.value = []
+  rosterVisible.value = true
+  rosterLoading.value = true
+  try {
+    rosterUsers.value = await listRoleUsers(row.id)
+  } finally {
+    rosterLoading.value = false
+  }
 }
 
 // ---------- 编辑权限 ----------

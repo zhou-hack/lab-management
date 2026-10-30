@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/lab_management?useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&preserveInstants=true&serverTimezone=UTC
+    url: jdbc:mysql://localhost:3306/lab_v0_1?useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&preserveInstants=true&serverTimezone=UTC
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -18,5 +18,6 @@ knife4j:
 
 app:
   cors:
-    # 本地回环 + 本机局域网地址（vite host 0.0.0.0 时 LAN 设备 Origin）
-    allowed-origins: http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://192.168.110.205:5173,http://192.168.110.205:5174,http://172.20.96.253:5173,http://172.20.96.253:5174
+    # 本地回环 + 私网网段任意端口（局域网客户端经 Vite 代理或直连后端均可）；
+    # 生产部署用 APP_CORS_ALLOWED_ORIGIN_PATTERNS 环境变量收敛为精确白名单
+    allowed-origin-patterns: http://localhost:*,http://127.0.0.1:*,http://192.168.*:*,http://10.*:*,http://172.*:*

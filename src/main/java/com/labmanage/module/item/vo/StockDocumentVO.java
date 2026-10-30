@@ -25,6 +25,9 @@ public record StockDocumentVO(
         @Schema(description = "单据状态", example = "POSTED")
         StockDocumentStatus status,
 
+        @Schema(description = "关联申领单 ID（申领实发出库/归还单留档；无关联为空）", example = "1234567890123456789")
+        String materialRequestId,
+
         @Schema(description = "归属老师 ID", example = "1234567890123456789")
         String ownerTeacherId,
 
@@ -57,6 +60,7 @@ public record StockDocumentVO(
                 String.valueOf(e.getDocumentId()),
                 e.getMovementType(),
                 e.getStatus(),
+                e.getMaterialRequestId() == null ? null : String.valueOf(e.getMaterialRequestId()),
                 e.getOwnerTeacherId() == null ? null : String.valueOf(e.getOwnerTeacherId()),
                 e.getVendorName(),
                 e.getReason(),

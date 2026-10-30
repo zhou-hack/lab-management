@@ -9,6 +9,35 @@
     <p class="t-hint book_series__tip">
       固定星期 + 节次 + 使用周期，一次提交；管理员批准后，周期内每周同日同节次自动占用。
     </p>
+    <!-- 场地/节次由时间轴带入锁定；星期与周期范围在弹窗内选择 -->
+    <div class="book_series__preset">
+      <p class="book_series__preset_line">
+        <span class="t-hint">预约场地：</span><b>{{ spaceName || '—' }}</b>
+        <span
+          v-if="capacity"
+          class="t-hint"
+        >（容量 {{ capacity }} 人）</span>
+      </p>
+      <div class="book_series__preset_line">
+        <span class="t-hint">预约节次：</span>
+        <span class="book_series__segments">
+          <el-tag
+            v-for="(seg, i) in segmentLabels"
+            :key="i"
+            size="small"
+            effect="plain"
+          >
+            {{ seg }}
+          </el-tag>
+        </span>
+      </div>
+      <p
+        v-if="segmentLabels.length > 1"
+        class="t-hint book_series__split_hint"
+      >
+        所选节次不连续，将按连续段拆分为 {{ segmentLabels.length }} 个周期预约单分别提交与审批
+      </p>
+    </div>
     <el-form
       ref="formRef"
       :model="form"
@@ -18,26 +47,9 @@
     >
       <div class="book_series__row">
         <el-form-item
-          label="预约场地"
-          prop="spaceId"
-          class="book_series__grow"
+          label="星期"
+          prop="weekday"
         >
-          <el-select
-            v-model="form.spaceId"
-            placeholder="仅展示可用状态场地"
-            class="book_series__full"
-            filterable
-            :disabled="!!presetSpaceId"
-          >
-            <el-option
-              v-for="s in spaceOptions"
-              :key="s.id"
-              :label="`${s.labName}（${s.capacity} 人）`"
-              :value="s.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="星期">
           <el-select
             v-model="form.weekday"
             class="book_series__weekday"
@@ -54,46 +66,6 @@
             </template>
           </el-select>
         </el-form-item>
-      </div>
-
-      <div class="book_series__row">
-        <el-form-item
-          label="起始节次"
-          prop="startPeriodId"
-        >
-          <el-select
-            v-model="form.startPeriodId"
-            placeholder="起始节次"
-            class="book_series__period"
-          >
-            <el-option
-              v-for="p in periodOptions"
-              :key="p.id"
-              :label="periodLabel(p)"
-              :value="p.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item
-          label="结束节次"
-          prop="endPeriodId"
-        >
-          <el-select
-            v-model="form.endPeriodId"
-            placeholder="结束节次"
-            class="book_series__period"
-          >
-            <el-option
-              v-for="p in periodOptions"
-              :key="p.id"
-              :label="periodLabel(p)"
-              :value="p.id"
-            />
-          </el-select>
-        </el-form-item>
-      </div>
-
-      <div class="book_series__row">
         <el-form-item
           label="周期开始日期"
           prop="cycleStartDate"
@@ -228,10 +200,11 @@ const WEEKDAY_NAMES = ['', '周一', '周二', '周三', '周四', '周五', '�
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
-  /** 从时间轴带入的预选场地/日期（推导星期与周期起点） */
+  /** 从时间轴带入的预选场地/日期（推导星期与周期起点；场地锁定展示） */
   presetSpaceId: { type: String, default: '' },
   presetDate: { type: String, default: '' },
-  presetPeriodNos: { type: Array, default: () => [] }
+  /** 连续段数组：[[起始节次号, 结束节次号], ...]（不连续选择已由时间轴拆段） */
+  presetSegments: { type: Array, default: () => [] }
 })
 
 const emit = defineEmits(['close', 'submit'])
@@ -242,22 +215,35 @@ const periodOptions = ref([])
 const teacherOptions = ref([])
 
 const form = reactive({
-  spaceId: '',
   weekday: null,
-  startPeriodId: null,
-  endPeriodId: null,
   cycleStartDate: '',
   cycleEndDate: '',
   courseName: '',
   className: '',
   teacherId: '',
   participantCount: null,
-  purpose: '',
-  idempotencyKey: genId()
+  purpose: ''
 })
 
-const selectedSpace = computed(() => spaceOptions.value.find((s) => s.id === form.spaceId))
+const selectedSpace = computed(() => spaceOptions.value.find((s) => s.id === props.presetSpaceId))
+const spaceName = computed(() => selectedSpace.value?.labName || '')
 const capacity = computed(() => selectedSpace.value?.capacity || null)
+
+/** 节次号 → 节次记录（class_period.period_no 匹配） */
+function periodOf(periodNo) {
+  return periodOptions.value.find((item) => Number(item.periodNo) === Number(periodNo))
+}
+
+/** 分段只读展示：第1节 08:00-08:45 / 第3~5节 10:00-11:40 */
+const segmentLabels = computed(() =>
+  (props.presetSegments || []).map(([startNo, endNo]) => {
+    const sp = periodOf(startNo)
+    const ep = periodOf(endNo)
+    if (!sp || !ep) return `第${startNo}节 ~ 第${endNo}节`
+    const name = startNo === endNo ? sp.periodName : `${sp.periodName} ~ ${ep.periodName}`
+    return `${name}（${sp.startClock} - ${ep.endClock}）`
+  })
+)
 
 /** 周期内匹配星期的周数（表单辅助提示） */
 const weekCount = computed(() => {
@@ -276,10 +262,7 @@ const weekCount = computed(() => {
 })
 
 const rules = {
-  spaceId: [{ required: true, message: '请选择预约场地', trigger: 'change' }],
   weekday: [{ required: true, message: '请选择星期', trigger: 'change' }],
-  startPeriodId: [{ required: true, message: '请选择起始节次', trigger: 'change' }],
-  endPeriodId: [{ required: true, message: '请选择结束节次', trigger: 'change' }],
   cycleStartDate: [{ required: true, message: '请选择周期开始日期', trigger: 'change' }],
   cycleEndDate: [{ required: true, message: '请选择周期结束日期', trigger: 'change' }],
   purpose: [
@@ -289,17 +272,14 @@ const rules = {
   participantCount: [{ required: true, message: '请填写参与人数', trigger: 'blur' }]
 }
 
-function periodLabel(p) {
-  return `${p.periodName} ${p.startClock}-${p.endClock}`
-}
-
 function disablePast(date) {
   const [y, m, d] = todayShanghai().split('-').map(Number)
   return date.getTime() < Date.UTC(y, m - 1, d)
 }
 
-function genId() {
-  return `series_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+/** 每段独立幂等键（同一批分段提交共用前缀 + 段下标，防重复提交且互不冲突） */
+function genId(segIndex) {
+  return `series_${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${segIndex}`
 }
 
 async function initForm() {
@@ -317,7 +297,6 @@ async function initForm() {
     periodOptions.value = []
     teacherOptions.value = []
   }
-  form.spaceId = props.presetSpaceId || ''
   // 由预选日期推导星期（ISO：周一=1 … 周日=7）
   if (props.presetDate) {
     const [y, m, d] = props.presetDate.split('-').map(Number)
@@ -329,20 +308,11 @@ async function initForm() {
     form.cycleStartDate = ''
   }
   form.cycleEndDate = props.presetDate ? addDaysShanghai(props.presetDate, 6) : ''
-  const [startNo, endNo] = props.presetPeriodNos || []
-  form.startPeriodId = startNo ? periodIdOf(startNo) : null
-  form.endPeriodId = endNo ? periodIdOf(endNo) : null
   form.courseName = ''
   form.className = ''
   form.teacherId = ''
   form.participantCount = null
   form.purpose = ''
-  form.idempotencyKey = genId()
-}
-
-function periodIdOf(periodNo) {
-  const p = periodOptions.value.find((item) => Number(item.periodNo) === Number(periodNo))
-  return p ? p.id : periodNo
 }
 
 async function submit() {
@@ -351,8 +321,8 @@ async function submit() {
   } catch {
     return
   }
-  if (Number(form.startPeriodId) > Number(form.endPeriodId)) {
-    ElMessage.warning('起始节次不能晚于结束节次')
+  if (!props.presetSegments.length) {
+    ElMessage.warning('请先在时间轴点按选择节次')
     return
   }
   if (form.cycleStartDate > form.cycleEndDate) {
@@ -367,21 +337,38 @@ async function submit() {
     ElMessage.warning('周期内没有匹配该星期的日期，请调整周期')
     return
   }
-  await createSeries({
-    spaceId: form.spaceId,
-    weekday: form.weekday,
-    startPeriodId: form.startPeriodId,
-    endPeriodId: form.endPeriodId,
-    cycleStartDate: form.cycleStartDate,
-    cycleEndDate: form.cycleEndDate,
-    courseName: form.courseName || undefined,
-    className: form.className || undefined,
-    teacherId: form.teacherId || undefined,
-    purpose: form.purpose,
-    participantCount: form.participantCount,
-    idempotencyKey: form.idempotencyKey
-  })
-  ElMessage.success('周期预约已提交，等待管理员核对')
+  // 连续段拆分多个周期预约单：逐段提交，任一失败即中断并提示
+  for (let i = 0; i < props.presetSegments.length; i++) {
+    const [startNo, endNo] = props.presetSegments[i]
+    const sp = periodOf(startNo)
+    const ep = periodOf(endNo)
+    if (!sp || !ep) {
+      ElMessage.warning('节次数据无效，请重新选择')
+      return
+    }
+    try {
+      await createSeries({
+        spaceId: props.presetSpaceId,
+        weekday: form.weekday,
+        startPeriodId: String(sp.id),
+        endPeriodId: String(ep.id),
+        cycleStartDate: form.cycleStartDate,
+        cycleEndDate: form.cycleEndDate,
+        courseName: form.courseName || undefined,
+        className: form.className || undefined,
+        teacherId: form.teacherId || undefined,
+        purpose: form.purpose,
+        participantCount: form.participantCount,
+        idempotencyKey: genId(i)
+      })
+    } catch (e) {
+      ElMessage.error(`第 ${i + 1}/${props.presetSegments.length} 个周期预约提交失败：${e?.message || '请稍后重试'}`)
+      return
+    }
+  }
+  ElMessage.success(props.presetSegments.length > 1
+    ? `${props.presetSegments.length} 个周期预约已提交，等待管理员核对`
+    : '周期预约已提交，等待管理员核对')
   emit('submit')
 }
 
@@ -396,6 +383,38 @@ watch(
 <style scoped>
 .book_series__tip {
   margin: 0 0 12px;
+}
+
+.book_series__preset {
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: var(--surface-sunken, #f5f7fa);
+  border-radius: 8px;
+}
+
+.book_series__preset_line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.book_series__preset_line:last-child {
+  margin-bottom: 0;
+}
+
+.book_series__segments {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.book_series__split_hint {
+  margin: 4px 0 0;
+  color: var(--warn, #f79009);
 }
 
 .book_series__row {
@@ -413,10 +432,6 @@ watch(
 
 .book_series__weekday {
   width: 110px;
-}
-
-.book_series__period {
-  width: 150px;
 }
 
 .book_series__count {

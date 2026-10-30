@@ -5,10 +5,13 @@ import com.labmanage.module.item.dto.MaterialRequestApproveDTO;
 import com.labmanage.module.item.dto.MaterialRequestCreateDTO;
 import com.labmanage.module.item.dto.MaterialRequestIssueDTO;
 import com.labmanage.module.item.dto.MaterialRequestQuery;
+import com.labmanage.module.item.dto.MaterialRequestReturnDTO;
 import com.labmanage.module.item.vo.MaterialRequestDetailVO;
 import com.labmanage.module.item.vo.MaterialRequestVO;
 import com.labmanage.module.item.vo.ProxyLineVO;
 import com.labmanage.module.item.vo.ProxySourceVO;
+import com.labmanage.module.item.vo.ReturnableLineVO;
+import com.labmanage.module.item.vo.TeacherOptionVO;
 
 import java.util.List;
 
@@ -56,4 +59,16 @@ public interface MaterialRequestService {
 
     /** 源申领单行含剩余可代领量（批准量 − 实发量 − 已被有效代领单占用申请量） */
     List<ProxyLineVO> proxyLines(String sourceRequestId);
+
+    /** 审批教师下拉选项（TEACHER 角色启用用户；学生申领必填审批教师） */
+    List<TeacherOptionVO> teacherOptions();
+
+    /** 申领单可归还行（已过账出库行 + 累计已归还量 + 可归还量） */
+    List<ReturnableLineVO> returnableLines(String id);
+
+    /**
+     * 申领单归还：生成绑定原出库行的 RETURN_IN 归还单草稿（关联申领单留档），
+     * 审批与过账走库存单据既有流程，过账回增库存并生成 RETURNED 结算。返回归还单 ID。
+     */
+    String returnRequest(String id, MaterialRequestReturnDTO dto);
 }

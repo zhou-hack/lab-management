@@ -7,18 +7,29 @@ import com.labmanage.common.core.BasePageQuery;
  */
 public class ModelPageQuery extends BasePageQuery {
 
-    /** 关键字（型号码/名称/品牌模糊匹配） */
-    private String keyword;
+    /** 型号码模糊匹配 */
+    private String modelCode;
+
+    /** 设备名称模糊匹配 */
+    private String equipmentName;
 
     /** 分类过滤 */
     private Long categoryId;
 
-    public String getKeyword() {
-        return keyword;
+    public String getModelCode() {
+        return modelCode;
     }
 
-    public void setKeyword(String keyword) {
-        this.keyword = keyword;
+    public void setModelCode(String modelCode) {
+        this.modelCode = modelCode;
+    }
+
+    public String getEquipmentName() {
+        return equipmentName;
+    }
+
+    public void setEquipmentName(String equipmentName) {
+        this.equipmentName = equipmentName;
     }
 
     public Long getCategoryId() {

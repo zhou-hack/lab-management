@@ -78,7 +78,7 @@ CREATE TABLE lab (
     capacity       INT          NOT NULL                COMMENT '容纳人数（>0）',
     facilities     TEXT         NULL                    COMMENT '配套设备清单（自由文本）',
     open_start     TIME(0)      NOT NULL DEFAULT '08:00:00' COMMENT '每日开放开始（上海本地时间）',
-    open_end       TIME(0)      NOT NULL DEFAULT '21:00:00' COMMENT '每日开放结束（上海本地时间，须晚于 open_start）',
+    open_end       TIME(0)      NOT NULL DEFAULT '22:00:00' COMMENT '每日开放结束（上海本地时间，须晚于 open_start）',
     status         VARCHAR(32)  NOT NULL DEFAULT 'AVAILABLE' COMMENT '状态：AVAILABLE可用/MAINTAINING维护中/CLOSED关闭',
     visible        TINYINT      NOT NULL DEFAULT 1 COMMENT '可见性：1可见 2不可见（停用；预约/查询列表只出 1，2026-10-19 需求定稿新增）',
     create_time    DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)) COMMENT '创建时间（UTC）',
@@ -97,6 +97,30 @@ CREATE TABLE lab (
     CONSTRAINT chk_lab_open CHECK (open_start < open_end),
     CONSTRAINT chk_lab_deleted CHECK (deleted IN (0, 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='场地表（教室/实训室空间主档，单表）';
+
+-- ----------------------------------------------------------------------------
+-- 1.3 lab_maintenance_window 场地维修时段（2026-10-24 新增）：
+--     AVAILABLE 场地的短期维修窗口；窗口内禁止新预约，与已批准预约重叠时拒绝设置；
+--     一个场地可有多个未来时段，取消置 cancelled_at（半开区间重叠判定同 lab_slot）。
+-- ----------------------------------------------------------------------------
+CREATE TABLE lab_maintenance_window (
+    id             BIGINT       NOT NULL                COMMENT '主键（雪花 ID）',
+    lab_id         BIGINT       NOT NULL                COMMENT '场地（→ lab.id）',
+    start_at       DATETIME(3)  NOT NULL                COMMENT '维修开始（UTC）',
+    end_at         DATETIME(3)  NOT NULL                COMMENT '维修结束（UTC）',
+    reason         VARCHAR(512) NULL                    COMMENT '维修事由',
+    cancelled_at   DATETIME(3)  NULL                    COMMENT '取消时间（UTC；NULL=生效中）',
+    create_time    DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)) COMMENT '创建时间（UTC）',
+    update_time    DATETIME(3)  NOT NULL DEFAULT (UTC_TIMESTAMP(3)) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间（UTC）',
+    deleted        TINYINT      NOT NULL DEFAULT 0      COMMENT '逻辑删除：0正常 1删除',
+    create_user_id BIGINT       NULL                    COMMENT '创建人（→ sys_user.id，审计字段不建外键）',
+    update_user_id BIGINT       NULL                    COMMENT '最后操作人（→ sys_user.id）',
+    PRIMARY KEY (id),
+    KEY idx_mw_lab_time (lab_id, start_at, end_at),
+    CONSTRAINT fk_mw_lab FOREIGN KEY (lab_id) REFERENCES lab (id),
+    CONSTRAINT chk_mw_time CHECK (start_at < end_at),
+    CONSTRAINT chk_mw_deleted CHECK (deleted IN (0, 1))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='场地维修时段（短期窗口，窗口内禁止新预约）';
 
 -- ----------------------------------------------------------------------------
 -- 1.2 补充 RBAC 跨模块外键（sys_rbac.sql 仅建列与索引，外键由所属模块补充）
@@ -119,13 +143,13 @@ INSERT INTO lab (id, lab_name, lab_type, location_detail, capacity, facilities,
 VALUES
 (1, 'A703 网络实训室', 'TRAINING_ROOM', 'A 楼七层 A703', 50,
     '网络综合布线实训环境：56 口配线架 12 组、路由交换设备 12 套、实训工位 50 个',
-    '08:00', '21:00', 'AVAILABLE', 1, 1),
+    '08:00', '22:00', 'AVAILABLE', 1, 1),
 (2, 'C703 电子电工实训室', 'TRAINING_ROOM', 'C 楼七层 C703', 45,
     '示波器 20 台、直流稳压电源 20 台、电工电子实训台 12 位',
-    '08:00', '21:00', 'AVAILABLE', 1, 1),
+    '08:00', '22:00', 'AVAILABLE', 1, 1),
 (3, '教学楼201多媒体教室', 'CLASSROOM', '教学楼二层 201', 60,
     '投影仪 1 台、音响系统 1 套、中控讲台 1 位',
-    '08:00', '21:00', 'AVAILABLE', 1, 1);
+    '08:00', '22:00', 'AVAILABLE', 1, 1);
 
 -- ----------------------------------------------------------------------------
 -- 1.4 场地权限（155-159，标识规范 模块:资源:操作，module_code='space'）
@@ -1247,7 +1271,7 @@ CREATE TABLE class_period (
     CONSTRAINT chk_class_period_deleted CHECK (deleted IN (0, 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='节次定义表';
 
--- 节次种子（示例作息，部署前由运维按学校实际作息调整）
+-- 节次种子（一天 12 节，部署前由运维按学校实际作息调整）
 INSERT INTO class_period (id, period_no, period_name, start_clock, end_clock) VALUES
 (1, 1, '第1节', '08:00:00', '08:45:00'),
 (2, 2, '第2节', '08:55:00', '09:40:00'),
@@ -1256,7 +1280,11 @@ INSERT INTO class_period (id, period_no, period_name, start_clock, end_clock) VA
 (5, 5, '第5节', '14:00:00', '14:45:00'),
 (6, 6, '第6节', '14:55:00', '15:40:00'),
 (7, 7, '第7节', '16:00:00', '16:45:00'),
-(8, 8, '第8节', '16:55:00', '17:40:00');
+(8, 8, '第8节', '16:55:00', '17:40:00'),
+(9, 9, '第9节', '18:30:00', '19:15:00'),
+(10, 10, '第10节', '19:20:00', '20:05:00'),
+(11, 11, '第11节', '20:10:00', '20:55:00'),
+(12, 12, '第12节', '21:00:00', '21:45:00');
 
 -- ----------------------------------------------------------------------------
 -- 6.2 lab_booking_series 周期预约规则（2026-10-19 需求定稿：

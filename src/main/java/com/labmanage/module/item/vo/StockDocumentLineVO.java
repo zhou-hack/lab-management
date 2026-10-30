@@ -41,13 +41,7 @@ public record StockDocumentLineVO(
         String toLocationName,
 
         @Schema(description = "数量", example = "10")
-        BigDecimal quantity,
-
-        @Schema(description = "单价快照", example = "25.5000")
-        BigDecimal unitPriceSnapshot,
-
-        @Schema(description = "金额快照", example = "255.00")
-        BigDecimal amountSnapshot
+        BigDecimal quantity
 ) {
 
     public static StockDocumentLineVO from(StockDocumentLine e, String skuCode, String skuName,
@@ -63,9 +57,7 @@ public record StockDocumentLineVO(
                 fromLocationName,
                 e.getToLocationId() == null ? null : String.valueOf(e.getToLocationId()),
                 toLocationName,
-                e.getQuantity(),
-                e.getUnitPriceSnapshot(),
-                e.getAmountSnapshot()
+                e.getQuantity()
         );
     }
 }

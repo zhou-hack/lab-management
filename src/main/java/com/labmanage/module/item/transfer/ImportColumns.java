@@ -20,7 +20,7 @@ public final class ImportColumns {
     public static final List<String> CATEGORY_HEADER = List.of("分类编码", "分类名称", "父分类编码");
 
     /** 期初余额导入模板列（有效行组装为一张 OPENING 期初入库草稿单，走既有审批过账） */
-    public static final List<String> BALANCE_OPENING_HEADER = List.of("库位编码", "SKU码", "数量", "单价");
+    public static final List<String> BALANCE_OPENING_HEADER = List.of("库位编码", "SKU码", "数量");
 
     private ImportColumns() {
     }

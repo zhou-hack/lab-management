@@ -49,8 +49,8 @@ import static org.mockito.Mockito.when;
 /**
  * 库存单据服务单元测试（纯 Mockito，不依赖数据库）
  * <p>
- * 重点覆盖过账引擎：CAS 状态迁移、移动加权均价计算、余额行初始化、缺货整笔失败、
- * 出库成本回填、流水幂等键、多行加锁顺序。
+ * 重点覆盖过账引擎：CAS 状态迁移、余额行初始化、缺货整笔失败、
+ * 流水幂等键、多行加锁顺序。
  */
 @ExtendWith(MockitoExtension.class)
 class StockDocumentServiceImplTest {
@@ -110,7 +110,7 @@ class StockDocumentServiceImplTest {
         return location;
     }
 
-    private StockBalance balance(long id, long locationId, long skuId, String qty, String avg) {
+    private StockBalance balance(long id, long locationId, long skuId, String qty) {
         StockBalance balance = new StockBalance();
         balance.setId(id);
         balance.setLocationId(locationId);
@@ -118,12 +118,11 @@ class StockDocumentServiceImplTest {
         balance.setStockQty(new BigDecimal(qty));
         balance.setSafeQty(BigDecimal.ZERO);
         balance.setTargetQty(BigDecimal.ZERO);
-        balance.setMovingAveragePrice(new BigDecimal(avg));
         balance.setVersion(0);
         return balance;
     }
 
-    private StockDocumentLine line(long id, int lineNo, long skuId, Long from, Long to, String qty, String price) {
+    private StockDocumentLine line(long id, int lineNo, long skuId, Long from, Long to, String qty) {
         StockDocumentLine line = new StockDocumentLine();
         line.setId(id);
         line.setLineNo(lineNo);
@@ -131,7 +130,6 @@ class StockDocumentServiceImplTest {
         line.setFromLocationId(from);
         line.setToLocationId(to);
         line.setQuantity(new BigDecimal(qty));
-        line.setUnitPriceSnapshot(price == null ? null : new BigDecimal(price));
         return line;
     }
 
@@ -190,7 +188,7 @@ class StockDocumentServiceImplTest {
                 OffsetDateTime.parse("2026-10-13T09:00:00.123456+08:00"),
                 null, "国药集团", "10 月补货",
                 List.of(new StockDocumentLineCreateDTO("1", null, "100",
-                        new BigDecimal("10"), new BigDecimal("25.5"))));
+                        new BigDecimal("10"))));
         when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L, 3)));
         when(locationMapper.selectByIds(anyCollection())).thenReturn(List.of(location(100L)));
         doAnswer(inv -> {
@@ -218,8 +216,6 @@ class StockDocumentServiceImplTest {
         assertEquals(1L, savedLine.getSkuId());
         assertEquals(100L, savedLine.getToLocationId());
         assertEquals(new BigDecimal("10"), savedLine.getQuantity());
-        assertEquals(new BigDecimal("25.5"), savedLine.getUnitPriceSnapshot());
-        assertEquals(new BigDecimal("255.00"), savedLine.getAmountSnapshot());
         // 批量插入前须预赋雪花 ID
         org.junit.jupiter.api.Assertions.assertNotNull(savedLine.getId());
     }
@@ -229,7 +225,7 @@ class StockDocumentServiceImplTest {
         StockDocumentCreateDTO dto = new StockDocumentCreateDTO(
                 MovementType.TRANSFER, OffsetDateTime.parse("2026-10-13T09:00:00+08:00"),
                 null, null, null,
-                List.of(new StockDocumentLineCreateDTO("1", "100", "200", BigDecimal.ONE, null)));
+                List.of(new StockDocumentLineCreateDTO("1", "100", "200", BigDecimal.ONE)));
 
         BusinessException ex = assertBizError(40000, () -> service.create(dto));
 
@@ -242,7 +238,7 @@ class StockDocumentServiceImplTest {
         StockDocumentCreateDTO dto = new StockDocumentCreateDTO(
                 MovementType.OPENING, OffsetDateTime.parse("2026-10-13T09:00:00+08:00"),
                 null, null, null,
-                List.of(new StockDocumentLineCreateDTO("1", null, null, BigDecimal.ONE, null)));
+                List.of(new StockDocumentLineCreateDTO("1", null, null, BigDecimal.ONE)));
         when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L, 3)));
 
         BusinessException ex = assertBizError(40000, () -> service.create(dto));
@@ -257,7 +253,7 @@ class StockDocumentServiceImplTest {
         StockDocumentCreateDTO dto = new StockDocumentCreateDTO(
                 MovementType.PURCHASE_IN, OffsetDateTime.parse("2026-10-13T09:00:00+08:00"),
                 null, null, null,
-                List.of(new StockDocumentLineCreateDTO("1", "99", "100", BigDecimal.ONE, null)));
+                List.of(new StockDocumentLineCreateDTO("1", "99", "100", BigDecimal.ONE)));
         when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L, 3)));
 
         BusinessException ex = assertBizError(40000, () -> service.create(dto));
@@ -272,26 +268,12 @@ class StockDocumentServiceImplTest {
         StockDocumentCreateDTO dto = new StockDocumentCreateDTO(
                 MovementType.ISSUE, OffsetDateTime.parse("2026-10-13T09:00:00+08:00"),
                 null, null, null,
-                List.of(new StockDocumentLineCreateDTO("1", null, null, BigDecimal.ONE, null)));
+                List.of(new StockDocumentLineCreateDTO("1", null, null, BigDecimal.ONE)));
         when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L, 3)));
 
         BusinessException ex = assertBizError(40000, () -> service.create(dto));
 
         assertTrue(ex.getMessage().contains("必须填写出库位"));
-    }
-
-    @Test
-    void createIssueRejectsUnitPrice() {
-        StockDocumentCreateDTO dto = new StockDocumentCreateDTO(
-                MovementType.ISSUE, OffsetDateTime.parse("2026-10-13T09:00:00+08:00"),
-                null, null, "教学领用",
-                List.of(new StockDocumentLineCreateDTO("1", "100", null, BigDecimal.ONE, new BigDecimal("5.0"))));
-        when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L, 3)));
-        when(locationMapper.selectByIds(anyCollection())).thenReturn(List.of(location(100L)));
-
-        BusinessException ex = assertBizError(40000, () -> service.create(dto));
-
-        assertTrue(ex.getMessage().contains("出库单据不接受单价"));
     }
 
     @Test
@@ -301,7 +283,7 @@ class StockDocumentServiceImplTest {
         StockDocumentCreateDTO dto = new StockDocumentCreateDTO(
                 MovementType.OPENING, OffsetDateTime.parse("2026-10-13T09:00:00+08:00"),
                 null, null, null,
-                List.of(new StockDocumentLineCreateDTO("1", null, "100", BigDecimal.ONE, null)));
+                List.of(new StockDocumentLineCreateDTO("1", null, "100", BigDecimal.ONE)));
         when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(disabled));
 
         BusinessException ex = assertBizError(40000, () -> service.create(dto));
@@ -314,7 +296,7 @@ class StockDocumentServiceImplTest {
         StockDocumentCreateDTO dto = new StockDocumentCreateDTO(
                 MovementType.OPENING, OffsetDateTime.parse("2026-10-13T09:00:00+08:00"),
                 null, null, null,
-                List.of(new StockDocumentLineCreateDTO("1", null, "100", new BigDecimal("0.5"), null)));
+                List.of(new StockDocumentLineCreateDTO("1", null, "100", new BigDecimal("0.5"))));
         when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L, 0)));
 
         BusinessException ex = assertBizError(40000, () -> service.create(dto));
@@ -349,7 +331,7 @@ class StockDocumentServiceImplTest {
         when(documentMapper.casPost(eq(1L), any(Instant.class))).thenReturn(1);
         when(documentMapper.selectById(1L)).thenReturn(document(MovementType.OPENING, 9001L));
         when(lineMapper.selectByDocumentId(1L))
-                .thenReturn(List.of(line(11, 1, 1L, null, 100L, "10", "25.5")));
+                .thenReturn(List.of(line(11, 1, 1L, null, 100L, "10")));
         // selectByIds 默认返回空集合 → 物料缺失
 
         BusinessException ex = assertBizError(40400, () -> service.post("1"));
@@ -364,7 +346,7 @@ class StockDocumentServiceImplTest {
         when(documentMapper.casPost(eq(1L), any(Instant.class))).thenReturn(1);
         when(documentMapper.selectById(1L)).thenReturn(document(MovementType.OPENING, 9001L));
         when(lineMapper.selectByDocumentId(1L))
-                .thenReturn(List.of(line(11, 1, 1L, null, 100L, "0.500", "25.5")));
+                .thenReturn(List.of(line(11, 1, 1L, null, 100L, "0.500")));
         when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L, 0)));
 
         BusinessException ex = assertBizError(40000, () -> service.post("1"));
@@ -378,14 +360,14 @@ class StockDocumentServiceImplTest {
         when(documentMapper.casPost(eq(1L), any(Instant.class))).thenReturn(1);
         when(documentMapper.selectById(1L)).thenReturn(document(MovementType.OPENING, 9001L));
         when(lineMapper.selectByDocumentId(1L))
-                .thenReturn(List.of(line(11, 1, 1L, null, 100L, "10", "25.5")));
+                .thenReturn(List.of(line(11, 1, 1L, null, 100L, "10")));
         when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L, 3)));
         // lockByLocationAndSku 默认返回 null → 走插入新余额分支
         doAnswer(inv -> {
             inv.getArgument(0, StockBalance.class).setId(500L);
             return 1;
         }).when(balanceMapper).insert(any(StockBalance.class));
-        when(balanceMapper.updatePostBalance(any(), any(), any(), any())).thenReturn(1);
+        when(balanceMapper.updatePostBalance(any(), any(), any())).thenReturn(1);
 
         service.post("1");
 
@@ -395,10 +377,9 @@ class StockDocumentServiceImplTest {
         assertEquals(100L, created.getLocationId());
         assertEquals(1L, created.getSkuId());
         assertEquals(0, created.getStockQty().compareTo(BigDecimal.ZERO));
-        assertEquals(0, created.getMovingAveragePrice().compareTo(BigDecimal.ZERO));
         assertEquals(0, created.getVersion());
 
-        verify(balanceMapper).updatePostBalance(500L, 0, new BigDecimal("10"), new BigDecimal("25.5000"));
+        verify(balanceMapper).updatePostBalance(500L, 0, new BigDecimal("10"));
 
         ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
         verify(movementMapper).insert(movementCaptor.capture());
@@ -410,36 +391,8 @@ class StockDocumentServiceImplTest {
         assertEquals(0, movement.getQtyDelta().compareTo(new BigDecimal("10")));
         assertEquals(0, movement.getBeforeQty().compareTo(BigDecimal.ZERO));
         assertEquals(0, movement.getAfterQty().compareTo(new BigDecimal("10")));
-        assertEquals(new BigDecimal("255.00"), movement.getValueDelta());
-        assertEquals(0, movement.getBeforeAvgPrice().compareTo(BigDecimal.ZERO));
-        assertEquals(new BigDecimal("25.5000"), movement.getAfterAvgPrice());
         assertEquals(OCCURRED, movement.getOccurredAt());
         assertEquals("STK:9001:1:IN", movement.getMovementKey());
-    }
-
-    @Test
-    void postInboundComputesMovingAveragePrice() {
-        when(documentMapper.casPost(eq(1L), any(Instant.class))).thenReturn(1);
-        when(documentMapper.selectById(1L)).thenReturn(document(MovementType.PURCHASE_IN, 9001L));
-        when(lineMapper.selectByDocumentId(1L))
-                .thenReturn(List.of(line(11, 1, 1L, null, 100L, "10", "30.0000")));
-        when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L, 3)));
-        // 原库存 10 × 均价 20，入 10 × 单价 30 → 新均价 25
-        when(balanceMapper.lockByLocationAndSku(100L, 1L)).thenReturn(balance(501L, 100L, 1L, "10", "20.0000"));
-        when(balanceMapper.updatePostBalance(any(), any(), any(), any())).thenReturn(1);
-
-        service.post("1");
-
-        verify(balanceMapper).updatePostBalance(501L, 0, new BigDecimal("20"), new BigDecimal("25.0000"));
-
-        ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
-        verify(movementMapper).insert(movementCaptor.capture());
-        StockMovement movement = movementCaptor.getValue();
-        assertEquals(0, movement.getBeforeQty().compareTo(new BigDecimal("10")));
-        assertEquals(0, movement.getAfterQty().compareTo(new BigDecimal("20")));
-        assertEquals(new BigDecimal("300.00"), movement.getValueDelta());
-        assertEquals(new BigDecimal("20.0000"), movement.getBeforeAvgPrice());
-        assertEquals(new BigDecimal("25.0000"), movement.getAfterAvgPrice());
     }
 
     @Test
@@ -447,37 +400,30 @@ class StockDocumentServiceImplTest {
         when(documentMapper.casPost(eq(1L), any(Instant.class))).thenReturn(1);
         when(documentMapper.selectById(1L)).thenReturn(document(MovementType.ISSUE, 9001L));
         when(lineMapper.selectByDocumentId(1L))
-                .thenReturn(List.of(line(11, 1, 1L, 100L, null, "10", null)));
+                .thenReturn(List.of(line(11, 1, 1L, 100L, null, "10")));
         when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L, 3)));
-        when(balanceMapper.lockByLocationAndSku(100L, 1L)).thenReturn(balance(501L, 100L, 1L, "5", "10.0000"));
+        when(balanceMapper.lockByLocationAndSku(100L, 1L)).thenReturn(balance(501L, 100L, 1L, "5"));
 
         BusinessException ex = assertBizError(40900, () -> service.post("1"));
 
         assertTrue(ex.getMessage().contains("库存不足"));
-        verify(balanceMapper, never()).updatePostBalance(any(), any(), any(), any());
+        verify(balanceMapper, never()).updatePostBalance(any(), any(), any());
         verify(movementMapper, never()).insert(any(StockMovement.class));
     }
 
     @Test
-    void postOutboundBackfillsCostSnapshot() {
+    void postOutboundDeductsBalanceAndWritesMovement() {
         when(documentMapper.casPost(eq(1L), any(Instant.class))).thenReturn(1);
         when(documentMapper.selectById(1L)).thenReturn(document(MovementType.ISSUE, 9001L));
         when(lineMapper.selectByDocumentId(1L))
-                .thenReturn(List.of(line(11, 1, 1L, 100L, null, "4", null)));
+                .thenReturn(List.of(line(11, 1, 1L, 100L, null, "4")));
         when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L, 3)));
-        when(balanceMapper.lockByLocationAndSku(100L, 1L)).thenReturn(balance(501L, 100L, 1L, "10", "25.0000"));
-        when(balanceMapper.updatePostBalance(any(), any(), any(), any())).thenReturn(1);
+        when(balanceMapper.lockByLocationAndSku(100L, 1L)).thenReturn(balance(501L, 100L, 1L, "10"));
+        when(balanceMapper.updatePostBalance(any(), any(), any())).thenReturn(1);
 
         service.post("1");
 
-        // 出库成本按过账时移动加权均价回填到单据行
-        ArgumentCaptor<StockDocumentLine> lineCaptor = ArgumentCaptor.forClass(StockDocumentLine.class);
-        verify(lineMapper).updateById(lineCaptor.capture());
-        StockDocumentLine backfilled = lineCaptor.getValue();
-        assertEquals(new BigDecimal("25.0000"), backfilled.getUnitPriceSnapshot());
-        assertEquals(new BigDecimal("100.00"), backfilled.getAmountSnapshot());
-
-        verify(balanceMapper).updatePostBalance(501L, 0, new BigDecimal("6"), new BigDecimal("25.0000"));
+        verify(balanceMapper).updatePostBalance(501L, 0, new BigDecimal("6"));
 
         ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
         verify(movementMapper).insert(movementCaptor.capture());
@@ -486,9 +432,6 @@ class StockDocumentServiceImplTest {
         assertEquals(0, movement.getQtyDelta().compareTo(new BigDecimal("-4")));
         assertEquals(0, movement.getBeforeQty().compareTo(new BigDecimal("10")));
         assertEquals(0, movement.getAfterQty().compareTo(new BigDecimal("6")));
-        assertEquals(new BigDecimal("-100.00"), movement.getValueDelta());
-        assertEquals(new BigDecimal("25.0000"), movement.getBeforeAvgPrice());
-        assertEquals(new BigDecimal("25.0000"), movement.getAfterAvgPrice());
         assertEquals("STK:9001:1:OUT", movement.getMovementKey());
     }
 
@@ -497,10 +440,10 @@ class StockDocumentServiceImplTest {
         when(documentMapper.casPost(eq(1L), any(Instant.class))).thenReturn(1);
         when(documentMapper.selectById(1L)).thenReturn(document(MovementType.OPENING, 9001L));
         when(lineMapper.selectByDocumentId(1L))
-                .thenReturn(List.of(line(11, 1, 1L, null, 100L, "10", "25.5")));
+                .thenReturn(List.of(line(11, 1, 1L, null, 100L, "10")));
         when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L, 3)));
-        when(balanceMapper.lockByLocationAndSku(100L, 1L)).thenReturn(balance(501L, 100L, 1L, "0", "0"));
-        when(balanceMapper.updatePostBalance(any(), any(), any(), any())).thenReturn(1);
+        when(balanceMapper.lockByLocationAndSku(100L, 1L)).thenReturn(balance(501L, 100L, 1L, "0"));
+        when(balanceMapper.updatePostBalance(any(), any(), any())).thenReturn(1);
         when(movementMapper.insert(any(StockMovement.class)))
                 .thenThrow(new DuplicateKeyException("uk_stock_movement_key"));
 
@@ -515,13 +458,13 @@ class StockDocumentServiceImplTest {
         when(documentMapper.selectById(1L)).thenReturn(document(MovementType.OPENING, 9001L));
         // 行号顺序与 (库位, SKU) 排序顺序刻意不一致，验证按库位加锁
         when(lineMapper.selectByDocumentId(1L)).thenReturn(List.of(
-                line(11, 1, 2L, null, 200L, "3", "2.5"),
-                line(12, 2, 1L, null, 100L, "2", "1.5")));
+                line(11, 1, 2L, null, 200L, "3"),
+                line(12, 2, 1L, null, 100L, "2")));
         when(skuMapper.selectByIds(anyCollection()))
                 .thenReturn(List.of(sku(1L, 3), sku(2L, 3)));
-        when(balanceMapper.lockByLocationAndSku(100L, 1L)).thenReturn(balance(601L, 100L, 1L, "5", "1.0000"));
-        when(balanceMapper.lockByLocationAndSku(200L, 2L)).thenReturn(balance(602L, 200L, 2L, "0", "0"));
-        when(balanceMapper.updatePostBalance(any(), any(), any(), any())).thenReturn(1);
+        when(balanceMapper.lockByLocationAndSku(100L, 1L)).thenReturn(balance(601L, 100L, 1L, "5"));
+        when(balanceMapper.lockByLocationAndSku(200L, 2L)).thenReturn(balance(602L, 200L, 2L, "0"));
+        when(balanceMapper.updatePostBalance(any(), any(), any())).thenReturn(1);
 
         service.post("1");
 
@@ -553,11 +496,11 @@ class StockDocumentServiceImplTest {
         when(documentMapper.casPost(eq(1L), any(Instant.class))).thenReturn(1);
         when(documentMapper.selectById(1L)).thenReturn(document(MovementType.OPENING, 9001L));
         when(lineMapper.selectByDocumentId(1L))
-                .thenReturn(List.of(line(11, 1, 1L, null, 100L, "10", "25.5")));
+                .thenReturn(List.of(line(11, 1, 1L, null, 100L, "10")));
         when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L, 3)));
-        when(balanceMapper.lockByLocationAndSku(100L, 1L)).thenReturn(balance(501L, 100L, 1L, "0", "0"));
+        when(balanceMapper.lockByLocationAndSku(100L, 1L)).thenReturn(balance(501L, 100L, 1L, "0"));
         // version 条件更新 0 行 → 防御性整笔回滚，不落流水
-        when(balanceMapper.updatePostBalance(any(), any(), any(), any())).thenReturn(0);
+        when(balanceMapper.updatePostBalance(any(), any(), any())).thenReturn(0);
 
         BusinessException ex = assertBizError(50000, () -> service.post("1"));
 

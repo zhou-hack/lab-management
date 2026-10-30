@@ -49,15 +49,6 @@ public record StockMovementVO(
         @Schema(description = "变更后余额", example = "10")
         BigDecimal afterQty,
 
-        @Schema(description = "价值变动", example = "255.00")
-        BigDecimal valueDelta,
-
-        @Schema(description = "过账前均价", example = "0")
-        BigDecimal beforeAvgPrice,
-
-        @Schema(description = "过账后均价", example = "25.5000")
-        BigDecimal afterAvgPrice,
-
         @Schema(description = "发生时间（UTC）", example = "2026-10-13T01:00:00.000Z")
         Instant occurredAt,
 

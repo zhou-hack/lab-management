@@ -2,14 +2,28 @@
   <div class="equip_section asset_manage">
     <div class="card">
       <div class="asset_manage__toolbar">
-        <el-input
-          v-model="query.keyword"
-          class="asset_manage__filter"
-          placeholder="资产编号 / 序列号 / 名称"
-          clearable
-          @keyup.enter="search"
-          @clear="search"
-        />
+        <div class="asset_manage__search">
+          <el-autocomplete
+            v-model="query.assetCode"
+            :fetch-suggestions="suggestAssetCodes"
+            placeholder="资产编号"
+            clearable
+            @keyup.enter="search"
+            @clear="search"
+            @select="search"
+          />
+        </div>
+        <div class="asset_manage__search">
+          <el-autocomplete
+            v-model="query.equipmentName"
+            :fetch-suggestions="suggestEquipmentNames"
+            placeholder="设备名称"
+            clearable
+            @keyup.enter="search"
+            @clear="search"
+            @select="search"
+          />
+        </div>
         <el-tree-select
           v-model="query.departmentId"
           class="asset_manage__filter"
@@ -106,7 +120,7 @@
       </div>
       <template v-else-if="groups.length">
         <div
-          v-for="group in groups"
+          v-for="group in pagedGroups"
           :key="group.modelId"
           class="equip_group"
           :class="{ 'equip_group--collapsed': !expanded[group.modelId] }"
@@ -282,6 +296,14 @@
         </el-icon>
         暂无台账记录，请从「新增台账」开始登记
       </div>
+      <el-pagination
+        v-if="groups.length"
+        v-model:current-page="groupPageNum"
+        class="asset_manage__pager"
+        :page-size="GROUP_PAGE_SIZE"
+        :total="groups.length"
+        layout="total, prev, pager, next"
+      />
     </div>
 
     <!-- 新增台账 -->
@@ -301,18 +323,94 @@
           label="设备型号"
           prop="modelId"
         >
-          <el-select
-            v-model="createForm.modelId"
-            filterable
-            placeholder="请选择型号"
+          <div class="asset_manage__model_pick">
+            <div class="asset_manage__model_input">
+              <el-autocomplete
+                v-model="createForm.modelText"
+                :fetch-suggestions="suggestModels"
+                placeholder="输入型号码 / 名称检索，无匹配可新增"
+                @select="onModelSelect"
+                @input="onModelInput"
+              />
+            </div>
+            <el-button
+              link
+              type="primary"
+              @click="toggleModelCreate"
+            >
+              {{ modelCreate.expanded ? '收起' : '新增型号' }}
+            </el-button>
+          </div>
+          <!-- 内嵌新增型号：仅必填项，保存后自动选用 -->
+          <div
+            v-if="modelCreate.expanded"
+            class="asset_manage__model_create"
           >
-            <el-option
-              v-for="model in modelOptions"
-              :key="model.id"
-              :label="`${model.modelCode} · ${model.equipmentName}`"
-              :value="model.id"
-            />
-          </el-select>
+            <div class="asset_manage__model_row">
+              <span class="asset_manage__model_label">所属分类</span>
+              <el-tree-select
+                v-model="modelForm.categoryId"
+                :data="categoryOptions"
+                :props="{ label: 'categoryName' }"
+                node-key="id"
+                check-strictly
+                placeholder="请选择分类"
+                class="asset_manage__model_ctrl"
+              />
+            </div>
+            <div class="asset_manage__model_row">
+              <span class="asset_manage__model_label">型号码</span>
+              <el-input
+                v-model="modelForm.modelCode"
+                maxlength="64"
+                placeholder="如 MODEL-A100"
+                class="asset_manage__model_ctrl"
+              />
+            </div>
+            <div class="asset_manage__model_row">
+              <span class="asset_manage__model_label">设备名称</span>
+              <el-input
+                v-model="modelForm.equipmentName"
+                maxlength="128"
+                placeholder="如 ThinkPad T14"
+                class="asset_manage__model_ctrl"
+              />
+            </div>
+            <div class="asset_manage__model_row">
+              <span class="asset_manage__model_label">规格说明</span>
+              <el-input
+                v-model="modelForm.specification"
+                maxlength="500"
+                placeholder="如 i7/16G/512G"
+                class="asset_manage__model_ctrl"
+              />
+            </div>
+            <div class="asset_manage__model_row">
+              <span class="asset_manage__model_label">计量单位</span>
+              <el-input
+                v-model="modelForm.unitName"
+                maxlength="16"
+                placeholder="如 台"
+                class="asset_manage__model_ctrl"
+              />
+            </div>
+            <div class="asset_manage__model_row">
+              <span class="asset_manage__model_label">数量</span>
+              <el-input-number
+                v-model="modelForm.quantity"
+                :min="0"
+                :precision="0"
+              />
+            </div>
+            <el-button
+              size="small"
+              type="primary"
+              :loading="modelCreate.saving"
+              @click="saveNewModel"
+            >
+              保存型号并选用
+            </el-button>
+          </div>
         </el-form-item>
         <el-form-item
           label="资产编号"
@@ -642,8 +740,10 @@ import { computed, h, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Files, Monitor } from '@element-plus/icons-vue'
 import {
+  categoryTree,
   classifyAsset,
   createAsset,
+  createModel,
   custodianOptions,
   deleteAsset,
   exportAssets,
@@ -713,7 +813,8 @@ async function loadDepartmentOptions() {
 /* ---------------- 列表（按设备型号分组，全量加载） ---------------- */
 
 const query = reactive({
-  keyword: '',
+  assetCode: '',
+  equipmentName: '',
   departmentId: null,
   labId: '',
   status: ''
@@ -760,7 +861,29 @@ const groups = computed(() => {
   return order.map((key) => map.get(key))
 })
 
-/* 分组折叠状态：新分组默认展开 */
+/* ---------------- 分组分页：每页 10 种设备（型号分组） ---------------- */
+
+const GROUP_PAGE_SIZE = 10
+const groupPageNum = ref(1)
+
+/** 当前页的型号分组切片；折叠状态按 modelId 保持，跨页不丢失 */
+const pagedGroups = computed(() => {
+  const start = (groupPageNum.value - 1) * GROUP_PAGE_SIZE
+  return groups.value.slice(start, start + GROUP_PAGE_SIZE)
+})
+
+/* 筛选/删除后分组数变少时收敛页码，避免停留在空白页 */
+watch(
+  () => groups.value.length,
+  (len) => {
+    const maxPage = Math.max(1, Math.ceil(len / GROUP_PAGE_SIZE))
+    if (groupPageNum.value > maxPage) {
+      groupPageNum.value = maxPage
+    }
+  }
+)
+
+/* 分组折叠状态：新分组默认折叠，点击展开 */
 const expanded = reactive({})
 
 watch(
@@ -768,7 +891,7 @@ watch(
   (list) => {
     for (const group of list) {
       if (!(group.modelId in expanded)) {
-        expanded[group.modelId] = true
+        expanded[group.modelId] = false
       }
     }
   },
@@ -784,8 +907,11 @@ async function load() {
   loading.value = true
   try {
     const base = { pageSize: 100 }
-    if (query.keyword.trim()) {
-      base.keyword = query.keyword.trim()
+    if (query.assetCode.trim()) {
+      base.assetCode = query.assetCode.trim()
+    }
+    if (query.equipmentName.trim()) {
+      base.equipmentName = query.equipmentName.trim()
     }
     if (query.departmentId) {
       base.departmentId = query.departmentId
@@ -819,7 +945,57 @@ async function load() {
 }
 
 function search() {
+  groupPageNum.value = 1
   load()
+}
+
+/* ---------------- 资产编号 / 设备名称 typeahead ---------------- */
+
+/**
+ * 联想候选：资产编号取台账 assetCode；设备名称取型号表 equipmentName
+ * （后端按型号名称过滤台账，联想值与过滤语义保持一致）。
+ * 失败静默返回空（列表查询错误由拦截器统一提示，输入辅助不重复打扰）。
+ */
+async function fetchAssetCodeSuggestions(queryString) {
+  const params = { pageNum: 1, pageSize: 10 }
+  if (queryString && queryString.trim()) {
+    params.assetCode = queryString.trim()
+  }
+  const data = await pageAssets(params)
+  const seen = new Set()
+  const list = []
+  for (const row of data.records || []) {
+    if (row.assetCode && !seen.has(row.assetCode)) {
+      seen.add(row.assetCode)
+      list.push({ value: row.assetCode })
+    }
+  }
+  return list
+}
+
+async function fetchEquipmentNameSuggestions(queryString) {
+  const params = { pageNum: 1, pageSize: 10 }
+  if (queryString && queryString.trim()) {
+    params.equipmentName = queryString.trim()
+  }
+  const data = await pageModels(params)
+  const seen = new Set()
+  const list = []
+  for (const row of data.records || []) {
+    if (row.equipmentName && !seen.has(row.equipmentName)) {
+      seen.add(row.equipmentName)
+      list.push({ value: row.equipmentName })
+    }
+  }
+  return list
+}
+
+function suggestAssetCodes(queryString, cb) {
+  fetchAssetCodeSuggestions(queryString).then(cb).catch(() => cb([]))
+}
+
+function suggestEquipmentNames(queryString, cb) {
+  fetchEquipmentNameSuggestions(queryString).then(cb).catch(() => cb([]))
 }
 
 /* ---------------- 一键导入 / 导出 ---------------- */
@@ -885,8 +1061,11 @@ async function onImportFileChosen(event) {
 async function doExport() {
   try {
     const params = {}
-    if (query.keyword.trim()) {
-      params.keyword = query.keyword.trim()
+    if (query.assetCode.trim()) {
+      params.assetCode = query.assetCode.trim()
+    }
+    if (query.equipmentName.trim()) {
+      params.equipmentName = query.equipmentName.trim()
     }
     if (query.departmentId) {
       params.departmentId = query.departmentId
@@ -916,6 +1095,7 @@ const createDialog = reactive({ visible: false, saving: false })
 const createFormRef = ref()
 const createForm = reactive({
   modelId: '',
+  modelText: '',
   assetCode: '',
   serialNo: '',
   labId: '',
@@ -927,15 +1107,146 @@ const createForm = reactive({
   warrantyUntil: ''
 })
 const createRules = {
-  modelId: [{ required: true, message: '请选择设备型号', trigger: 'change' }],
+  modelId: [{ required: true, message: '请检索选择型号，无匹配时点「新增型号」', trigger: 'change' }],
   assetCode: [{ required: true, message: '请输入资产编号', trigger: 'blur' }],
   labId: [{ required: true, message: '请选择保管实验室', trigger: 'change' }],
   departmentId: [{ required: true, message: '请选择归口部门', trigger: 'change' }]
 }
 
+/* ---------------- 新增台账：型号 typeahead + 内嵌新增型号 ---------------- */
+
+/** 型号联想：本地过滤已加载型号（型号码/名称包含匹配，取前 10） */
+function suggestModels(queryString, cb) {
+  const kw = (queryString || '').trim().toLowerCase()
+  const list = modelOptions.value
+    .filter(
+      (m) =>
+        !kw ||
+        m.modelCode.toLowerCase().includes(kw) ||
+        (m.equipmentName || '').toLowerCase().includes(kw)
+    )
+    .slice(0, 10)
+    .map((m) => ({ value: `${m.modelCode} · ${m.equipmentName}`, id: m.id }))
+  cb(list)
+}
+
+function onModelSelect(item) {
+  createForm.modelId = item.id
+  createFormRef.value?.clearValidate('modelId')
+}
+
+/** 手动改动文本即脱离已选型号，提交前须重新选择或新增 */
+function onModelInput() {
+  createForm.modelId = ''
+}
+
+const modelCreate = reactive({ expanded: false, saving: false })
+const modelForm = reactive({
+  categoryId: null,
+  modelCode: '',
+  equipmentName: '',
+  specification: '',
+  quantity: 0,
+  unitName: ''
+})
+const categoryOptions = ref([])
+
+/** 仅保留启用分类（递归子树），新型号只能挂靠启用分类 */
+function filterEnabledCategories(nodes) {
+  const result = []
+  for (const node of nodes || []) {
+    if (node.enabled !== 1) {
+      continue
+    }
+    result.push({ ...node, children: filterEnabledCategories(node.children) })
+  }
+  return result
+}
+
+async function loadCategoryOptions() {
+  try {
+    categoryOptions.value = filterEnabledCategories((await categoryTree()) || [])
+  } catch {
+    // 失败提示由请求拦截器统一处理
+  }
+}
+
+function toggleModelCreate() {
+  modelCreate.expanded = !modelCreate.expanded
+  if (modelCreate.expanded) {
+    // 已输入的检索文本带入设备名称，减少重复录入
+    if (!modelForm.equipmentName && createForm.modelText.trim()) {
+      modelForm.equipmentName = createForm.modelText.trim()
+    }
+    if (!categoryOptions.value.length) {
+      loadCategoryOptions()
+    }
+  }
+}
+
+async function saveNewModel() {
+  if (!modelForm.categoryId) {
+    ElMessage.warning('请选择所属分类')
+    return
+  }
+  if (!modelForm.modelCode.trim()) {
+    ElMessage.warning('请输入型号码')
+    return
+  }
+  if (!modelForm.equipmentName.trim()) {
+    ElMessage.warning('请输入设备名称')
+    return
+  }
+  if (!modelForm.specification.trim()) {
+    ElMessage.warning('请输入规格说明')
+    return
+  }
+  if (!modelForm.unitName.trim()) {
+    ElMessage.warning('请输入计量单位')
+    return
+  }
+  modelCreate.saving = true
+  try {
+    await createModel({
+      categoryId: modelForm.categoryId,
+      modelCode: modelForm.modelCode.trim(),
+      equipmentName: modelForm.equipmentName.trim(),
+      brand: null,
+      specification: modelForm.specification.trim(),
+      quantity: modelForm.quantity ?? 0,
+      unitName: modelForm.unitName.trim(),
+      referencePrice: null,
+      expectedLifeMonths: null,
+      requiresDataErasure: false
+    })
+    // 型号创建接口不回 id：刷新选项后按型号码（唯一）找回回填选用
+    await loadModelOptions()
+    const created = modelOptions.value.find((m) => m.modelCode === modelForm.modelCode.trim())
+    if (created) {
+      createForm.modelId = created.id
+      createForm.modelText = `${created.modelCode} · ${created.equipmentName}`
+    }
+    ElMessage.success('型号已创建并选用')
+    modelCreate.expanded = false
+    Object.assign(modelForm, {
+      categoryId: null,
+      modelCode: '',
+      equipmentName: '',
+      specification: '',
+      quantity: 0,
+      unitName: ''
+    })
+  } catch {
+    // 失败提示由请求拦截器统一处理
+  } finally {
+    modelCreate.saving = false
+  }
+}
+
 function openCreate() {
   Object.assign(createForm, {
     modelId: '',
+    modelText: '',
     assetCode: '',
     serialNo: '',
     labId: '',
@@ -946,6 +1257,7 @@ function openCreate() {
     purchasePrice: null,
     warrantyUntil: ''
   })
+  modelCreate.expanded = false
   createDialog.visible = true
 }
 
@@ -1176,8 +1488,60 @@ watch(
   width: 200px;
 }
 
+/* 搜索框外套固定宽度容器：el-autocomplete 会把 class 透传到内部 el-input，
+   scoped 选择器命不中，故宽度控制在 wrapper 上 */
+.asset_manage__search {
+  width: 150px;
+  flex: none;
+}
+
 .asset_manage__filter--status {
   width: 140px;
+}
+
+.asset_manage__pager {
+  margin-top: 14px;
+  justify-content: flex-end;
+}
+
+/* 新增台账：型号检索 + 内嵌新增型号 */
+.asset_manage__model_pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.asset_manage__model_input {
+  flex: 1;
+}
+
+.asset_manage__model_create {
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px dashed var(--el-border-color);
+  border-radius: var(--r-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.asset_manage__model_row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.asset_manage__model_label {
+  width: 70px;
+  flex: none;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+
+.asset_manage__model_ctrl {
+  flex: 1;
 }
 
 /* 操作按钮组右对齐（提高特异性以覆盖 .el-button + .el-button 的相邻 margin） */

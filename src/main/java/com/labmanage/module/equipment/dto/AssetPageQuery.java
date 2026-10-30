@@ -11,8 +11,11 @@ import com.labmanage.module.equipment.enums.EquipmentStatus;
  */
 public class AssetPageQuery extends BasePageQuery {
 
-    /** 关键字（资产编号/序列号/名称模糊匹配） */
-    private String keyword;
+    /** 资产编号模糊匹配 */
+    private String assetCode;
+
+    /** 设备名称模糊匹配（按所属型号名称） */
+    private String equipmentName;
 
     /** 归口部门过滤 */
     private Long departmentId;
@@ -23,12 +26,20 @@ public class AssetPageQuery extends BasePageQuery {
     /** 状态过滤（仅维护权限者生效） */
     private EquipmentStatus status;
 
-    public String getKeyword() {
-        return keyword;
+    public String getAssetCode() {
+        return assetCode;
     }
 
-    public void setKeyword(String keyword) {
-        this.keyword = keyword;
+    public void setAssetCode(String assetCode) {
+        this.assetCode = assetCode;
+    }
+
+    public String getEquipmentName() {
+        return equipmentName;
+    }
+
+    public void setEquipmentName(String equipmentName) {
+        this.equipmentName = equipmentName;
     }
 
     public Long getDepartmentId() {

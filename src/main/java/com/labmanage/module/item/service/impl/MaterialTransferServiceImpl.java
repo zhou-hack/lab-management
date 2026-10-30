@@ -167,13 +167,11 @@ public class MaterialTransferServiceImpl implements MaterialTransferService {
     public TransferFile exportSkus(MaterialSkuExportQuery query) {
         FileFormat format = formatOf(query.getFormat());
         LambdaQueryWrapper<MaterialSku> wrapper = new LambdaQueryWrapper<>();
-        if (query.getKeyword() != null && !query.getKeyword().isBlank()) {
-            String keyword = query.getKeyword().trim();
-            wrapper.and(q -> q.likeRight(MaterialSku::getSkuCode, keyword)
-                    .or()
-                    .like(MaterialSku::getMaterialName, keyword)
-                    .or()
-                    .like(MaterialSku::getSpecification, keyword));
+        if (query.getSkuCode() != null && !query.getSkuCode().isBlank()) {
+            wrapper.like(MaterialSku::getSkuCode, query.getSkuCode().trim());
+        }
+        if (query.getMaterialName() != null && !query.getMaterialName().isBlank()) {
+            wrapper.like(MaterialSku::getMaterialName, query.getMaterialName().trim());
         }
         if (query.getCategoryId() != null && !query.getCategoryId().isBlank()) {
             wrapper.eq(MaterialSku::getCategoryId, IdUtils.requireId(query.getCategoryId(), "分类 ID"));

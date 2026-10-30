@@ -24,8 +24,10 @@ import com.labmanage.module.item.mapper.StockDocumentLineMapper;
 import com.labmanage.module.item.service.MaterialSkuService;
 import com.labmanage.module.item.util.IdUtils;
 import com.labmanage.module.item.vo.MaterialSkuVO;
+import com.labmanage.module.item.vo.SkuOptionVO;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -58,13 +60,11 @@ public class MaterialSkuServiceImpl implements MaterialSkuService {
     @Override
     public PageResult<MaterialSkuVO> page(MaterialSkuQuery query) {
         LambdaQueryWrapper<MaterialSku> wrapper = new LambdaQueryWrapper<>();
-        if (query.getKeyword() != null && !query.getKeyword().isBlank()) {
-            String keyword = query.getKeyword().trim();
-            wrapper.and(q -> q.likeRight(MaterialSku::getSkuCode, keyword)
-                    .or()
-                    .like(MaterialSku::getMaterialName, keyword)
-                    .or()
-                    .like(MaterialSku::getSpecification, keyword));
+        if (query.getSkuCode() != null && !query.getSkuCode().isBlank()) {
+            wrapper.like(MaterialSku::getSkuCode, query.getSkuCode().trim());
+        }
+        if (query.getMaterialName() != null && !query.getMaterialName().isBlank()) {
+            wrapper.like(MaterialSku::getMaterialName, query.getMaterialName().trim());
         }
         if (query.getCategoryId() != null && !query.getCategoryId().isBlank()) {
             wrapper.eq(MaterialSku::getCategoryId, IdUtils.requireId(query.getCategoryId(), "分类 ID"));
@@ -79,6 +79,35 @@ public class MaterialSkuServiceImpl implements MaterialSkuService {
         IPage<MaterialSku> page = skuMapper.selectPage(PageUtils.toPage(query), wrapper);
         List<MaterialSkuVO> records = toVos(page.getRecords());
         return PageResult.of(records, page.getTotal(), query.getPageNum(), query.getPageSize());
+    }
+
+    @Override
+    public List<SkuOptionVO> listOptions(String keyword) {
+        LambdaQueryWrapper<MaterialSku> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(MaterialSku::getEnabled, 1);
+        // 能申领的都是库存中有的：任一库位可用量 > 0（2026-10-24 定稿）
+        wrapper.exists("SELECT 1 FROM stock_balance b "
+                + "WHERE b.sku_id = material_sku.id AND b.deleted = 0 AND b.stock_qty > 0");
+        if (keyword != null && !keyword.isBlank()) {
+            String kw = keyword.trim();
+            wrapper.and(w -> w.like(MaterialSku::getSkuCode, kw)
+                    .or().like(MaterialSku::getMaterialName, kw));
+        }
+        wrapper.orderByAsc(MaterialSku::getSkuCode);
+        wrapper.last("LIMIT 20");
+        List<MaterialSku> skus = skuMapper.selectList(wrapper);
+        if (skus.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, BigDecimal> stockMap = balanceMapper.sumStockBySkuIds(
+                        skus.stream().map(MaterialSku::getId).toList())
+                .stream()
+                .collect(Collectors.toMap(StockBalanceMapper.SkuStockTotal::skuId,
+                        StockBalanceMapper.SkuStockTotal::totalQty));
+        return skus.stream()
+                .map(s -> new SkuOptionVO(String.valueOf(s.getId()), s.getSkuCode(), s.getMaterialName(),
+                        s.getBaseUnit(), stockMap.getOrDefault(s.getId(), BigDecimal.ZERO)))
+                .toList();
     }
 
     @Override

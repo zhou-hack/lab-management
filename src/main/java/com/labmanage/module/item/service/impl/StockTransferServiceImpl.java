@@ -107,7 +107,6 @@ public class StockTransferServiceImpl implements StockTransferService {
                 String locationCode = requireText(cell(row, 0, "库位编码"), 64, "库位编码");
                 String skuCode = requireText(cell(row, 1, "SKU码"), 64, "SKU 码");
                 BigDecimal quantity = requireQuantity(cell(row, 2, "数量"), "数量");
-                BigDecimal unitPrice = optionalPrice(cell(row, 3, "单价"));
 
                 StockLocation location = selectLocationByCode(locationCode);
                 if (location == null) {
@@ -140,7 +139,7 @@ public class StockTransferServiceImpl implements StockTransferService {
                             "文件内库位+SKU 组合重复：" + locationCode + " / " + skuCode);
                 }
                 validLines.add(new StockDocumentLineCreateDTO(
-                        String.valueOf(sku.getId()), null, String.valueOf(location.getId()), quantity, unitPrice));
+                        String.valueOf(sku.getId()), null, String.valueOf(location.getId()), quantity));
             } catch (BusinessException e) {
                 failures.add(new ImportResultVO.Failure(rowNo, e.getMessage()));
             }
@@ -172,7 +171,7 @@ public class StockTransferServiceImpl implements StockTransferService {
                         .collect(Collectors.toMap(StockLocation::getId, Function.identity()));
 
         List<String[]> lines = new ArrayList<>(balances.size() + 1);
-        lines.add(headerRow("库位编码", "SKU码", "物料名称", "库存量", "安全库存", "补货目标", "移动均价", "预警状态"));
+        lines.add(headerRow("库位编码", "SKU码", "物料名称", "库存量", "安全库存", "补货目标", "预警状态"));
         for (StockBalanceVO vo : balances) {
             StockLocation location = locationMap.get(Long.valueOf(vo.locationId()));
             lines.add(new String[]{
@@ -182,7 +181,6 @@ public class StockTransferServiceImpl implements StockTransferService {
                     qtyText(vo.stockQty()),
                     qtyText(vo.safeQty()),
                     qtyText(vo.targetQty()),
-                    priceText(vo.movingAveragePrice()),
                     warningText(vo.warningLevel())
             });
         }
@@ -241,19 +239,6 @@ public class StockTransferServiceImpl implements StockTransferService {
         }
         checkDigits(value, 15, 3, fieldName);
         return value;
-    }
-
-    private BigDecimal optionalPrice(String raw) {
-        String value = raw == null ? "" : raw.trim();
-        if (value.isEmpty()) {
-            return null;
-        }
-        BigDecimal price = parseDecimal(value, "单价");
-        if (price.signum() < 0) {
-            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "单价不能为负");
-        }
-        checkDigits(price, 15, 4, "单价");
-        return price;
     }
 
     private BigDecimal parseDecimal(String raw, String fieldName) {
@@ -339,10 +324,6 @@ public class StockTransferServiceImpl implements StockTransferService {
     }
 
     private String qtyText(BigDecimal value) {
-        return value == null ? "" : value.toPlainString();
-    }
-
-    private String priceText(BigDecimal value) {
         return value == null ? "" : value.toPlainString();
     }
 

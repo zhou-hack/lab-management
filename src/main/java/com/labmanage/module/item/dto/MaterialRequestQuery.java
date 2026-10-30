@@ -26,6 +26,10 @@ public class MaterialRequestQuery extends BasePageQuery {
     @Schema(description = "开课实例 ID", example = "1234567890123456789")
     private String offeringId;
 
+    @Schema(description = "经办人 ID（用户端「我的申领」过滤本人经办单用；仍受数据范围约束）",
+            example = "1234567890123456789")
+    private String operatorId;
+
     public MaterialRequestStatus getStatus() {
         return status;
     }
@@ -64,5 +68,13 @@ public class MaterialRequestQuery extends BasePageQuery {
 
     public void setOfferingId(String offeringId) {
         this.offeringId = offeringId;
+    }
+
+    public String getOperatorId() {
+        return operatorId;
+    }
+
+    public void setOperatorId(String operatorId) {
+        this.operatorId = operatorId;
     }
 }

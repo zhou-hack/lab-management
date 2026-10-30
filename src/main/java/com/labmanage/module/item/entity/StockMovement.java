@@ -34,15 +34,6 @@ public class StockMovement extends BaseEntity {
     /** 变更后余额 */
     private BigDecimal afterQty;
 
-    /** 价值变动 */
-    private BigDecimal valueDelta;
-
-    /** 过账前移动加权均价 */
-    private BigDecimal beforeAvgPrice;
-
-    /** 过账后移动加权均价 */
-    private BigDecimal afterAvgPrice;
-
     /** 发生时间（UTC，取单据 occurred_at） */
     private Instant occurredAt;
 
@@ -103,30 +94,6 @@ public class StockMovement extends BaseEntity {
 
     public void setAfterQty(BigDecimal afterQty) {
         this.afterQty = afterQty;
-    }
-
-    public BigDecimal getValueDelta() {
-        return valueDelta;
-    }
-
-    public void setValueDelta(BigDecimal valueDelta) {
-        this.valueDelta = valueDelta;
-    }
-
-    public BigDecimal getBeforeAvgPrice() {
-        return beforeAvgPrice;
-    }
-
-    public void setBeforeAvgPrice(BigDecimal beforeAvgPrice) {
-        this.beforeAvgPrice = beforeAvgPrice;
-    }
-
-    public BigDecimal getAfterAvgPrice() {
-        return afterAvgPrice;
-    }
-
-    public void setAfterAvgPrice(BigDecimal afterAvgPrice) {
-        this.afterAvgPrice = afterAvgPrice;
     }
 
     public Instant getOccurredAt() {

@@ -14,17 +14,23 @@ import com.labmanage.module.equipment.dto.AssetPageQuery;
 import com.labmanage.module.equipment.dto.AssetTransferRequest;
 import com.labmanage.module.equipment.dto.AssetUpdateRequest;
 import com.labmanage.module.equipment.entity.EquipmentAsset;
+import com.labmanage.module.equipment.entity.EquipmentBooking;
 import com.labmanage.module.equipment.entity.EquipmentLocationHistory;
 import com.labmanage.module.equipment.entity.EquipmentModel;
+import com.labmanage.module.equipment.enums.BookingStatus;
 import com.labmanage.module.equipment.enums.EquipmentStatus;
 import com.labmanage.module.equipment.enums.ValueLevel;
 import com.labmanage.module.equipment.mapper.EquipmentAssetMapper;
+import com.labmanage.module.equipment.mapper.EquipmentBookingMapper;
 import com.labmanage.module.equipment.mapper.EquipmentLocationHistoryMapper;
 import com.labmanage.module.equipment.mapper.EquipmentModelMapper;
 import com.labmanage.module.equipment.service.AssetService;
+import com.labmanage.module.equipment.vo.AssetBookingSlotVO;
 import com.labmanage.module.equipment.vo.AssetImportResultVO;
 import com.labmanage.module.equipment.vo.AssetVO;
 import com.labmanage.module.equipment.vo.CustodianOptionVO;
+import com.labmanage.module.space.entity.BizSpace;
+import com.labmanage.module.space.mapper.BizSpaceMapper;
 import com.labmanage.roles.entity.SysDepartment;
 import com.labmanage.roles.mapper.SysDepartmentMapper;
 import com.labmanage.roles.entity.SysUser;
@@ -76,17 +82,23 @@ public class AssetServiceImpl implements AssetService {
     private final EquipmentLocationHistoryMapper locationHistoryMapper;
     private final SysDepartmentMapper departmentMapper;
     private final SysUserMapper userMapper;
+    private final BizSpaceMapper spaceMapper;
+    private final EquipmentBookingMapper bookingMapper;
 
     public AssetServiceImpl(EquipmentAssetMapper assetMapper,
                             EquipmentModelMapper modelMapper,
                             EquipmentLocationHistoryMapper locationHistoryMapper,
                             SysDepartmentMapper departmentMapper,
-                            SysUserMapper userMapper) {
+                            SysUserMapper userMapper,
+                            BizSpaceMapper spaceMapper,
+                            EquipmentBookingMapper bookingMapper) {
         this.assetMapper = assetMapper;
         this.modelMapper = modelMapper;
         this.locationHistoryMapper = locationHistoryMapper;
         this.departmentMapper = departmentMapper;
         this.userMapper = userMapper;
+        this.spaceMapper = spaceMapper;
+        this.bookingMapper = bookingMapper;
     }
 
     @Override
@@ -102,6 +114,7 @@ public class AssetServiceImpl implements AssetService {
         if (model == null || model.getEnabled() != 1) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "设备型号不存在或已停用");
         }
+        requireLab(request.labId());
         requireDepartment(request.departmentId());
         Long codeExists = assetMapper.selectCount(new LambdaQueryWrapper<EquipmentAsset>()
                 .eq(EquipmentAsset::getAssetCode, request.assetCode()));
@@ -112,6 +125,7 @@ public class AssetServiceImpl implements AssetService {
         asset.setModelId(request.modelId());
         asset.setAssetCode(request.assetCode());
         asset.setSerialNo(request.serialNo());
+        asset.setLabId(request.labId());
         asset.setDepartmentId(request.departmentId());
         asset.setLocationDetail(request.locationDetail());
         asset.setCustodianId(request.custodianId());
@@ -202,12 +216,12 @@ public class AssetServiceImpl implements AssetService {
     private static final String[] EXPORT_HEADERS = {
             "资产编号", "序列号", "型号码", "设备名称", "品牌", "规格说明",
             "归口部门", "存放位置", "保管人", "购置日期", "购置价格(元)", "保修截止",
-            "价值分级", "状态", "启用", "入账时间(UTC)"
+            "价值分级", "状态", "启用", "入账时间(UTC)", "保管实验室"
     };
 
     /** 导入列宽（与 EXPORT_HEADERS 顺序一致） */
     private static final int[] EXPORT_WIDTHS = {
-            16, 18, 20, 22, 14, 26, 18, 16, 12, 12, 14, 12, 10, 10, 8, 20
+            16, 18, 20, 22, 14, 26, 18, 16, 12, 12, 14, 12, 10, 10, 8, 20, 16
     };
 
     /** 导入状态文案/枚举名 → 枚举 */
@@ -298,7 +312,7 @@ public class AssetServiceImpl implements AssetService {
             }
             Map<String, Integer> columns = headerIndex(sheet.getRow(0));
             List<String> missing = new ArrayList<>();
-            for (String required : List.of("资产编号", "型号码", "归口部门")) {
+            for (String required : List.of("资产编号", "型号码", "归口部门", "保管实验室")) {
                 if (!columns.containsKey(required)) {
                     missing.add(required);
                 }
@@ -315,6 +329,8 @@ public class AssetServiceImpl implements AssetService {
             Map<String, List<SysDepartment>> departments = departmentMapper.selectList(
                             new LambdaQueryWrapper<SysDepartment>().eq(SysDepartment::getEnabled, 1))
                     .stream().collect(Collectors.groupingBy(SysDepartment::getDepartmentName));
+            Map<String, List<BizSpace>> labs = spaceMapper.selectList(null)
+                    .stream().collect(Collectors.groupingBy(BizSpace::getLabName));
             Map<String, List<SysUser>> custodians = userMapper.selectList(new LambdaQueryWrapper<SysUser>()
                             .eq(SysUser::getEnabled, 1))
                     .stream().collect(Collectors.groupingBy(SysUser::getRealName));
@@ -334,8 +350,10 @@ public class AssetServiceImpl implements AssetService {
                 String code = text(row, columns, "资产编号");
                 String modelCode = text(row, columns, "型号码");
                 String deptName = text(row, columns, "归口部门");
-                if (!StringUtils.hasText(code) || !StringUtils.hasText(modelCode) || !StringUtils.hasText(deptName)) {
-                    errors.add(new AssetImportResultVO.RowError(excelRow, "资产编号、型号码、归口部门为必填"));
+                String labName = text(row, columns, "保管实验室");
+                if (!StringUtils.hasText(code) || !StringUtils.hasText(modelCode)
+                        || !StringUtils.hasText(deptName) || !StringUtils.hasText(labName)) {
+                    errors.add(new AssetImportResultVO.RowError(excelRow, "资产编号、型号码、归口部门、保管实验室为必填"));
                     continue;
                 }
                 if (fileCodes.contains(code)) {
@@ -350,6 +368,11 @@ public class AssetServiceImpl implements AssetService {
                 Long departmentId = uniqueId(departments, deptName, SysDepartment::getId);
                 if (departmentId == null) {
                     errors.add(new AssetImportResultVO.RowError(excelRow, "归口部门不存在或名称不唯一：" + deptName));
+                    continue;
+                }
+                Long labId = uniqueId(labs, labName, BizSpace::getId);
+                if (labId == null) {
+                    errors.add(new AssetImportResultVO.RowError(excelRow, "保管实验室不存在或名称不唯一：" + labName));
                     continue;
                 }
                 String custodianName = text(row, columns, "保管人");
@@ -411,6 +434,7 @@ public class AssetServiceImpl implements AssetService {
                 asset.setModelId(model.getId());
                 asset.setAssetCode(code);
                 asset.setSerialNo(text(row, columns, "序列号"));
+                asset.setLabId(labId);
                 asset.setDepartmentId(departmentId);
                 asset.setLocationDetail(text(row, columns, "存放位置"));
                 asset.setCustodianId(custodianId);
@@ -474,17 +498,19 @@ public class AssetServiceImpl implements AssetService {
         if (query.getModelId() != null) {
             wrapper.eq(EquipmentAsset::getModelId, query.getModelId());
         }
-        if (StringUtils.hasText(query.getKeyword())) {
-            String keyword = query.getKeyword();
+        if (StringUtils.hasText(query.getAssetCode())) {
+            wrapper.like(EquipmentAsset::getAssetCode, query.getAssetCode().trim());
+        }
+        if (StringUtils.hasText(query.getEquipmentName())) {
             List<Long> modelIds = modelMapper.selectList(new LambdaQueryWrapper<EquipmentModel>()
-                            .like(EquipmentModel::getEquipmentName, keyword))
+                            .like(EquipmentModel::getEquipmentName, query.getEquipmentName().trim()))
                     .stream().map(EquipmentModel::getId).toList();
-            wrapper.and(w -> {
-                w.like(EquipmentAsset::getAssetCode, keyword).or().like(EquipmentAsset::getSerialNo, keyword);
-                if (!modelIds.isEmpty()) {
-                    w.or().in(EquipmentAsset::getModelId, modelIds);
-                }
-            });
+            if (modelIds.isEmpty()) {
+                // 无型号命中即整体无结果
+                wrapper.eq(EquipmentAsset::getId, -1L);
+            } else {
+                wrapper.in(EquipmentAsset::getModelId, modelIds);
+            }
         }
         wrapper.orderByAsc(EquipmentAsset::getId);
         return wrapper;
@@ -506,6 +532,14 @@ public class AssetServiceImpl implements AssetService {
         return department;
     }
 
+    private BizSpace requireLab(Long labId) {
+        BizSpace lab = spaceMapper.selectById(labId);
+        if (lab == null) {
+            throw new BusinessException(ResultCode.CONFLICT.getCode(), "保管实验室不存在");
+        }
+        return lab;
+    }
+
     private List<AssetVO> assemble(List<EquipmentAsset> assets) {
         if (assets.isEmpty()) {
             return List.of();
@@ -514,6 +548,10 @@ public class AssetServiceImpl implements AssetService {
                 assets.stream().map(EquipmentAsset::getModelId).collect(Collectors.toSet()),
                 modelMapper::selectBatchIds,
                 EquipmentModel::getId);
+        Map<Long, BizSpace> labs = loadMap(
+                assets.stream().map(EquipmentAsset::getLabId).filter(Objects::nonNull).collect(Collectors.toSet()),
+                spaceMapper::selectBatchIds,
+                BizSpace::getId);
         Map<Long, SysDepartment> departments = loadMap(
                 assets.stream().map(EquipmentAsset::getDepartmentId).filter(Objects::nonNull).collect(Collectors.toSet()),
                 departmentMapper::selectBatchIds,
@@ -522,9 +560,12 @@ public class AssetServiceImpl implements AssetService {
                 assets.stream().map(EquipmentAsset::getCustodianId).filter(Objects::nonNull).collect(Collectors.toSet()),
                 userMapper::selectBatchIds,
                 SysUser::getId);
+        Map<Long, String> usageStates = resolveUsageStates(
+                assets.stream().map(EquipmentAsset::getId).collect(Collectors.toSet()));
         return assets.stream()
                 .map(asset -> {
                     EquipmentModel model = models.get(asset.getModelId());
+                    BizSpace lab = asset.getLabId() == null ? null : labs.get(asset.getLabId());
                     SysDepartment department = asset.getDepartmentId() == null ? null
                             : departments.get(asset.getDepartmentId());
                     SysUser custodian = asset.getCustodianId() == null ? null
@@ -537,6 +578,8 @@ public class AssetServiceImpl implements AssetService {
                             model != null ? model.getModelCode() : null,
                             model != null ? model.getEquipmentName() : null,
                             model != null ? model.getCategoryId().toString() : null,
+                            asset.getLabId() == null ? null : asset.getLabId().toString(),
+                            lab != null ? lab.getLabName() : null,
                             asset.getDepartmentId() == null ? null : asset.getDepartmentId().toString(),
                             department != null ? department.getDepartmentName() : null,
                             asset.getLocationDetail(),
@@ -547,9 +590,54 @@ public class AssetServiceImpl implements AssetService {
                             asset.getWarrantyUntil(),
                             asset.getValueLevel(),
                             asset.getStatus(),
-                            asset.getEnabled()
+                            asset.getEnabled(),
+                            usageStates.getOrDefault(asset.getId(), "FREE")
                     );
                 })
+                .toList();
+    }
+
+    /**
+     * 批量计算占用状态：已借出未归还、或已批准且当前落在时段内 → IN_USE；
+     * 否则存在未来已批准预约 → RESERVED；其余 → FREE。
+     */
+    private Map<Long, String> resolveUsageStates(Set<Long> assetIds) {
+        Map<Long, String> states = new HashMap<>();
+        if (assetIds.isEmpty()) {
+            return states;
+        }
+        Instant now = Instant.now();
+        List<EquipmentBooking> bookings = bookingMapper.selectList(new LambdaQueryWrapper<EquipmentBooking>()
+                .in(EquipmentBooking::getAssetId, assetIds)
+                .and(w -> w.eq(EquipmentBooking::getStatus, BookingStatus.CHECKED_OUT)
+                        .or(x -> x.eq(EquipmentBooking::getStatus, BookingStatus.APPROVED)
+                                .gt(EquipmentBooking::getEndAt, now))));
+        Map<Long, List<EquipmentBooking>> byAsset = bookings.stream()
+                .collect(Collectors.groupingBy(EquipmentBooking::getAssetId));
+        for (Long assetId : assetIds) {
+            List<EquipmentBooking> list = byAsset.getOrDefault(assetId, List.of());
+            boolean inUse = list.stream().anyMatch(b -> b.getStatus() == BookingStatus.CHECKED_OUT
+                    || (b.getStartAt() != null && !b.getStartAt().isAfter(now) && b.getEndAt().isAfter(now)));
+            boolean reserved = list.stream().anyMatch(b -> b.getStatus() == BookingStatus.APPROVED
+                    && b.getStartAt() != null && b.getStartAt().isAfter(now));
+            states.put(assetId, inUse ? "IN_USE" : reserved ? "RESERVED" : "FREE");
+        }
+        return states;
+    }
+
+    @Override
+    public List<AssetBookingSlotVO> futureBookings(String id) {
+        Long assetId = Ids.parse(id);
+        requireAsset(assetId);
+        Instant now = Instant.now();
+        return bookingMapper.selectList(new LambdaQueryWrapper<EquipmentBooking>()
+                        .eq(EquipmentBooking::getAssetId, assetId)
+                        .and(w -> w.eq(EquipmentBooking::getStatus, BookingStatus.CHECKED_OUT)
+                                .or(x -> x.eq(EquipmentBooking::getStatus, BookingStatus.APPROVED)
+                                        .gt(EquipmentBooking::getEndAt, now)))
+                        .orderByAsc(EquipmentBooking::getStartAt))
+                .stream()
+                .map(b -> new AssetBookingSlotVO(b.getId().toString(), b.getStartAt(), b.getEndAt(), b.getStatus()))
                 .toList();
     }
 
@@ -699,6 +787,7 @@ public class AssetServiceImpl implements AssetService {
         if (createTime != null) {
             cells[15].setCellValue(EXCEL_DATETIME_UTC.format(createTime));
         }
+        cells[16].setCellValue(nvl(row.labName()));
         return cells;
     }
 

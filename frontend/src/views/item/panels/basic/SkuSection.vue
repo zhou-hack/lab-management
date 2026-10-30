@@ -1,18 +1,28 @@
 <template>
   <div>
     <div class="toolbar">
-      <el-input
-        v-model="keyword"
-        clearable
-        class="w220"
-        placeholder="SKU 码 / 名称 / 规格"
-        @change="pager.search"
-      />
-      <CategorySelect
-        v-model="categoryId"
-        all-option
-        @change="pager.search"
-      />
+      <div class="sku_section__search">
+        <el-autocomplete
+          v-model="skuCode"
+          :fetch-suggestions="(q, cb) => suggestField(q, cb, 'skuCode')"
+          placeholder="SKU 码"
+          clearable
+          @keyup.enter="pager.search"
+          @clear="pager.search"
+          @select="pager.search"
+        />
+      </div>
+      <div class="sku_section__search">
+        <el-autocomplete
+          v-model="materialName"
+          :fetch-suggestions="(q, cb) => suggestField(q, cb, 'materialName')"
+          placeholder="物料名称"
+          clearable
+          @keyup.enter="pager.search"
+          @clear="pager.search"
+          @select="pager.search"
+        />
+      </div>
       <el-select
         v-model="materialType"
         clearable
@@ -359,8 +369,8 @@ import StatusTag from '@/components/StatusTag.vue'
 import ImportDialog from '@/components/ImportDialog.vue'
 import CategorySelect from '@/components/CategorySelect.vue'
 
-const keyword = ref('')
-const categoryId = ref(null)
+const skuCode = ref('')
+const materialName = ref('')
 const materialType = ref(null)
 const enabled = ref(null)
 const importDialogRef = ref(null)
@@ -369,12 +379,39 @@ const exporting = ref(false)
 const pager = usePagedList((params) =>
   pageSkus({
     ...params,
-    keyword: keyword.value || undefined,
-    categoryId: categoryId.value || undefined,
+    skuCode: skuCode.value || undefined,
+    materialName: materialName.value || undefined,
     materialType: materialType.value || undefined,
     enabled: enabled.value || undefined
   })
 )
+
+/**
+ * typeahead 联想：按输入片段查前 10 条 SKU，取对应字段去重映射为 { value }；
+ * SKU 码与名称均为模糊匹配（与后端查询语义一致）。
+ * 失败静默返回空（查询错误由拦截器统一提示，输入辅助不重复打扰）。
+ */
+async function suggestField(queryString, cb, field) {
+  try {
+    const params = { pageNum: 1, pageSize: 10 }
+    if (queryString && queryString.trim()) {
+      params[field] = queryString.trim()
+    }
+    const data = await pageSkus(params)
+    const seen = new Set()
+    const list = []
+    for (const row of data.records || []) {
+      const text = row[field]
+      if (text && !seen.has(text)) {
+        seen.add(text)
+        list.push({ value: text })
+      }
+    }
+    cb(list)
+  } catch {
+    cb([])
+  }
+}
 
 const dialogVisible = ref(false)
 const submitting = ref(false)
@@ -503,8 +540,8 @@ async function doExport(format) {
   exporting.value = true
   try {
     const file = await exportSkus({
-      keyword: keyword.value || undefined,
-      categoryId: categoryId.value || undefined,
+      skuCode: skuCode.value || undefined,
+      materialName: materialName.value || undefined,
       materialType: materialType.value || undefined,
       enabled: enabled.value || undefined,
       format
@@ -524,3 +561,12 @@ onMounted(() => {
 
 defineExpose({ refresh: pager.load })
 </script>
+
+<style scoped>
+/* 搜索框外套固定宽度容器：el-autocomplete 会把 class 透传到内部 el-input，
+   scoped 选择器命不中，故宽度控制在 wrapper 上 */
+.sku_section__search {
+  width: 180px;
+  flex: none;
+}
+</style>

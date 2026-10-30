@@ -38,9 +38,6 @@
         <el-descriptions-item label="经办人">
           {{ displayName(detail.operatorName, detail.operatorId) }}
         </el-descriptions-item>
-        <el-descriptions-item label="金额合计">
-          {{ formatQty(detail.totalAmount) || '-' }}
-        </el-descriptions-item>
         <el-descriptions-item
           label="事由"
           :span="2"
@@ -98,24 +95,6 @@
         >
           <template #default="{ row }">
             {{ formatQty(row.quantity) }}
-          </template>
-        </el-table-column>
-        <el-table-column
-          label="单价快照"
-          width="100"
-          align="right"
-        >
-          <template #default="{ row }">
-            {{ formatQty(row.unitPriceSnapshot) }}
-          </template>
-        </el-table-column>
-        <el-table-column
-          label="金额快照"
-          width="110"
-          align="right"
-        >
-          <template #default="{ row }">
-            {{ formatQty(row.amountSnapshot) }}
           </template>
         </el-table-column>
       </el-table>

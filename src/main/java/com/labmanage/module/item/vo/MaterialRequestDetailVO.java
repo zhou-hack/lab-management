@@ -2,6 +2,7 @@ package com.labmanage.module.item.vo;
 
 import com.labmanage.module.item.entity.MaterialRequest;
 import com.labmanage.module.item.enums.MaterialRequestStatus;
+import com.labmanage.module.item.enums.PickupMode;
 import com.labmanage.module.item.enums.RequestType;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -58,6 +59,9 @@ public record MaterialRequestDetailVO(
         @Schema(description = "申领类型：SELF 本人申领 / PROXY 学生代理代领", example = "SELF")
         RequestType requestType,
 
+        @Schema(description = "领取方式：SELF_PICKUP 本人领取 / PROXY_PICKUP 学生代理领取", example = "SELF_PICKUP")
+        PickupMode pickupMode,
+
         @Schema(description = "源申领单 ID（PROXY 时非空）", example = "1234567890123456789")
         String sourceRequestId,
 
@@ -89,6 +93,7 @@ public record MaterialRequestDetailVO(
                 e.getPeriodCount(),
                 e.getPurpose(),
                 e.getRequestType(),
+                e.getPickupMode(),
                 e.getSourceRequestId() == null ? null : String.valueOf(e.getSourceRequestId()),
                 e.getStatus(),
                 e.getCreateTime(),

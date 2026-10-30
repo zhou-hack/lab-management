@@ -10,6 +10,11 @@ export function pageSkus(params) {
   return request.get('/material-skus/page', { params })
 }
 
+// 物料选项（申领表单选择器用；关键字同时模糊匹配 SKU 码与名称，仅启用物料，不暴露档案字段）
+export function skuOptions(keyword) {
+  return request.get('/material-skus/options', { params: { keyword: keyword || undefined } })
+}
+
 export function getMaterialSku(id) {
   return request.get(`/material-skus/${id}`)
 }
@@ -192,6 +197,16 @@ export function issueRequest(id, data) {
   return request.post(`/material-requests/${id}/issue`, data)
 }
 
+// 申领单可归还行（已过账出库行 + 累计已归还量 + 可归还量）
+export function returnableLines(id) {
+  return request.get(`/material-requests/${id}/returnable_lines`)
+}
+
+// 申领单归还（生成 RETURN_IN 归还单草稿，审批过账后回增库存）
+export function returnRequest(id, data) {
+  return request.post(`/material-requests/${id}/return`, data)
+}
+
 // 学生代理代领：老师已审核通过的可代领源申领单分页
 export function pageProxySources(params) {
   return request.get('/material-requests/proxy-sources', { params })
@@ -200,6 +215,11 @@ export function pageProxySources(params) {
 // 学生代理代领：源申领单行（含剩余可代领量）
 export function listProxyLines(sourceRequestId) {
   return request.get(`/material-requests/proxy-sources/${sourceRequestId}/lines`)
+}
+
+// 审批教师下拉（TEACHER 角色启用用户；学生申领必填审批教师）
+export function requestTeacherOptions() {
+  return request.get('/material-requests/teacher_options')
 }
 
 // ---------- 领用定额 ----------

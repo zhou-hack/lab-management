@@ -2,14 +2,28 @@
   <div class="equip_section model_manage">
     <div class="card">
       <div class="model_manage__toolbar">
-        <el-input
-          v-model="query.keyword"
-          class="model_manage__filter"
-          placeholder="型号码 / 名称 / 品牌"
-          clearable
-          @keyup.enter="search"
-          @clear="search"
-        />
+        <div class="model_manage__search">
+          <el-autocomplete
+            v-model="query.modelCode"
+            :fetch-suggestions="suggestModelCodes"
+            placeholder="型号码"
+            clearable
+            @keyup.enter="search"
+            @clear="search"
+            @select="search"
+          />
+        </div>
+        <div class="model_manage__search">
+          <el-autocomplete
+            v-model="query.equipmentName"
+            :fetch-suggestions="suggestEquipmentNames"
+            placeholder="设备名称"
+            clearable
+            @keyup.enter="search"
+            @clear="search"
+            @select="search"
+          />
+        </div>
         <el-tree-select
           v-model="query.categoryId"
           class="model_manage__filter"
@@ -55,7 +69,7 @@
       </div>
       <template v-else-if="groups.length">
         <div
-          v-for="group in groups"
+          v-for="group in pagedGroups"
           :key="group.categoryId"
           class="equip_group"
           :class="{ 'equip_group--collapsed': !expanded[group.categoryId] }"
@@ -156,37 +170,17 @@
                   </template>
                 </el-table-column>
                 <el-table-column
-                  label="预期寿命（月）"
-                  width="110"
-                >
-                  <template #default="{ row }">
-                    {{ row.expectedLifeMonths ?? '—' }}
-                  </template>
-                </el-table-column>
-                <el-table-column
-                  label="归还擦除"
+                  label="设备状态"
                   width="100"
                 >
                   <template #default="{ row }">
-                    <span
-                      class="pill"
-                      :class="row.requiresDataErasure ? 'pill--brand' : 'pill--muted'"
+                    <el-button
+                      link
+                      type="primary"
+                      @click="openAssets(row)"
                     >
-                      {{ row.requiresDataErasure ? '需擦除' : '无需' }}
-                    </span>
-                  </template>
-                </el-table-column>
-                <el-table-column
-                  label="状态"
-                  width="90"
-                >
-                  <template #default="{ row }">
-                    <span
-                      class="pill"
-                      :class="row.enabled === 1 ? 'pill--ok' : 'pill--muted'"
-                    >
-                      {{ row.enabled === 1 ? '启用' : '停用' }}
-                    </span>
+                      查看详情
+                    </el-button>
                   </template>
                 </el-table-column>
                 <el-table-column
@@ -231,13 +225,12 @@
         暂无型号，请从「新增型号」开始建立
       </div>
       <el-pagination
-        v-model:current-page="query.pageNum"
-        v-model:page-size="query.pageSize"
+        v-if="groups.length"
+        v-model:current-page="groupPageNum"
         class="model_manage__pager"
-        :total="total"
-        :page-sizes="[10, 20, 50, 100]"
-        layout="total, sizes, prev, pager, next"
-        @change="load"
+        :page-size="GROUP_PAGE_SIZE"
+        :total="groups.length"
+        layout="total, prev, pager, next"
       />
     </div>
 
@@ -251,6 +244,100 @@
     >
       <CategoryDirectory @changed="onCategoryChanged" />
     </el-drawer>
+
+    <!-- 设备明细：该型号下的每台设备（台账分页） -->
+    <el-dialog
+      v-model="assetsDialog.visible"
+      :title="`设备明细 · ${assetsDialog.modelText}`"
+      width="960px"
+      destroy-on-close
+    >
+      <el-table
+        v-loading="assetsDialog.loading"
+        :data="assetsDialog.records"
+        class="table-scroll-x"
+      >
+        <el-table-column
+          prop="assetCode"
+          label="资产编号"
+          min-width="110"
+        />
+        <el-table-column
+          label="序列号"
+          min-width="110"
+        >
+          <template #default="{ row }">
+            {{ row.serialNo || '—' }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="labName"
+          label="保管实验室"
+          min-width="130"
+        >
+          <template #default="{ row }">
+            {{ row.labName || '—' }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="departmentName"
+          label="归口部门"
+          min-width="100"
+        />
+        <el-table-column
+          label="存放位置"
+          min-width="120"
+          show-overflow-tooltip
+        >
+          <template #default="{ row }">
+            {{ row.locationDetail || '—' }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="保管人"
+          width="90"
+        >
+          <template #default="{ row }">
+            {{ row.custodianName || '—' }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="价值分级"
+          width="90"
+        >
+          <template #default="{ row }">
+            <span
+              class="pill"
+              :class="valueLevelMeta(row).pill"
+            >
+              {{ valueLevelMeta(row).label }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="状态"
+          width="90"
+        >
+          <template #default="{ row }">
+            <span
+              class="pill"
+              :class="enumMeta(row.status, EQUIPMENT_STATUS).pill"
+            >
+              {{ enumMeta(row.status, EQUIPMENT_STATUS).label }}
+            </span>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-pagination
+        v-model:current-page="assetsDialog.pageNum"
+        v-model:page-size="assetsDialog.pageSize"
+        class="model_manage__pager"
+        :total="assetsDialog.total"
+        :page-sizes="[10, 20, 50]"
+        layout="total, sizes, prev, pager, next"
+        @change="loadAssets"
+      />
+    </el-dialog>
 
     <el-dialog
       v-model="dialog.visible"
@@ -386,7 +473,8 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Box, Collection } from '@element-plus/icons-vue'
-import { categoryTree, createModel, deleteModel, pageModels, updateModel } from '@/api/equipment'
+import { categoryTree, createModel, deleteModel, pageAssets, pageModels, updateModel } from '@/api/equipment'
+import { EQUIPMENT_STATUS, VALUE_LEVEL, enumMeta } from '@/utils/enums'
 import CategoryDirectory from '@/views/admin/equipment/CategoryManage.vue'
 
 /**
@@ -449,9 +537,8 @@ const categoryMeta = computed(() => {
 
 /* ---------------- 列表（按分类分组） ---------------- */
 
-const query = reactive({ pageNum: 1, pageSize: 20, keyword: '', categoryId: null })
+const query = reactive({ modelCode: '', equipmentName: '', categoryId: null })
 const records = ref([])
-const total = ref(0)
 const loading = ref(false)
 
 /** 当前页记录按所属分类分组（保持记录出现顺序） */
@@ -474,7 +561,29 @@ const groups = computed(() => {
   return order.map((key) => map.get(key))
 })
 
-/* 分组折叠状态：新分组默认展开 */
+/* ---------------- 分组分页：每页 10 类设备（分类分组） ---------------- */
+
+const GROUP_PAGE_SIZE = 10
+const groupPageNum = ref(1)
+
+/** 当前页的分类分组切片；折叠状态按 categoryId 保持，跨页不丢失 */
+const pagedGroups = computed(() => {
+  const start = (groupPageNum.value - 1) * GROUP_PAGE_SIZE
+  return groups.value.slice(start, start + GROUP_PAGE_SIZE)
+})
+
+/* 筛选/删除后分组数变少时收敛页码，避免停留在空白页 */
+watch(
+  () => groups.value.length,
+  (len) => {
+    const maxPage = Math.max(1, Math.ceil(len / GROUP_PAGE_SIZE))
+    if (groupPageNum.value > maxPage) {
+      groupPageNum.value = maxPage
+    }
+  }
+)
+
+/* 分组折叠状态：新分组默认折叠，点击展开 */
 const expanded = reactive({})
 
 watch(
@@ -482,7 +591,7 @@ watch(
   (list) => {
     for (const group of list) {
       if (!(group.categoryId in expanded)) {
-        expanded[group.categoryId] = true
+        expanded[group.categoryId] = false
       }
     }
   },
@@ -493,20 +602,35 @@ function toggleGroup(key) {
   expanded[key] = !expanded[key]
 }
 
+/** 全量加载：后端 pageSize 上限 100，循环翻页直至收齐 total 条 */
 async function load() {
   loading.value = true
   try {
-    const params = { pageNum: query.pageNum, pageSize: query.pageSize }
-    if (query.keyword.trim()) {
-      params.keyword = query.keyword.trim()
+    const base = { pageSize: 100 }
+    if (query.modelCode.trim()) {
+      base.modelCode = query.modelCode.trim()
+    }
+    if (query.equipmentName.trim()) {
+      base.equipmentName = query.equipmentName.trim()
     }
     if (query.categoryId) {
-      params.categoryId = query.categoryId
+      base.categoryId = query.categoryId
     }
-    const data = await pageModels(params)
-    records.value = data.records || []
-    total.value = data.total || 0
-    emit('count', total.value)
+    const all = []
+    let totalCount = Infinity
+    let pageNum = 1
+    while (all.length < totalCount) {
+      const data = await pageModels({ ...base, pageNum })
+      const batch = data.records || []
+      all.push(...batch)
+      totalCount = data.total || 0
+      pageNum += 1
+      if (!batch.length) {
+        break
+      }
+    }
+    records.value = all
+    emit('count', all.length)
   } catch {
     // 失败提示由请求拦截器统一处理
   } finally {
@@ -515,12 +639,87 @@ async function load() {
 }
 
 function search() {
-  query.pageNum = 1
+  groupPageNum.value = 1
   load()
 }
 
-/* ---------------- 分类抽屉 ---------------- */
+/* ---------------- 型号码 / 设备名称 typeahead ---------------- */
 
+/**
+ * 联想候选：按输入片段查前 10 条型号，取对应字段去重映射为 { value }。
+ * 失败静默返回空（列表查询错误由拦截器统一提示，输入辅助不重复打扰）。
+ */
+async function fetchSuggestions(queryString, field) {
+  const params = { pageNum: 1, pageSize: 10 }
+  if (queryString && queryString.trim()) {
+    params[field] = queryString.trim()
+  }
+  const data = await pageModels(params)
+  const seen = new Set()
+  const list = []
+  for (const row of data.records || []) {
+    const text = row[field]
+    if (text && !seen.has(text)) {
+      seen.add(text)
+      list.push({ value: text })
+    }
+  }
+  return list
+}
+
+function suggestModelCodes(queryString, cb) {
+  fetchSuggestions(queryString, 'modelCode').then(cb).catch(() => cb([]))
+}
+
+function suggestEquipmentNames(queryString, cb) {
+  fetchSuggestions(queryString, 'equipmentName').then(cb).catch(() => cb([]))
+}
+
+/* ---------------- 设备明细（型号下的每台设备） ---------------- */
+
+const assetsDialog = reactive({
+  visible: false,
+  loading: false,
+  modelId: '',
+  modelText: '',
+  records: [],
+  total: 0,
+  pageNum: 1,
+  pageSize: 10
+})
+
+function valueLevelMeta(row) {
+  return row.valueLevel
+    ? enumMeta(row.valueLevel, VALUE_LEVEL)
+    : { label: '待分类', pill: 'pill--danger' }
+}
+
+function openAssets(row) {
+  assetsDialog.modelId = row.id
+  assetsDialog.modelText = `${row.modelCode} · ${row.equipmentName}`
+  assetsDialog.pageNum = 1
+  assetsDialog.visible = true
+  loadAssets()
+}
+
+async function loadAssets() {
+  assetsDialog.loading = true
+  try {
+    const data = await pageAssets({
+      pageNum: assetsDialog.pageNum,
+      pageSize: assetsDialog.pageSize,
+      modelId: assetsDialog.modelId
+    })
+    assetsDialog.records = data.records || []
+    assetsDialog.total = data.total || 0
+  } catch {
+    // 失败提示由请求拦截器统一处理
+  } finally {
+    assetsDialog.loading = false
+  }
+}
+
+/* ---------------- 分类抽屉 ---------------- */
 const categoryDrawerVisible = ref(false)
 
 /** 抽屉内分类变更后：刷新分类树（筛选/元数据）与型号分组 */
@@ -680,6 +879,13 @@ watch(
 
 .model_manage__filter {
   width: 200px;
+}
+
+/* 搜索框外套固定宽度容器：el-autocomplete 会把 class 透传到内部 el-input，
+   scoped 选择器命不中，故宽度控制在 wrapper 上 */
+.model_manage__search {
+  width: 150px;
+  flex: none;
 }
 
 /* 管理分类按钮靠右（提高特异性覆盖 .el-button + .el-button 相邻 margin） */

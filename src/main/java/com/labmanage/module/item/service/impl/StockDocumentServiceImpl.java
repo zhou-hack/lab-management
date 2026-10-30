@@ -52,7 +52,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -194,13 +193,9 @@ public class StockDocumentServiceImpl implements StockDocumentService {
                 : locationMapper.selectByIds(locationIds).stream()
                         .collect(Collectors.toMap(StockLocation::getId, location -> location));
 
-        BigDecimal totalAmount = BigDecimal.ZERO;
         List<StockDocumentLineVO> lineVos = new ArrayList<>(lines.size());
         for (StockDocumentLine line : lines) {
             MaterialSku sku = skuMap.get(line.getSkuId());
-            if (line.getAmountSnapshot() != null) {
-                totalAmount = totalAmount.add(line.getAmountSnapshot());
-            }
             lineVos.add(StockDocumentLineVO.from(line,
                     sku == null ? null : sku.getSkuCode(),
                     sku == null ? null : sku.getMaterialName(),
@@ -210,8 +205,7 @@ public class StockDocumentServiceImpl implements StockDocumentService {
         }
         Map<Long, String> operatorNames = document.getOperatorId() == null
                 ? Map.of() : userNamesOf(List.of(document));
-        StockDocumentDetailVO vo = StockDocumentDetailVO.from(document, lineVos,
-                totalAmount.setScale(2, RoundingMode.HALF_UP), operatorNames);
+        StockDocumentDetailVO vo = StockDocumentDetailVO.from(document, lineVos, operatorNames);
         // 经办人字段排查日志：定位姓名缺失或 ID 不匹配问题
         if (log.isDebugEnabled()) {
             log.debug(
@@ -323,21 +317,11 @@ public class StockDocumentServiceImpl implements StockDocumentService {
             Long locationId = targetLocationId(line, direction);
             StockBalance balance = lockBalance(locationId, line.getSkuId());
             BigDecimal beforeQty = balance.getStockQty();
-            BigDecimal beforeAvg = balance.getMovingAveragePrice();
             BigDecimal quantity = line.getQuantity();
 
             BigDecimal afterQty;
-            BigDecimal afterAvg;
-            BigDecimal valueDelta;
             if (direction == MoveDirection.IN) {
-                BigDecimal price = line.getUnitPriceSnapshot() == null ? BigDecimal.ZERO : line.getUnitPriceSnapshot();
                 afterQty = beforeQty.add(quantity);
-                // 移动加权平均：新均价 = (原量×原均价 + 入量×入价) / 新量（4 位小数）
-                afterAvg = afterQty.signum() > 0
-                        ? beforeQty.multiply(beforeAvg).add(quantity.multiply(price))
-                                .divide(afterQty, 4, RoundingMode.HALF_UP)
-                        : beforeAvg;
-                valueDelta = quantity.multiply(price).setScale(2, RoundingMode.HALF_UP);
             } else {
                 if (beforeQty.compareTo(quantity) < 0) {
                     throw new BusinessException(ResultCode.CONFLICT.getCode(),
@@ -346,16 +330,10 @@ public class StockDocumentServiceImpl implements StockDocumentService {
                                     + quantity.stripTrailingZeros().toPlainString());
                 }
                 afterQty = beforeQty.subtract(quantity);
-                afterAvg = beforeAvg;
-                valueDelta = quantity.multiply(beforeAvg).setScale(2, RoundingMode.HALF_UP).negate();
-                // 出库行回填过账时成本快照
-                line.setUnitPriceSnapshot(beforeAvg);
-                line.setAmountSnapshot(valueDelta.negate());
-                lineMapper.updateById(line);
             }
 
             // 行锁保护下 version 条件更新必然成功，0 行表示数据异常，整笔回滚
-            int updated = balanceMapper.updatePostBalance(balance.getId(), balance.getVersion(), afterQty, afterAvg);
+            int updated = balanceMapper.updatePostBalance(balance.getId(), balance.getVersion(), afterQty);
             if (updated == 0) {
                 throw new BusinessException(ResultCode.INTERNAL_ERROR.getCode(), "库存余额更新异常，请重试");
             }
@@ -368,9 +346,6 @@ public class StockDocumentServiceImpl implements StockDocumentService {
             movement.setQtyDelta(direction == MoveDirection.IN ? quantity : quantity.negate());
             movement.setBeforeQty(beforeQty);
             movement.setAfterQty(afterQty);
-            movement.setValueDelta(valueDelta);
-            movement.setBeforeAvgPrice(beforeAvg);
-            movement.setAfterAvgPrice(afterAvg);
             movement.setOccurredAt(document.getOccurredAt());
             movement.setMovementKey("STK:" + document.getDocumentId() + ":" + line.getLineNo() + ":" + direction);
             // 幂等键唯一冲突表示重复过账，整笔回滚
@@ -398,7 +373,6 @@ public class StockDocumentServiceImpl implements StockDocumentService {
         created.setStockQty(BigDecimal.ZERO);
         created.setSafeQty(BigDecimal.ZERO);
         created.setTargetQty(BigDecimal.ZERO);
-        created.setMovingAveragePrice(BigDecimal.ZERO);
         created.setVersion(0);
         try {
             balanceMapper.insert(created);
@@ -466,10 +440,6 @@ public class StockDocumentServiceImpl implements StockDocumentService {
             if (location == null || location.getEnabled() == null || location.getEnabled() != 1) {
                 throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "库位不存在或已停用：" + locationId);
             }
-            if (direction == MoveDirection.OUT && dto.unitPrice() != null) {
-                throw new BusinessException(ResultCode.BAD_REQUEST.getCode(),
-                        "出库单据不接受单价，出库成本由过账时移动加权均价快照生成");
-            }
 
             StockDocumentLine line = new StockDocumentLine();
             line.setId(IdWorker.getId());
@@ -479,9 +449,6 @@ public class StockDocumentServiceImpl implements StockDocumentService {
             line.setFromLocationId(fromLocationId);
             line.setToLocationId(toLocationId);
             line.setQuantity(dto.quantity());
-            line.setUnitPriceSnapshot(dto.unitPrice());
-            line.setAmountSnapshot(dto.unitPrice() == null ? null
-                    : dto.quantity().multiply(dto.unitPrice()).setScale(2, RoundingMode.HALF_UP));
             lines.add(line);
         }
         return lines;
@@ -681,11 +648,6 @@ public class StockDocumentServiceImpl implements StockDocumentService {
             line.setToLocationId(to);
             line.setQuantity(lineDto.quantity());
             line.setOriginalIssueLineId(issueLineId);
-            // 归还按原出库成本快照入库（过账参与移动加权）
-            BigDecimal price = issueLine.getUnitPriceSnapshot();
-            line.setUnitPriceSnapshot(price);
-            line.setAmountSnapshot(price == null ? null
-                    : lineDto.quantity().multiply(price).setScale(2, RoundingMode.HALF_UP));
             lines.add(line);
         }
         if (!lines.isEmpty()) {
@@ -811,14 +773,8 @@ public class StockDocumentServiceImpl implements StockDocumentService {
             line.setQuantity(originalLine.getQuantity());
             if (originalDirection == MoveDirection.IN) {
                 line.setFromLocationId(originalLine.getToLocationId());
-                line.setUnitPriceSnapshot(null);
-                line.setAmountSnapshot(null);
             } else {
                 line.setToLocationId(originalLine.getFromLocationId());
-                BigDecimal price = originalLine.getUnitPriceSnapshot();
-                line.setUnitPriceSnapshot(price);
-                line.setAmountSnapshot(price == null ? null
-                        : originalLine.getQuantity().multiply(price).setScale(2, RoundingMode.HALF_UP));
             }
             lines.add(line);
         }
@@ -878,14 +834,13 @@ public class StockDocumentServiceImpl implements StockDocumentService {
                                 + " " + sku.getBaseUnit() + "，需要 "
                                 + quantity.stripTrailingZeros().toPlainString());
             }
-            BigDecimal srcAvg = src.getMovingAveragePrice();
             applyOutLeg(document, line, line.getFromLocationId(), src, quantity);
-            applyInLeg(document, line, line.getToLocationId(), dst, quantity, srcAvg);
+            applyInLeg(document, line, line.getToLocationId(), dst, quantity);
         }
     }
 
     /**
-     * 冲销过账：原单为入库 → 冲销按当前账面均价出库；原单为出库 → 冲销按原出库成本快照回库；
+     * 冲销过账：原单为入库 → 冲销出库；原单为出库 → 冲销回库；
      * 写相反流水并保留原单；原单已被冲销/存在结算依赖时整笔回滚（防御性复核）。
      */
     private void postReversal(StockDocument document, List<StockDocumentLine> lines) {
@@ -936,17 +891,11 @@ public class StockDocumentServiceImpl implements StockDocumentService {
             StockBalance balance = balanceMap.get(
                     new LocSku(targetLocationId(line, reversalDirection), line.getSkuId()));
             if (reversalDirection == MoveDirection.OUT) {
-                // 撤销入库：按当前账面均价出库，回填成本快照
-                BigDecimal beforeAvg = balance.getMovingAveragePrice();
+                // 撤销入库
                 applyOutLeg(document, line, line.getFromLocationId(), balance, line.getQuantity());
-                line.setUnitPriceSnapshot(beforeAvg);
-                line.setAmountSnapshot(line.getQuantity().multiply(beforeAvg).setScale(2, RoundingMode.HALF_UP));
-                lineMapper.updateById(line);
             } else {
-                // 撤销出库：按原出库成本快照回库
-                BigDecimal inPrice = originalLine.getUnitPriceSnapshot() == null
-                        ? BigDecimal.ZERO : originalLine.getUnitPriceSnapshot();
-                applyInLeg(document, line, line.getToLocationId(), balance, line.getQuantity(), inPrice);
+                // 撤销出库：回库
+                applyInLeg(document, line, line.getToLocationId(), balance, line.getQuantity());
             }
         }
     }
@@ -1068,45 +1017,34 @@ public class StockDocumentServiceImpl implements StockDocumentService {
         return requestLineMap;
     }
 
-    /** 入库腿：移动加权均价更新 + 写 IN 流水（inPrice 为入账单价） */
+    /** 入库腿：更新余额 + 写 IN 流水 */
     private void applyInLeg(StockDocument document, StockDocumentLine line, Long locationId,
-                            StockBalance balance, BigDecimal quantity, BigDecimal inPrice) {
+                            StockBalance balance, BigDecimal quantity) {
         BigDecimal beforeQty = balance.getStockQty();
-        BigDecimal beforeAvg = balance.getMovingAveragePrice();
         BigDecimal afterQty = beforeQty.add(quantity);
-        BigDecimal afterAvg = afterQty.signum() > 0
-                ? beforeQty.multiply(beforeAvg).add(quantity.multiply(inPrice))
-                        .divide(afterQty, 4, RoundingMode.HALF_UP)
-                : beforeAvg;
-        BigDecimal valueDelta = quantity.multiply(inPrice).setScale(2, RoundingMode.HALF_UP);
-        if (balanceMapper.updatePostBalance(balance.getId(), balance.getVersion(), afterQty, afterAvg) == 0) {
+        if (balanceMapper.updatePostBalance(balance.getId(), balance.getVersion(), afterQty) == 0) {
             throw new BusinessException(ResultCode.INTERNAL_ERROR.getCode(), "库存余额更新异常，请重试");
         }
-        insertMovement(document, line, locationId, MoveDirection.IN, quantity,
-                beforeQty, afterQty, valueDelta, beforeAvg, afterAvg);
+        insertMovement(document, line, locationId, MoveDirection.IN, quantity, beforeQty, afterQty);
     }
 
-    /** 出库腿：缺货校验 + 账面均价计成本 + 写 OUT 流水 */
+    /** 出库腿：缺货校验 + 更新余额 + 写 OUT 流水 */
     private void applyOutLeg(StockDocument document, StockDocumentLine line, Long locationId,
                              StockBalance balance, BigDecimal quantity) {
         BigDecimal beforeQty = balance.getStockQty();
-        BigDecimal beforeAvg = balance.getMovingAveragePrice();
         if (beforeQty.compareTo(quantity) < 0) {
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "库存不足，无法完成过账");
         }
         BigDecimal afterQty = beforeQty.subtract(quantity);
-        BigDecimal valueDelta = quantity.multiply(beforeAvg).setScale(2, RoundingMode.HALF_UP).negate();
-        if (balanceMapper.updatePostBalance(balance.getId(), balance.getVersion(), afterQty, beforeAvg) == 0) {
+        if (balanceMapper.updatePostBalance(balance.getId(), balance.getVersion(), afterQty) == 0) {
             throw new BusinessException(ResultCode.INTERNAL_ERROR.getCode(), "库存余额更新异常，请重试");
         }
-        insertMovement(document, line, locationId, MoveDirection.OUT, quantity,
-                beforeQty, afterQty, valueDelta, beforeAvg, beforeAvg);
+        insertMovement(document, line, locationId, MoveDirection.OUT, quantity, beforeQty, afterQty);
     }
 
     private void insertMovement(StockDocument document, StockDocumentLine line, Long locationId,
                                 MoveDirection direction, BigDecimal quantity,
-                                BigDecimal beforeQty, BigDecimal afterQty, BigDecimal valueDelta,
-                                BigDecimal beforeAvg, BigDecimal afterAvg) {
+                                BigDecimal beforeQty, BigDecimal afterQty) {
         StockMovement movement = new StockMovement();
         movement.setDocumentLineId(line.getId());
         movement.setLocationId(locationId);
@@ -1115,9 +1053,6 @@ public class StockDocumentServiceImpl implements StockDocumentService {
         movement.setQtyDelta(direction == MoveDirection.IN ? quantity : quantity.negate());
         movement.setBeforeQty(beforeQty);
         movement.setAfterQty(afterQty);
-        movement.setValueDelta(valueDelta);
-        movement.setBeforeAvgPrice(beforeAvg);
-        movement.setAfterAvgPrice(afterAvg);
         movement.setOccurredAt(document.getOccurredAt());
         movement.setMovementKey("STK:" + document.getDocumentId() + ":" + line.getLineNo()
                 + ":" + direction);

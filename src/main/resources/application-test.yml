@@ -10,6 +10,9 @@ spring:
 app:
   jwt:
     secret: ${JWT_SECRET:dev-only-jwt-secret-32-bytes-minimum!!}
+  cors:
+    # 同 dev：本地回环 + 私网网段任意端口；生产用环境变量收敛
+    allowed-origin-patterns: http://localhost:*,http://127.0.0.1:*,http://192.168.*:*,http://10.*:*,http://172.*:*
 
 springdoc:
   api-docs:

@@ -217,9 +217,10 @@ class BookingApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("创建失败（超出开放窗口 08:00-21:00）：40000")
+    @DisplayName("创建失败（超出开放窗口 08:00-22:00）：40000")
     void create_outOfWindow() throws Exception {
-        JsonNode body = createBooking("2026-12-01T00:30:00.000Z", "2026-12-01T14:00:00.000Z", teacherToken);
+        // 上海 21:30-22:30（UTC 13:30-14:30）：结束越过 22:00 开放结束
+        JsonNode body = createBooking("2026-12-01T13:30:00.000Z", "2026-12-01T14:30:00.000Z", teacherToken);
         assertThat(body.path("code").asInt()).isEqualTo(40000);
     }
 

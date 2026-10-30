@@ -5,7 +5,6 @@ import com.labmanage.module.item.enums.MovementType;
 import com.labmanage.module.item.enums.StockDocumentStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +25,9 @@ public record StockDocumentDetailVO(
 
         @Schema(description = "单据状态", example = "POSTED")
         StockDocumentStatus status,
+
+        @Schema(description = "关联申领单 ID（申领实发出库/归还单留档；无关联为空）", example = "1234567890123456789")
+        String materialRequestId,
 
         @Schema(description = "归属老师 ID", example = "1234567890123456789")
         String ownerTeacherId,
@@ -48,9 +50,6 @@ public record StockDocumentDetailVO(
         @Schema(description = "明细行")
         List<StockDocumentLineVO> lines,
 
-        @Schema(description = "合计金额（两位小数）", example = "255.00")
-        BigDecimal totalAmount,
-
         @Schema(description = "经办人 ID（→ sys_user.id，单据实际操作人）", example = "1234567890123456789")
         String operatorId,
 
@@ -59,13 +58,14 @@ public record StockDocumentDetailVO(
 ) {
 
     public static StockDocumentDetailVO from(StockDocument e, List<StockDocumentLineVO> lines,
-                                            BigDecimal totalAmount, Map<Long, String> userNames) {
+                                            Map<Long, String> userNames) {
         String operatorId = e.getOperatorId() == null ? null : String.valueOf(e.getOperatorId());
         return new StockDocumentDetailVO(
                 String.valueOf(e.getId()),
                 String.valueOf(e.getDocumentId()),
                 e.getMovementType(),
                 e.getStatus(),
+                e.getMaterialRequestId() == null ? null : String.valueOf(e.getMaterialRequestId()),
                 e.getOwnerTeacherId() == null ? null : String.valueOf(e.getOwnerTeacherId()),
                 e.getVendorName(),
                 e.getReason(),
@@ -73,7 +73,6 @@ public record StockDocumentDetailVO(
                 e.getPostedAt(),
                 e.getCreateTime(),
                 lines,
-                totalAmount,
                 operatorId,
                 operatorId == null ? null : userNames.get(e.getOperatorId())
         );

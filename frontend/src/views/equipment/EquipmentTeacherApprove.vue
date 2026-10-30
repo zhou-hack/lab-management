@@ -6,7 +6,7 @@
           设备申请初审
         </h2>
         <p class="t-sub">
-          指定给您初审的学生申请 · 普通设备通过即生效，贵重设备通过后转管理员终审；超 24 小时未处理管理员可代批
+          指定给您初审的学生申请 · 初审通过后统一转管理员终审；超 24 小时未处理管理员可代批
         </p>
       </div>
     </div>
@@ -257,12 +257,9 @@ async function load() {
 }
 
 async function approve(row) {
-  const toAdmin = row.valueLevelSnapshot === 'VALUABLE'
   try {
     await ElMessageBox.confirm(
-      toAdmin
-        ? '该申请为贵重设备，初审通过后将转管理员终审。确认通过？'
-        : '初审通过后普通设备申请即生效。确认通过？',
+      '初审通过后将转管理员终审，终审批准后申请才生效。确认通过？',
       '初审通过',
       { type: 'info', confirmButtonText: '通过', cancelButtonText: '取消' }
     )
@@ -271,7 +268,7 @@ async function approve(row) {
   }
   try {
     await teacherReview(row.id, { action: 'approve' })
-    ElMessage.success(toAdmin ? '已通过，转管理员终审' : '已通过')
+    ElMessage.success('已通过，转管理员终审')
     load()
   } catch {
     // 失败提示由请求拦截器统一处理

@@ -10,8 +10,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(description = "物料分页查询参数")
 public class MaterialSkuQuery extends BasePageQuery {
 
-    @Schema(description = "关键词（匹配 SKU 码/名称/规格）", example = "乙醇")
-    private String keyword;
+    @Schema(description = "SKU 码（模糊匹配）", example = "SKU001")
+    private String skuCode;
+
+    @Schema(description = "物料名称（模糊匹配）", example = "单股铜芯线")
+    private String materialName;
 
     @Schema(description = "所属分类 ID", example = "1234567890123456789")
     private String categoryId;
@@ -22,12 +25,20 @@ public class MaterialSkuQuery extends BasePageQuery {
     @Schema(description = "启用状态（空为全部）", example = "true")
     private Boolean enabled;
 
-    public String getKeyword() {
-        return keyword;
+    public String getSkuCode() {
+        return skuCode;
     }
 
-    public void setKeyword(String keyword) {
-        this.keyword = keyword;
+    public void setSkuCode(String skuCode) {
+        this.skuCode = skuCode;
+    }
+
+    public String getMaterialName() {
+        return materialName;
+    }
+
+    public void setMaterialName(String materialName) {
+        this.materialName = materialName;
     }
 
     public String getCategoryId() {

@@ -9,6 +9,11 @@ export function listRoles() {
   return request.get('/system/roles')
 }
 
+/** 角色下用户名单（ASSISTANT 为有效授权动态持有者） → RoleUserItemVO[] */
+export function listRoleUsers(id) {
+  return request.get(`/system/roles/${id}/users`)
+}
+
 /** 全部启用权限（角色权限编辑选项） → PermissionOptionVO[] */
 export function listPermissionOptions() {
   return request.get('/system/roles/permissions')

@@ -83,7 +83,6 @@ class StockQueryServiceImplTest {
         balance.setStockQty(new BigDecimal(qty));
         balance.setSafeQty(new BigDecimal(safe));
         balance.setTargetQty(new BigDecimal(target));
-        balance.setMovingAveragePrice(BigDecimal.ZERO);
         balance.setVersion(1);
         balance.setUpdateTime(Instant.parse("2026-10-13T00:00:00.000Z"));
         return balance;

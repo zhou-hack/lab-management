@@ -25,12 +25,13 @@ public record MaterialRequestCreateDTO(
         @Pattern(regexp = "^\\d{1,19}$", message = "归属老师 ID 格式无效")
         String ownerTeacherId,
 
-        @Schema(description = "经办人 ID（学生代理代领时为代理学生本人，PROXY 必填）",
+        @Schema(description = "经办人 ID（PROXY 时由服务端强制取当前登录学生，入参忽略）",
                 example = "1234567890123456789")
         @Pattern(regexp = "^\\d{1,19}$", message = "经办人 ID 格式无效")
         String operatorId,
 
-        @Schema(description = "命中的助理授权 ID", example = "1234567890123456789")
+        @Schema(description = "命中的助理授权 ID（PROXY 时由服务端按有效授权命中写入，入参忽略）",
+                example = "1234567890123456789")
         @Pattern(regexp = "^\\d{1,19}$", message = "助理授权 ID 格式无效")
         String grantId,
 
@@ -57,6 +58,11 @@ public record MaterialRequestCreateDTO(
         @Schema(description = "用途", example = "有机化学实验课耗材")
         @Size(max = 512, message = "用途不超过 512 字")
         String purpose,
+
+        @Schema(description = "领取方式：SELF_PICKUP 本人领取（默认）/ PROXY_PICKUP 学生代理领取"
+                + "（仅老师本人申领单可选；学生单与代领单服务端强制 SELF_PICKUP）", example = "SELF_PICKUP")
+        @Pattern(regexp = "^(SELF_PICKUP|PROXY_PICKUP)$", message = "领取方式仅支持 SELF_PICKUP 或 PROXY_PICKUP")
+        String pickupMode,
 
         @Schema(description = "申领类型：SELF 本人申领（默认，学生个人发起） / PROXY 学生代理代领（引用老师已审核源单）",
                 example = "SELF")

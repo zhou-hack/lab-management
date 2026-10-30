@@ -109,7 +109,7 @@ class StockDocumentServiceImplPhase2Test {
         return location;
     }
 
-    private StockBalance balance(long locationId, long skuId, String qty, String avg) {
+    private StockBalance balance(long locationId, long skuId, String qty) {
         StockBalance balance = new StockBalance();
         balance.setId(locationId * 1000 + skuId);
         balance.setLocationId(locationId);
@@ -117,7 +117,6 @@ class StockDocumentServiceImplPhase2Test {
         balance.setStockQty(new BigDecimal(qty));
         balance.setSafeQty(BigDecimal.ZERO);
         balance.setTargetQty(BigDecimal.ZERO);
-        balance.setMovingAveragePrice(new BigDecimal(avg));
         balance.setVersion(0);
         return balance;
     }
@@ -199,7 +198,7 @@ class StockDocumentServiceImplPhase2Test {
         when(lineMapper.selectByDocumentId(901L)).thenReturn(List.of(line(1, 1L, 100L, 200L, "5")));
         when(skuMapper.selectByIds(anyCollection())).thenReturn(List.of(sku(1L, 3)));
         // 调出库位余额不足；调入库位无行则初始化 0 量行
-        when(balanceMapper.lockByLocationAndSku(100L, 1L)).thenReturn(balance(100L, 1L, "2", "1.5"));
+        when(balanceMapper.lockByLocationAndSku(100L, 1L)).thenReturn(balance(100L, 1L, "2"));
         when(balanceMapper.lockByLocationAndSku(200L, 1L)).thenReturn(null);
         doAnswer(inv -> 1).when(balanceMapper).insert(any(StockBalance.class));
 
@@ -265,7 +264,6 @@ class StockDocumentServiceImplPhase2Test {
         when(documentMapper.selectCount(any())).thenReturn(0L);
         StockDocumentLine issueLine = line(1, 1L, 100L, null, "5");
         issueLine.setStockDocumentId(66L);
-        issueLine.setUnitPriceSnapshot(new BigDecimal("2.5"));
         when(lineMapper.selectByDocumentId(66L)).thenReturn(List.of(issueLine));
         when(settlementMapper.selectSettledIssueLineIds(anyCollection())).thenReturn(List.of());
         stubInsertWithId(903L);
@@ -282,10 +280,9 @@ class StockDocumentServiceImplPhase2Test {
                 ArgumentCaptor.forClass(List.class);
         verify(lineMapper).insertBatch(linesCaptor.capture());
         StockDocumentLine reversalLine = linesCaptor.getValue().get(0);
-        // 原出库行 → 冲销入库行：库位对调到原出库位，沿用原出库成本快照
+        // 原出库行 → 冲销入库行：库位对调到原出库位
         assertEquals(100L, reversalLine.getToLocationId());
         assertEquals(new BigDecimal("5"), reversalLine.getQuantity());
-        assertEquals(new BigDecimal("2.5"), reversalLine.getUnitPriceSnapshot());
         // 批量插入前须预赋雪花 ID
         assertDoesNotThrow(() -> java.util.Objects.requireNonNull(reversalLine.getId()));
     }

@@ -6,6 +6,7 @@ import com.labmanage.module.equipment.dto.AssetCreateRequest;
 import com.labmanage.module.equipment.dto.AssetPageQuery;
 import com.labmanage.module.equipment.dto.AssetTransferRequest;
 import com.labmanage.module.equipment.dto.AssetUpdateRequest;
+import com.labmanage.module.equipment.vo.AssetBookingSlotVO;
 import com.labmanage.module.equipment.vo.AssetImportResultVO;
 import com.labmanage.module.equipment.vo.AssetVO;
 import com.labmanage.module.equipment.vo.CustodianOptionVO;
@@ -54,6 +55,11 @@ public interface AssetService {
      * 保管人下拉选项（全部启用用户）
      */
     List<CustodianOptionVO> custodianOptions();
+
+    /**
+     * 设备进行中与未来的被约时段（APPROVED 未过期 + CHECKED_OUT，按开始时间升序）
+     */
+    List<AssetBookingSlotVO> futureBookings(String id);
 
     /**
      * 台账导出（xlsx，按查询条件全量导出；权限收敛规则与分页查询一致）

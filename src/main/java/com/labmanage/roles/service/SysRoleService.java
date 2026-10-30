@@ -3,6 +3,7 @@ package com.labmanage.roles.service;
 import com.labmanage.roles.dto.RolePermissionAssignDTO;
 import com.labmanage.roles.vo.PermissionOptionVO;
 import com.labmanage.roles.vo.RoleDetailVO;
+import com.labmanage.roles.vo.RoleUserItemVO;
 
 import java.util.List;
 
@@ -16,6 +17,9 @@ public interface SysRoleService {
 
     /** 全部启用权限（角色权限编辑选项） */
     List<PermissionOptionVO> listPermissionOptions();
+
+    /** 角色下用户名单（ASSISTANT 由有效助理授权动态计算，其余读持久化绑定） */
+    List<RoleUserItemVO> listRoleUsers(Long roleId);
 
     /**
      * 整集替换角色权限绑定（OPS_ADMIN 角色锁定；变更后踢出该角色全部持有者会话，

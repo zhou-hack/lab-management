@@ -132,21 +132,6 @@
           </template>
         </el-table-column>
         <el-table-column
-          v-if="cols.price"
-          label="单价"
-          width="150"
-        >
-          <template #default="{ row }">
-            <el-input-number
-              v-model="row.unitPrice"
-              :min="0"
-              :precision="4"
-              controls-position="right"
-              placeholder="登记单价，4 位小数"
-            />
-          </template>
-        </el-table-column>
-        <el-table-column
           label="数量"
           width="150"
         >
@@ -157,16 +142,6 @@
               controls-position="right"
               placeholder="必填，最多 3 位小数"
             />
-          </template>
-        </el-table-column>
-        <el-table-column
-          v-if="cols.price"
-          label="金额"
-          width="120"
-          align="right"
-        >
-          <template #default="{ row }">
-            {{ lineAmount(row) }}
           </template>
         </el-table-column>
         <el-table-column
@@ -192,12 +167,6 @@
       >
         + 添加一行
       </el-button>
-      <div
-        v-if="cols.price && hasAmount"
-        class="total-bar"
-      >
-        合计金额：<b>{{ totalAmount }}</b> 元（按 数量 × 单价 计算，两位小数）
-      </div>
     </template>
 
     <div class="footer-tip">
@@ -287,7 +256,6 @@ const cols = computed(() => {
     from: ['ISSUE', 'SCRAP', 'TRANSFER'].includes(t),
     to: ['OPENING', 'PURCHASE_IN', 'TRANSFER'].includes(t),
     toOptional: t === 'RETURN_IN',
-    price: ['OPENING', 'PURCHASE_IN'].includes(t),
     issueLine: t === 'RETURN_IN'
   }
 })
@@ -304,30 +272,12 @@ const reasonPlaceholder = computed(() => {
   return '选填'
 })
 
-/** 入库行金额联动：数量 × 单价（两位小数），未填全显示占位 */
-function lineAmount(line) {
-  if (line.quantity == null || line.unitPrice == null) return '—'
-  return (line.quantity * line.unitPrice).toFixed(2)
-}
-
-/** 至少一行填全 数量+单价 才显示合计（全免填时 0.00 无意义） */
-const hasAmount = computed(() =>
-  form.lines.some((l) => l.quantity != null && l.unitPrice != null)
-)
-
-const totalAmount = computed(() =>
-  form.lines
-    .filter((l) => l.quantity != null && l.unitPrice != null)
-    .reduce((sum, l) => sum + l.quantity * l.unitPrice, 0)
-    .toFixed(2)
-)
-
 function emitVisible(value) {
   emit('update:visible', value)
 }
 
 function emptyLine() {
-  return { skuId: null, fromLocationId: null, toLocationId: null, quantity: null, unitPrice: null, originalIssueLineId: '' }
+  return { skuId: null, fromLocationId: null, toLocationId: null, quantity: null, originalIssueLineId: '' }
 }
 
 /** 打开时按预置值初始化（裸 @click 传入的 MouseEvent 已被父级防御为字符串） */
@@ -422,9 +372,6 @@ function validateLines() {
     if (decimalPlaces(line.quantity) > 3) {
       return failLine(i, '数量小数位超过 3 位（物料精度上限）')
     }
-    if (cols.value.price && (line.unitPrice === null || line.unitPrice === undefined)) {
-      return failLine(i, '入库行需填写单价')
-    }
   }
   if (reasonRequired.value && !form.reason.trim()) {
     ElMessage.warning(form.movementType === 'SCRAP' ? '报废事由必填' : '冲销原因必填')
@@ -454,8 +401,7 @@ async function submitCreate() {
           skuId: l.skuId,
           toLocationId: type === 'ISSUE' ? undefined : l.toLocationId,
           fromLocationId: type === 'ISSUE' ? l.fromLocationId : undefined,
-          quantity: l.quantity,
-          unitPrice: type === 'ISSUE' ? undefined : l.unitPrice
+          quantity: l.quantity
         }))
       })
     } else if (type === 'TRANSFER') {
@@ -520,13 +466,6 @@ async function submitCreate() {
   margin-top: 8px;
   margin-left: 0;
   border-style: dashed;
-}
-
-.total-bar {
-  margin-top: 8px;
-  text-align: right;
-  color: var(--el-text-color-regular);
-  font-size: 13px;
 }
 
 .footer-tip {

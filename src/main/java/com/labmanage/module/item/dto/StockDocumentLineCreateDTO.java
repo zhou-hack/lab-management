@@ -31,11 +31,6 @@ public record StockDocumentLineCreateDTO(
         @NotNull(message = "数量不能为空")
         @DecimalMin(value = "0", inclusive = false, message = "数量必须大于 0")
         @Digits(integer = 15, fraction = 3, message = "数量整数最多 15 位、小数最多 3 位")
-        BigDecimal quantity,
-
-        @Schema(description = "单价（采购/期初登记价格，可空）", example = "25.5000")
-        @DecimalMin(value = "0", message = "单价不能为负")
-        @Digits(integer = 15, fraction = 4, message = "单价整数最多 15 位、小数最多 4 位")
-        BigDecimal unitPrice
+        BigDecimal quantity
 ) {
 }

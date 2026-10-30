@@ -17,9 +17,9 @@ import java.util.List;
 public interface MaterialSettlementMapper extends BaseMapper<MaterialSettlement> {
 
     /**
-     * 原出库行累计结算量（归还/核销前校验不超过原出库量）
+     * 原出库行累计结算量（归还/核销前校验不超过原出库量；数量列 2026-10-22 已更名 quantity）
      */
-    @Select("SELECT COALESCE(SUM(qty), 0) FROM material_settlement "
+    @Select("SELECT COALESCE(SUM(quantity), 0) FROM material_settlement "
             + "WHERE issue_line_id = #{issueLineId} AND deleted = 0")
     BigDecimal sumSettledQty(@Param("issueLineId") Long issueLineId);
 

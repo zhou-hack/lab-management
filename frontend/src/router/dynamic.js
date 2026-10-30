@@ -34,7 +34,10 @@ const viewModules = {
   // item 模块（单工作台形态，内部分页签）
   ItemWorkspace: () => import('@/views/item/ItemWorkspace.vue'),
   // item 学生代理代领（菜单 205；复用申领面板，领取由后端 assistant_grant 动态放行）
-  ItemAssistantPickup: () => import('@/views/item/ItemAssistantPickup.vue')
+  ItemAssistantPickup: () => import('@/views/item/ItemAssistantPickup.vue'),
+  // item 用户端申领（菜单 222；老师/学生共用）与老师初审（菜单 223）
+  ItemMyRequests: () => import('@/views/item/ItemMyRequests.vue'),
+  ItemTeacherApprove: () => import('@/views/item/ItemTeacherApprove.vue')
 }
 
 const addedRouteNames = []

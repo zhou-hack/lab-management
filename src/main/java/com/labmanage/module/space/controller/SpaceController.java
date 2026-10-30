@@ -5,10 +5,13 @@ import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
 import com.labmanage.module.space.dto.SpaceBatchStatusDTO;
 import com.labmanage.module.space.dto.SpaceCreateDTO;
+import com.labmanage.module.space.dto.MaintenanceWindowCreateDTO;
 import com.labmanage.module.space.dto.SpacePageQuery;
 import com.labmanage.module.space.dto.SpaceUpdateDTO;
 import com.labmanage.module.space.enums.SpaceType;
+import com.labmanage.module.space.service.SpaceMaintenanceService;
 import com.labmanage.module.space.service.SpaceService;
+import com.labmanage.module.space.vo.MaintenanceWindowVO;
 import com.labmanage.module.space.vo.SpaceBatchStatusVO;
 import com.labmanage.module.space.vo.SpaceDetailVO;
 import com.labmanage.module.space.vo.SpaceImportVO;
@@ -44,14 +47,40 @@ public class SpaceController {
 
     private final SpaceService spaceService;
 
-    public SpaceController(SpaceService spaceService) {
+    private final SpaceMaintenanceService maintenanceService;
+
+    public SpaceController(SpaceService spaceService, SpaceMaintenanceService maintenanceService) {
         this.spaceService = spaceService;
+        this.maintenanceService = maintenanceService;
     }
 
     @GetMapping
     @RequirePermission("space:space:list")
     public Result<PageResult<SpaceListVO>> page(@Valid @ModelAttribute SpacePageQuery query) {
         return Result.success(spaceService.page(query));
+    }
+
+    /** 场地维修时段列表（生效中：含进行中与未来，场地管理「维修时段」弹窗） */
+    @GetMapping("/{id}/maintenance_windows")
+    @RequirePermission("space:space:read")
+    public Result<List<MaintenanceWindowVO>> listMaintenanceWindows(@PathVariable Long id) {
+        return Result.success(maintenanceService.listActive(id));
+    }
+
+    /** 设置维修时段（与已批准预约重叠 → 40900 拒绝，须先取消重叠预约） */
+    @PostMapping("/{id}/maintenance_windows")
+    @RequirePermission("space:space:update")
+    public Result<MaintenanceWindowVO> createMaintenanceWindow(@PathVariable Long id,
+                                                               @Valid @RequestBody MaintenanceWindowCreateDTO dto) {
+        return Result.success(maintenanceService.create(id, dto));
+    }
+
+    /** 取消维修时段（幂等；不存在或已取消 → 40400） */
+    @PostMapping("/{id}/maintenance_windows/{windowId}/cancel")
+    @RequirePermission("space:space:update")
+    public Result<Void> cancelMaintenanceWindow(@PathVariable Long id, @PathVariable Long windowId) {
+        maintenanceService.cancel(id, windowId);
+        return Result.success();
     }
 
     /** CSV 导出（与分页同条件；UTF-8 BOM，时间按上海时区展示） */

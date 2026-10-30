@@ -39,6 +39,23 @@ public interface LabSlotMapper extends BaseMapper<LabSlot> {
                                       @Param("endAt") Instant endAt);
 
     /**
+     * 查询多个场地在 [startAt, endAt) 区间内未释放的占用（全部场地某日总览），
+     * 按场地、开始时间升序。
+     */
+    @Select("""
+            <script>
+            SELECT * FROM lab_slot WHERE deleted = 0 AND released_at IS NULL
+              AND lab_id IN
+              <foreach collection="labIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+              AND start_at &lt; #{endAt} AND end_at &gt; #{startAt}
+            ORDER BY lab_id ASC, start_at ASC
+            </script>
+            """)
+    List<LabSlot> listOccupiedInRangeForLabs(@Param("labIds") List<Long> labIds,
+                                             @Param("startAt") Instant startAt,
+                                             @Param("endAt") Instant endAt);
+
+    /**
      * 统计场地未释放占用数（场地删除前引用检查）。
      */
     @Select("SELECT COUNT(*) FROM lab_slot WHERE lab_id = #{labId} AND deleted = 0 "

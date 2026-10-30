@@ -45,11 +45,11 @@ public class ModelServiceImpl implements ModelService {
         if (query.getCategoryId() != null) {
             wrapper.eq(EquipmentModel::getCategoryId, query.getCategoryId());
         }
-        if (StringUtils.hasText(query.getKeyword())) {
-            String keyword = query.getKeyword();
-            wrapper.and(w -> w.like(EquipmentModel::getModelCode, keyword)
-                    .or().like(EquipmentModel::getEquipmentName, keyword)
-                    .or().like(EquipmentModel::getBrand, keyword));
+        if (StringUtils.hasText(query.getModelCode())) {
+            wrapper.like(EquipmentModel::getModelCode, query.getModelCode().trim());
+        }
+        if (StringUtils.hasText(query.getEquipmentName())) {
+            wrapper.like(EquipmentModel::getEquipmentName, query.getEquipmentName().trim());
         }
         wrapper.orderByAsc(EquipmentModel::getId);
         Page<EquipmentModel> page = modelMapper.selectPage(PageUtils.toPage(query), wrapper);

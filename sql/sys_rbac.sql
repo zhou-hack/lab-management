@@ -380,7 +380,7 @@ INSERT INTO sys_menu (id, parent_id, menu_code, menu_name, route_path, component
 (12, NULL, 'system_user_group',   '用户组',       '/system/user_group', NULL,              NULL, 'DIRECTORY', 40, 1),
 (2,  12,   'system_user',         '人员管理',     '/system/user',       'SystemUserRoster', 1,    'PAGE',      1,  1),
 (4,  1,    'system_department',   '组织管理',     '/system/department', 'SystemDepartment', 10,   'PAGE',      3,  1),
-(5,  1,    'system_role',         '角色权限',     '/system/role',       'SystemRole',       14,   'PAGE',      4,  1),
+(5,  1,    'system_role',         '角色权限及名单', '/system/role',       'SystemRole',       14,   'PAGE',      4,  1),
 (6,  1,    'system_scope',        '数据范围',     '/system/scope',      'SystemScope',      15,   'PAGE',      5,  1),
 (8,  1,    'system_log',          '操作日志',     '/system/log',        'SystemLog',        20,   'PAGE',      7,  1),
 (9,  1,    'system_policy',       '参数配置',     '/system/policy',     'SystemPolicy',     21,   'PAGE',      8,  1),
