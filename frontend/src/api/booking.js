@@ -46,6 +46,11 @@ export function getAvailability(spaceId, date) {
   return request.get('/booking/labs/availability', { params: { spaceId, date } })
 }
 
+/** 全部可用场地某日占用总览（任意预约权限；时间轴「只选日期」三色卡片） */
+export function getAvailabilityAll(date) {
+  return request.get('/booking/labs/availability_all', { params: { date } })
+}
+
 /** 预约详情（本人或审批权限） */
 export function getBookingDetail(id) {
   return request.get(`/booking/labs/${id}`)

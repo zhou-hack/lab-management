@@ -50,50 +50,119 @@
             <el-breadcrumb-item>{{ route.meta.title || '首页' }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
-        <el-dropdown @command="onUserCommand">
-          <span class="admin_layout__user">
-            <span class="admin_layout__avatar">
-              {{ (store.user?.realName || '用').slice(0, 1) }}
-            </span>
-            <span class="admin_layout__username">
-              {{ store.user?.realName || '用户' }}
-            </span>
-            <el-icon><ArrowDown /></el-icon>
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item
-                v-if="store.switchableRoles.length"
-                command="switchRole"
+        <div class="admin_layout__header_right">
+          <el-tooltip
+            v-if="canViewNotifications"
+            content="通知消息"
+            placement="bottom"
+          >
+            <el-badge
+              :value="notification.unreadCount"
+              :max="99"
+              :hidden="!notification.unreadCount"
+              class="admin_layout__notification_badge"
+            >
+              <el-button
+                text
+                class="admin_layout__notification_btn"
+                aria-label="通知消息"
+                @click="notification.openDrawer()"
               >
-                切换身份（{{ roleLabel(store.switchableRoles[0]) }}）
-              </el-dropdown-item>
-              <el-dropdown-item command="logout">
-                退出登录
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+                <el-icon :size="19">
+                  <Bell />
+                </el-icon>
+              </el-button>
+            </el-badge>
+          </el-tooltip>
+          <el-dropdown @command="onUserCommand">
+            <span class="admin_layout__user">
+              <span class="admin_layout__avatar">
+                {{ (store.user?.realName || '用').slice(0, 1) }}
+              </span>
+              <span class="admin_layout__username">
+                {{ store.user?.realName || '用户' }}
+              </span>
+              <el-icon><ArrowDown /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  v-if="store.switchableRoles.length"
+                  command="switchRole"
+                >
+                  切换身份（{{ roleLabel(store.switchableRoles[0]) }}）
+                </el-dropdown-item>
+                <el-dropdown-item command="logout">
+                  退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </el-header>
 
       <el-main class="admin_layout__main">
         <router-view />
       </el-main>
     </el-container>
+    <item-notification-drawer />
   </el-container>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import { ArrowDown, Expand, Fold, HomeFilled, Tools } from '@element-plus/icons-vue'
+import { ArrowDown, Bell, Expand, Fold, HomeFilled, Tools } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
+import { useNotificationStore } from '@/store/notification'
+import { hasPermission } from '@/utils/permission'
+import ItemNotificationDrawer from '@/components/item/ItemNotificationDrawer.vue'
 import SidebarItem from './SidebarItem.vue'
 
 const route = useRoute()
 const router = useRouter()
 const store = useUserStore()
+const notification = useNotificationStore()
+const canViewNotifications = computed(() =>
+  hasPermission('item:notification:list', store.permissions)
+)
+
+let notificationTimer = null
+
+function stopNotificationPolling() {
+  window.clearInterval(notificationTimer)
+  notificationTimer = null
+}
+
+async function refreshUnreadCount() {
+  if (!canViewNotifications.value) return
+  await notification.fetchUnreadCount()
+  if (notification.authBlocked) stopNotificationPolling()
+}
+
+function startNotificationPolling() {
+  stopNotificationPolling()
+  if (canViewNotifications.value && !notification.authBlocked) {
+    notificationTimer = window.setInterval(refreshUnreadCount, 60000)
+  }
+}
+
+watch(
+  () => `${store.user?.userId || ''}|${store.activeRole || ''}|${canViewNotifications.value}`,
+  () => {
+    notification.reset()
+    stopNotificationPolling()
+    if (store.user?.userId && canViewNotifications.value) {
+      refreshUnreadCount()
+      startNotificationPolling()
+    }
+  },
+  { immediate: true }
+)
+
+watch(() => route.fullPath, refreshUnreadCount)
+onUnmounted(stopNotificationPolling)
 
 // 窗口 <1024 默认收起侧边栏（规范第 10 节，桌面断点）
 const collapsed = ref(window.innerWidth < 1024)
@@ -226,6 +295,24 @@ async function onUserCommand(command) {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.admin_layout__header_right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin_layout__notification_btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  color: var(--g2);
+  border-radius: var(--r-full);
+}
+.admin_layout__notification_btn:hover {
+  color: var(--brand);
+  background: var(--brand-a08);
 }
 
 .admin_layout__collapse_btn {

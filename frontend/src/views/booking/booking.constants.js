@@ -37,15 +37,31 @@ export const SERIES_STATUS_MAP = SERIES_STATUS.reduce((map, item) => {
 }, {})
 
 /**
- * 节次卡片三色派生（前端按当前时间计算，不落库）：
- *  - free       绿：空闲，无排课无预约，可点选
+ * 节次卡片状态派生（前端按当前时间计算，不落库）：
+ *  - free       绿：空闲，无排课无预约无维修，可点选
  *  - occupied   红：已占用（已批准预约/排课占用）
+ *  - maintenance 灰：维修中（当日生效维修时段覆盖，不可选）
  *  - pending    黄：下节课要使用，之后紧邻有排课/预约、即将占用，谨慎选择
  *  - past       灰：已过去的节次（不可选）
  */
 export const PERIOD_CARD_MAP = {
   free: { cls: 'period_card--free', tip: '空闲 · 可点选' },
   occupied: { cls: 'period_card--occupied', tip: '已占用 · 不可选' },
+  maintenance: { cls: 'period_card--past', tip: '维修中 · 不可选' },
   pending: { cls: 'period_card--pending', tip: '下节课即将使用 · 谨慎选择' },
   past: { cls: 'period_card--past', tip: '已过去 · 不可选' }
+}
+
+/**
+ * 场地日总览三色 + 维修态（只选日期未选场地时的场地卡片）：
+ *  - all      绿：全天空闲（所有未过去节次均无占用）
+ *  - partial  橙：部分空闲
+ *  - none     红：无空闲（所有未过去节次均被占用，或当日节次已全部结束）
+ *  - maintenance 灰：当日有生效中的维修时段（优先于占用三色展示）
+ */
+export const SPACE_CARD_MAP = {
+  all: { cls: 'period_card--free', tip: '全天空闲' },
+  partial: { cls: 'period_card--pending', tip: '部分空闲' },
+  none: { cls: 'period_card--occupied', tip: '无空闲' },
+  maintenance: { cls: 'period_card--past', tip: '有维修安排' }
 }

@@ -13,93 +13,41 @@
       label-position="top"
       @submit.prevent
     >
-      <div class="book_form__row">
-        <el-form-item
-          label="预约场地"
-          prop="spaceId"
-          class="book_form__grow"
-        >
-          <el-select
-            v-model="form.spaceId"
-            placeholder="仅展示可用状态场地"
-            class="book_form__full"
-            filterable
-            :disabled="!!presetSpaceId"
-            @change="onSpaceChange"
-          >
-            <el-option
-              v-for="s in spaceOptions"
-              :key="s.id"
-              :label="`${s.labName}（${s.capacity} 人）`"
-              :value="s.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item
-          label="日期（上海本地）"
-          prop="date"
-        >
-          <el-date-picker
-            v-model="form.date"
-            type="date"
-            value-format="YYYY-MM-DD"
-            placeholder="选择日期"
-            :disabled-date="disablePast"
-            class="book_form__date"
-            @change="loadAvailability"
-          />
-        </el-form-item>
-      </div>
-
-      <!-- 节次选择：默认带入时间轴选中的节次，也可手动调整 -->
-      <div class="book_form__row">
-        <el-form-item
-          label="起始节次"
-          prop="startPeriodId"
-        >
-          <el-select
-            v-model="form.startPeriodId"
-            placeholder="起始节次"
-            class="book_form__period"
-            @change="syncPeriodTime"
-          >
-            <el-option
-              v-for="p in periodOptions"
-              :key="p.id"
-              :label="periodLabel(p)"
-              :value="p.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item
-          label="结束节次"
-          prop="endPeriodId"
-        >
-          <el-select
-            v-model="form.endPeriodId"
-            placeholder="结束节次"
-            class="book_form__period"
-            @change="syncPeriodTime"
-          >
-            <el-option
-              v-for="p in periodOptions"
-              :key="p.id"
-              :label="periodLabel(p)"
-              :value="p.id"
-            />
-          </el-select>
+      <!-- 场地/日期/节次由时间轴带入锁定，不重复选择 -->
+      <div class="book_form__preset">
+        <p class="book_form__preset_line">
+          <span class="t-hint">预约场地：</span><b>{{ spaceName || '—' }}</b>
           <span
-            v-if="startPeriod && endPeriod"
-            class="book_form__period_range t-hint"
-          >
-            {{ form.startPeriodId <= form.endPeriodId ? '占用 ' + startPeriod.startClock + ' ~ ' + endPeriod.endClock : '' }}
+            v-if="capacity"
+            class="t-hint"
+          >（容量 {{ capacity }} 人）</span>
+        </p>
+        <p class="book_form__preset_line">
+          <span class="t-hint">预约日期：</span><b>{{ presetDate }}</b>（上海本地）
+        </p>
+        <div class="book_form__preset_line">
+          <span class="t-hint">预约节次：</span>
+          <span class="book_form__segments">
+            <el-tag
+              v-for="(seg, i) in segmentLabels"
+              :key="i"
+              size="small"
+              effect="plain"
+            >
+              {{ seg }}
+            </el-tag>
           </span>
-        </el-form-item>
+        </div>
+        <p
+          v-if="segmentLabels.length > 1"
+          class="t-hint book_form__split_hint"
+        >
+          所选节次不连续，将按连续段拆分为 {{ segmentLabels.length }} 个预约单分别提交与审批
+        </p>
       </div>
 
-      <!-- 该场地已有预约/占用（可选中的场地 + 日期联动） -->
+      <!-- 该场地当日已有占用（带入场地 + 日期联动展示） -->
       <div
-        v-if="form.spaceId && form.date"
         v-loading="availabilityLoading"
         class="book_form__avail"
       >
@@ -226,15 +174,15 @@ import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listSpaceOptions } from '@/api/space'
 import { getAvailability, listPeriods, listTeachers } from '@/api/booking'
-import { shanghaiLocalToIso, todayShanghai } from '@/utils/datetime'
+import { shanghaiLocalToIso } from '@/utils/datetime'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
-  /** 从时间轴「发起预约」带入的预选场地/日期/节次 */
+  /** 从时间轴带入的预选场地/日期（锁定展示，不重复选择） */
   presetSpaceId: { type: String, default: '' },
   presetDate: { type: String, default: '' },
-  /** 数组：[起始节次号, 结束节次号]（基于 class_period.period_no） */
-  presetPeriodNos: { type: Array, default: () => [] }
+  /** 连续段数组：[[起始节次号, 结束节次号], ...]（不连续选择已由时间轴拆段） */
+  presetSegments: { type: Array, default: () => [] }
 })
 
 const emit = defineEmits(['close', 'submit'])
@@ -247,10 +195,6 @@ const teacherOptions = ref([])
 const availability = ref(null)
 
 const form = reactive({
-  spaceId: '',
-  date: '',
-  startPeriodId: null,
-  endPeriodId: null,
   courseName: '',
   className: '',
   teacherId: '',
@@ -258,10 +202,9 @@ const form = reactive({
   purpose: ''
 })
 
-const selectedSpace = computed(() => spaceOptions.value.find((s) => s.id === form.spaceId))
+const selectedSpace = computed(() => spaceOptions.value.find((s) => s.id === props.presetSpaceId))
+const spaceName = computed(() => selectedSpace.value?.labName || '')
 const capacity = computed(() => selectedSpace.value?.capacity || null)
-const startPeriod = computed(() => periodOptions.value.find((p) => p.id === form.startPeriodId))
-const endPeriod = computed(() => periodOptions.value.find((p) => p.id === form.endPeriodId))
 const openWindow = computed(() =>
   availability.value ? `${availability.value.openStart} - ${availability.value.openEnd}` : ''
 )
@@ -273,11 +216,23 @@ const occupiedSegments = computed(() =>
   })
 )
 
+/** 节次号 → 节次记录（class_period.period_no 匹配） */
+function periodOf(periodNo) {
+  return periodOptions.value.find((item) => Number(item.periodNo) === Number(periodNo))
+}
+
+/** 分段只读展示：第1节 08:00-08:45 / 第3~5节 10:00-11:40 */
+const segmentLabels = computed(() =>
+  (props.presetSegments || []).map(([startNo, endNo]) => {
+    const sp = periodOf(startNo)
+    const ep = periodOf(endNo)
+    if (!sp || !ep) return `第${startNo}节 ~ 第${endNo}节`
+    const name = startNo === endNo ? sp.periodName : `${sp.periodName} ~ ${ep.periodName}`
+    return `${name}（${sp.startClock} - ${ep.endClock}）`
+  })
+)
+
 const rules = {
-  spaceId: [{ required: true, message: '请选择预约场地', trigger: 'change' }],
-  date: [{ required: true, message: '请选择日期', trigger: 'change' }],
-  startPeriodId: [{ required: true, message: '请选择起始节次', trigger: 'change' }],
-  endPeriodId: [{ required: true, message: '请选择结束节次', trigger: 'change' }],
   purpose: [
     { required: true, message: '请填写使用事由', trigger: 'blur' },
     { max: 512, message: '事由不能超过 512 字', trigger: 'blur' }
@@ -285,28 +240,8 @@ const rules = {
   participantCount: [{ required: true, message: '请填写参与人数', trigger: 'blur' }]
 }
 
-function periodLabel(p) {
-  return `${p.periodName} ${p.startClock}-${p.endClock}`
-}
-
 function formatClock(iso) {
   return iso ? String(iso).slice(11, 16) : ''
-}
-
-/** 禁选昨天（含）之前 */
-function disablePast(date) {
-  const [y, m, d] = todayShanghai().split('-').map(Number)
-  return date.getTime() < Date.UTC(y, m - 1, d)
-}
-
-/** 节次区间 ↔ 起止时间推导：startPeriodId <= endPeriodId，占用段 = 首节次起始 ~ 末节次结束 */
-async function syncPeriodTime() {
-  if (!form.startPeriodId || !form.endPeriodId) return
-  if (Number(form.startPeriodId) > Number(form.endPeriodId)) {
-    ElMessage.warning('起始节次不能晚于结束节次')
-    return
-  }
-  // 结束节次下拉回显（Element Plus 渲染需要，v-model 已绑定）
 }
 
 async function initForm() {
@@ -324,39 +259,23 @@ async function initForm() {
     periodOptions.value = []
     teacherOptions.value = []
   }
-  const [startNo, endNo] = props.presetPeriodNos || []
-  form.spaceId = props.presetSpaceId || ''
-  form.date = props.presetDate || ''
-  form.startPeriodId = startNo ? String(periodOf(startNo)) : null
-  form.endPeriodId = endNo ? String(periodOf(endNo)) : null
   form.courseName = ''
   form.className = ''
   form.teacherId = ''
   form.participantCount = null
   form.purpose = ''
   availability.value = null
-  if (form.spaceId && form.date) await loadAvailability()
-}
-
-/** 节次号 → 节次 ID（class_period.id 与 period_no 一致） */
-function periodOf(periodNo) {
-  const p = periodOptions.value.find((item) => Number(item.periodNo) === Number(periodNo))
-  return p ? p.id : periodNo
-}
-
-function onSpaceChange() {
-  availability.value = null
-  loadAvailability()
+  await loadAvailability()
 }
 
 async function loadAvailability() {
-  if (!form.spaceId || !form.date) {
+  if (!props.presetSpaceId || !props.presetDate) {
     availability.value = null
     return
   }
   availabilityLoading.value = true
   try {
-    availability.value = await getAvailability(form.spaceId, form.date)
+    availability.value = await getAvailability(props.presetSpaceId, props.presetDate)
   } catch {
     availability.value = null
   } finally {
@@ -370,44 +289,51 @@ async function submit() {
   } catch {
     return
   }
-  if (!startPeriod.value || !endPeriod.value) {
-    ElMessage.warning('请先选择起始与结束节次')
+  if (!props.presetSegments.length) {
+    ElMessage.warning('请先在时间轴点按选择节次')
     return
-  }
-  if (Number(form.startPeriodId) > Number(form.endPeriodId)) {
-    ElMessage.warning('起始节次不能晚于结束节次')
-    return
-  }
-  const startAt = shanghaiLocalToIso(form.date, startPeriod.value.startClock)
-  const endAt = shanghaiLocalToIso(form.date, endPeriod.value.endClock)
-  if (!startAt || !endAt) {
-    ElMessage.warning('时间格式无效')
-    return
-  }
-  const av = availability.value
-  if (av && av.openStart && av.openEnd) {
-    if (startPeriod.value.startClock < av.openStart || endPeriod.value.endClock > av.openEnd) {
-      ElMessage.warning(`须在开放时段 ${av.openStart} - ${av.openEnd} 内`)
-      return
-    }
   }
   if (capacity.value && form.participantCount > capacity.value) {
     ElMessage.warning(`参与人数不能超过场地容量（${capacity.value} 人）`)
     return
   }
-  emit('submit', {
-    spaceId: form.spaceId,
-    purpose: form.purpose,
-    participantCount: form.participantCount,
-    courseName: form.courseName || undefined,
-    className: form.className || undefined,
-    teacherId: form.teacherId || undefined,
-    bookingDate: form.date,
-    startPeriodId: form.startPeriodId,
-    endPeriodId: form.endPeriodId,
-    startAt,
-    endAt
-  })
+  // 逐段构造预约负载：startAt/endAt 按首节次起始 ~ 末节次结束（上海本地转 ISO）
+  const payloads = []
+  for (const [startNo, endNo] of props.presetSegments) {
+    const sp = periodOf(startNo)
+    const ep = periodOf(endNo)
+    if (!sp || !ep) {
+      ElMessage.warning('节次数据无效，请重新选择')
+      return
+    }
+    const startAt = shanghaiLocalToIso(props.presetDate, sp.startClock)
+    const endAt = shanghaiLocalToIso(props.presetDate, ep.endClock)
+    if (!startAt || !endAt) {
+      ElMessage.warning('时间格式无效')
+      return
+    }
+    const av = availability.value
+    if (av && av.openStart && av.openEnd) {
+      if (sp.startClock < av.openStart || ep.endClock > av.openEnd) {
+        ElMessage.warning(`须在开放时段 ${av.openStart} - ${av.openEnd} 内`)
+        return
+      }
+    }
+    payloads.push({
+      spaceId: props.presetSpaceId,
+      purpose: form.purpose,
+      participantCount: form.participantCount,
+      courseName: form.courseName || undefined,
+      className: form.className || undefined,
+      teacherId: form.teacherId || undefined,
+      bookingDate: props.presetDate,
+      startPeriodId: String(sp.id),
+      endPeriodId: String(ep.id),
+      startAt,
+      endAt
+    })
+  }
+  emit('submit', payloads)
 }
 
 watch(
@@ -419,6 +345,38 @@ watch(
 </script>
 
 <style scoped>
+.book_form__preset {
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: var(--surface-sunken, #f5f7fa);
+  border-radius: 8px;
+}
+
+.book_form__preset_line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.book_form__preset_line:last-child {
+  margin-bottom: 0;
+}
+
+.book_form__segments {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.book_form__split_hint {
+  margin: 4px 0 0;
+  color: var(--warn, #f79009);
+}
+
 .book_form__row {
   display: flex;
   gap: 12px;
@@ -430,19 +388,6 @@ watch(
 
 .book_form__full {
   width: 100%;
-}
-
-.book_form__date {
-  width: 150px;
-}
-
-.book_form__period {
-  width: 130px;
-}
-
-.book_form__period_range {
-  display: block;
-  margin-top: 4px;
 }
 
 .book_form__count {
@@ -461,11 +406,8 @@ watch(
   margin: 0 0 6px;
 }
 
-.book_form__segments {
+.book_form__avail .book_form__segments {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
   margin-top: 6px;
 }
 

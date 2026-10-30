@@ -38,13 +38,13 @@
 .el-button {
   border-radius: var(--r-full);
 }
-.el-button--primary {
+.el-button--primary:not(.is-link):not(.is-text):not(.is-plain) {
   background: var(--brand-grad);
   border: none;
   box-shadow: var(--brand-shadow);
 }
-.el-button--primary:hover,
-.el-button--primary:focus {
+.el-button--primary:not(.is-link):not(.is-text):not(.is-plain):hover,
+.el-button--primary:not(.is-link):not(.is-text):not(.is-plain):focus {
   background: var(--brand-grad-hover);
   box-shadow: var(--brand-shadow-lg);
 }

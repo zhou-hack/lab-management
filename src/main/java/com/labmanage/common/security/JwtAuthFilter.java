@@ -42,6 +42,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
+        // 放行 CORS 预检（OPTIONS 无凭证头，交由 Spring CORS 处理器应答）
+        if (org.springframework.http.HttpMethod.OPTIONS.matches(request.getMethod())) {
+            return true;
+        }
         String path = request.getRequestURI();
         return !path.startsWith(PREFIX) || PUBLIC_PATHS.contains(path);
     }

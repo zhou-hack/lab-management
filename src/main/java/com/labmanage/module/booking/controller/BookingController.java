@@ -13,6 +13,7 @@ import com.labmanage.module.booking.vo.AvailabilityVO;
 import com.labmanage.module.booking.vo.BookingDetailVO;
 import com.labmanage.module.booking.vo.BookingStatsVO;
 import com.labmanage.module.booking.vo.BookingVO;
+import com.labmanage.module.booking.vo.SpaceDayAvailabilityVO;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -83,6 +84,18 @@ public class BookingController {
             @RequestParam Long spaceId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         return Result.success(bookingService.availability(spaceId, date));
+    }
+
+    /**
+     * 全部可用场地某日占用总览（时间轴「只选日期」三色卡片）。
+     * 任意预约权限可读（学生只读视角同样展示场地状态总览）。
+     */
+    @GetMapping("/availability_all")
+    @RequirePermission(value = {"booking:lab:view", "booking:lab:list",
+            "booking:lab:create", "booking:lab:approve"}, mode = RequirePermission.Mode.OR)
+    public Result<java.util.List<SpaceDayAvailabilityVO>> availabilityAll(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return Result.success(bookingService.availabilityAll(date));
     }
 
     /**

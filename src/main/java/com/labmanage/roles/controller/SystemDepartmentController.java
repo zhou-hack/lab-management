@@ -40,8 +40,8 @@ public class SystemDepartmentController {
         this.departmentService = departmentService;
     }
 
-    @Operation(summary = "启用部门下拉选项（用户/名单表单用）")
-    @RequirePermission("system:user:list")
+    // 登录即可用：业务表单（设备台账归属部门等）与系统页共用的只读下拉，不挂 system 权限
+    @Operation(summary = "启用部门下拉选项（业务/系统表单共用）")
     @GetMapping("/options")
     public Result<List<DepartmentOptionVO>> options() {
         return Result.success(sysUserService.departmentOptions());

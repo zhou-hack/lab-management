@@ -83,7 +83,7 @@ com.labmanage
 ├── common          返回体、错误码、异常、分页、工具类
 ├── config          JWT 安全、跨域、Knife4j、序列化配置
 ├── roles           用户、角色、菜单、权限，RBAC 核心
-├── module          业务模块，按场地、设备、物料分子包
+├── module          业务模块，仅保留 space、booking、document 等子包
 └── LabApplication  启动类
 ```
 
@@ -158,7 +158,7 @@ JSON 接口统一返回 `code`、`msg`、`data`，成功时 `code = 0`，失败�
 - 口令不上明文：登录与敏感操作确认前，前端按账号 `GET /auth/salt` 取该账号 BCrypt 盐前缀，用 bcryptjs 以同一盐复算出口令哈希后上传，服务端常量时间比对库中哈希。哈希即凭据可被重放，内网/开发场景接受该风险；传输层安全仍以 HTTPS 为准，禁止在任何场景直传明文口令。
 - 本项目采用 `sessionStorage` 保存 access/refresh 双 token，通过统一工具读写，以浏览器标签页会话为生命周期。Axios 统一添加 `Authorization: Bearer <access token>`；401 时先以 refresh token 单飞刷新（`POST /auth/refresh` 轮换双 token）并重试原请求，刷新失败才清态跳登录。
 - Axios 统一解包 `code/msg/data` 并处理网络错误；401 清除 token、用户、权限及已注册动态路由，跳转登录；403 提示无权限。退出登录同时调用后端注销接口并清理前端状态。
-- RBAC 关系为用户关联角色、角色关联菜单及权限。权限标识采用 `模块:资源:操作`（例如 `item:material:create`）；前后端使用同一份标识。
+- RBAC 关系为用户关联角色、角色关联菜单及权限。权限标识采用 `模块:资源:操作`（例如 `booking:lab:create`）；前后端使用同一份标识。
 - 登录后获取当前用户、菜单与权限；Vue Router 通过本地组件白名单映射菜单注册动态路由，刷新后重新加载，退出时移除。禁止直接执行后端下发的组件路径或代码。
 - 按钮使用 `v-permission` 自定义指令控制可见性（随业务页面重建恢复登记），路由守卫检查登录与页面权限；后端对每个受保护接口执行权限校验（`@RequirePermission`）。隐藏菜单或按钮不能代替后端授权。
 - Knife4j 仅在开发和测试环境按需启用；接口定义同步维护入参、出参、分页、权限要求和错误响应。
@@ -198,7 +198,7 @@ JSON 接口统一返回 `code`、`msg`、`data`，成功时 `code = 0`，失败�
 
 ## 6. Git 协作与 PR
 
-严禁直接推送 `main` 或他人分支。个人工作分支使用 `dev/{desc}`，`{desc}` 表示负责模块，仅使用小写英文字母、数字和下划线，并以字母开头，例如 `dev/item`、`dev/permission`、`dev/user_management`；如有同模块协作冲突，可使用英文姓名或账号后缀，如 `dev/item_jinbin`。分支名不使用中文或横杠。
+严禁直接推送 `main` 或他人分支。个人工作分支使用 `dev/{desc}`，`{desc}` 表示负责模块，仅使用小写英文字母、数字和下划线，并以字母开头，例如 `dev/booking`、`dev/permission`、`dev/user_management`；如有同模块协作冲突，可使用英文姓名或账号后缀，如 `dev/booking_jinbin`。分支名不使用中文或横杠。
 
 ### 初始化时先检测仓库与分支
 
@@ -235,7 +235,7 @@ git push -u origin dev/user_management
 
 `git add .` 前确认忽略规则已排除凭据、依赖目录和构建产物；提交前检查暂存内容，移除与本次任务无关的文件。已有本地个人分支使用 `git switch dev/user_management`；只有远端分支时，先 `git fetch origin`，再执行 `git switch --track origin/dev/user_management`。推送后在 GitHub 创建目标为 `main` 的 PR，经审核后合并。
 
-提交信息使用 `类型: 描述`：`feature: 新增物料查询`、`fix: 修复权限校验`；文档使用 `docs:`，重构使用 `refactor:`，测试使用 `test:`，工具或依赖调整使用 `chore:`。一次提交聚焦一个完整变更，不夹带无关格式化或生成文件。
+提交信息使用 `类型: 描述`：`feature: 新增场地查询`、`fix: 修复权限校验`；文档使用 `docs:`，重构使用 `refactor:`，测试使用 `test:`，工具或依赖调整使用 `chore:`。一次提交聚焦一个完整变更，不夹带无关格式化或生成文件。
 
 合并流程：
 

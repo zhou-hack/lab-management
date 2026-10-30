@@ -8,8 +8,8 @@
         </h2>
         <p class="t-sub">
           {{ isReadonly
-            ? '只读查看预约情况、批准/驳回结果与驳回原因 · 时段按上海本地时间展示'
-            : '选日期按节次查看空闲/占用 · 点选空闲节次发起预约，可提交批量周期预约' }}
+            ? '只读查看：选日期看全部场地状态，点场地卡片看各节次占用 · 时段按上海本地时间展示'
+            : '选日期看全部场地三色状态 · 点场地卡片进入节次视图，点按空闲节次（可跳选多节）后发起预约或批量周期预约' }}
         </p>
       </div>
       <div
@@ -92,15 +92,61 @@
       </el-form>
     </div>
 
-    <!-- 节次三色小卡片 -->
-    <div class="card tl__periods">
+    <!-- 场地三色总览（只选日期未选场地） -->
+    <div
+      v-if="!filter.spaceId"
+      class="card tl__periods"
+    >
       <div class="tl__periods_head">
         <h3 class="tl__block_title">
-          {{ filter.date || today }} 节次安排
+          {{ filter.date || today }} 全部场地状态
+        </h3>
+        <div class="tl__legend">
+          <span class="tl__legend_item"><i class="tl__dot tl__dot--free" />全天空闲</span>
+          <span class="tl__legend_item"><i class="tl__dot tl__dot--pending" />部分空闲</span>
+          <span class="tl__legend_item"><i class="tl__dot tl__dot--occupied" />无空闲</span>
+          <span class="tl__legend_item"><i class="tl__dot tl__dot--past" />有维修安排</span>
+        </div>
+      </div>
+      <div
+        v-loading="overviewLoading"
+        class="tl__period_grid"
+      >
+        <button
+          v-for="card in spaceCards"
+          :key="card.spaceId"
+          type="button"
+          class="period_card"
+          :class="SPACE_CARD_MAP[card.state].cls"
+          :title="isReadonly ? `${card.labName} · 查看节次占用` : `${card.labName} · 点击进入节次视图预约`"
+          @click="onSpaceCardClick(card)"
+        >
+          <b class="period_card__no">{{ card.labName }}</b>
+          <span class="period_card__clock">容量 {{ card.capacity }} 人 · {{ card.openStart }}-{{ card.openEnd }}</span>
+          <span class="period_card__state">{{ SPACE_CARD_MAP[card.state].tip }}</span>
+        </button>
+        <p
+          v-if="!spaceCards.length && !overviewLoading"
+          class="t-hint tl__periods_empty"
+        >
+          该日期暂无可用场地
+        </p>
+      </div>
+    </div>
+
+    <!-- 节次三色小卡片（选了场地 + 日期） -->
+    <div
+      v-else
+      class="card tl__periods"
+    >
+      <div class="tl__periods_head">
+        <h3 class="tl__block_title">
+          {{ selectedSpace ? selectedSpace.labName : '' }} · {{ filter.date || today }} 节次安排
         </h3>
         <div class="tl__legend">
           <span class="tl__legend_item"><i class="tl__dot tl__dot--free" />空闲可点选</span>
           <span class="tl__legend_item"><i class="tl__dot tl__dot--occupied" />已占用</span>
+          <span class="tl__legend_item"><i class="tl__dot tl__dot--past" />维修中</span>
           <span class="tl__legend_item"><i class="tl__dot tl__dot--pending" />下节课即将占用</span>
           <span class="tl__legend_item"><i class="tl__dot tl__dot--past" />已过去</span>
         </div>
@@ -114,8 +160,8 @@
           :key="card.periodNo"
           type="button"
           class="period_card"
-          :class="[PERIOD_CARD_MAP[card.state].cls, { 'period_card--selected': isInRange(card.periodNo), 'period_card--dim': filter.periodNo && card.periodNo !== filter.periodNo }]"
-          :disabled="card.state !== 'free'"
+          :class="[PERIOD_CARD_MAP[card.state].cls, { 'period_card--selected': isSelected(card.periodNo), 'period_card--dim': filter.periodNo && card.periodNo !== filter.periodNo }]"
+          :disabled="card.state !== 'free' || isReadonly"
           :title="PERIOD_CARD_MAP[card.state].tip"
           @click="onPeriodClick(card)"
         >
@@ -127,7 +173,7 @@
           v-if="!cards.length && !periodsLoading"
           class="t-hint tl__periods_empty"
         >
-          请先选择场地与日期
+          该场地当日无节次数据
         </p>
       </div>
       <div
@@ -138,7 +184,7 @@
         <el-button
           link
           type="primary"
-          @click="selectedRange = []"
+          @click="selectedPeriodNos = []"
         >
           取消选择
         </el-button>
@@ -180,7 +226,7 @@
           </template>
         </el-table-column>
         <el-table-column
-          label="使用时段（上海）"
+          label="使用时段"
           min-width="170"
         >
           <template #default="{ row }">
@@ -260,7 +306,7 @@
           </template>
         </el-table-column>
         <el-table-column
-          label="使用时段（上海）"
+          label="使用时段"
           min-width="180"
         >
           <template #default="{ row }">
@@ -348,7 +394,7 @@
       v-model="bookVisible"
       :preset-space-id="filter.spaceId"
       :preset-date="filter.date"
-      :preset-period-nos="selectedRange"
+      :preset-segments="selectedSegments"
       @close="bookVisible = false"
       @submit="onBookingSubmitted"
     />
@@ -356,7 +402,7 @@
       v-model="seriesVisible"
       :preset-space-id="filter.spaceId"
       :preset-date="filter.date"
-      :preset-period-nos="selectedRange.slice(0, 2)"
+      :preset-segments="selectedSegments"
       @close="seriesVisible = false"
       @submit="onSeriesSubmitted"
     />
@@ -375,10 +421,11 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import SpaceBookDialog from './SpaceBookDialog.vue'
 import SeriesBookDialog from './SeriesBookDialog.vue'
 import MyBookingDetailDrawer from './MyBookingDetailDrawer.vue'
-import { BOOKING_STATUS_MAP, RUNTIME_PHASE_MAP, PERIOD_CARD_MAP } from './booking.constants'
+import { BOOKING_STATUS_MAP, RUNTIME_PHASE_MAP, PERIOD_CARD_MAP, SPACE_CARD_MAP } from './booking.constants'
 import { listSpaceOptions } from '@/api/space'
 import {
   getAvailability,
+  getAvailabilityAll,
   listPeriods,
   listRecentBookings,
   pageMyBookings,
@@ -403,11 +450,13 @@ const toMin = (t) => (Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)))
 const periods = ref([])
 const spaces = ref([])
 const availability = ref(null)
+const overview = ref([])
 const recent = ref([])
 const records = ref([])
 const total = ref(0)
 
 const periodsLoading = ref(false)
+const overviewLoading = ref(false)
 const recentLoading = ref(false)
 const listLoading = ref(false)
 
@@ -424,8 +473,8 @@ const filter = reactive({
   periodNo: null
 })
 
-// 节次点选区间（起始/结束节次号；全空闲才允许成段选择）
-const selectedRange = ref([])
+// 节次点按多选（节次号数组，可跳选不连续；提交时按连续段拆分多预约单）
+const selectedPeriodNos = ref([])
 
 const query = reactive({
   pageNum: 1,
@@ -454,7 +503,24 @@ async function querySpaces(keyword, cb) {
 function onSelectSpace(item) {
   filter.spaceId = item.id
   filter.keyword = item.labName
+  selectedPeriodNos.value = []
   refreshTimeline()
+}
+
+/** 场地总览卡片点击：选中该场地进入节次视图（学生只读也可查看占用） */
+function onSpaceCardClick(card) {
+  const hit = spaces.value.find((s) => s.id === card.spaceId)
+  if (hit) {
+    onSelectSpace(hit)
+  } else {
+    // typeahead 缓存未命中时直接按总览数据置入选中态
+    filter.spaceId = card.spaceId
+    filter.keyword = card.labName
+    spaces.value = [...spaces.value.filter((s) => s.id !== card.spaceId),
+      { id: card.spaceId, labName: card.labName, capacity: card.capacity }]
+    selectedPeriodNos.value = []
+    refreshTimeline()
+  }
 }
 
 function onClearSpace() {
@@ -462,12 +528,17 @@ function onClearSpace() {
   filter.keyword = ''
   availability.value = null
   recent.value = []
-  selectedRange.value = []
+  selectedPeriodNos.value = []
+  loadOverview()
 }
 
 function onDateChanged() {
-  selectedRange.value = []
-  refreshTimeline()
+  selectedPeriodNos.value = []
+  if (filter.spaceId) {
+    refreshTimeline()
+  } else {
+    loadOverview()
+  }
 }
 
 function onPeriodFiltered() {
@@ -479,10 +550,9 @@ function disablePast(date) {
   return date.getTime() < Date.UTC(y, m - 1, d)
 }
 
-/** 某节次是否被已批准占用段命中（半开区间重叠） */
-function isOccupied(period) {
-  const occupied = availability.value?.occupied || []
-  return occupied.some((seg) => {
+/** 某节次是否被占用段命中（半开区间重叠；segments 为 UTC 占用段数组） */
+function isOccupiedBy(segments, period) {
+  return (segments || []).some((seg) => {
     const s = shanghaiClockOf(seg.startAt)
     const e = shanghaiClockOf(seg.endAt)
     if (!s || !e) return false
@@ -492,7 +562,16 @@ function isOccupied(period) {
   })
 }
 
-/** 节次卡片三色派生（前端按当前时间计算，不落库） */
+function isOccupied(period) {
+  return isOccupiedBy(availability.value?.occupied, period)
+}
+
+/** 某节次是否被生效中维修时段覆盖（维修窗口内禁止预约，卡片标灰） */
+function isMaintenance(period) {
+  return isOccupiedBy(availability.value?.maintenance, period)
+}
+
+/** 节次卡片状态派生（前端按当前时间计算，不落库；维修优先于占用展示） */
 const cards = computed(() => {
   const nowClock = nowShanghaiClock()
   const nowMin = toMin(nowClock)
@@ -503,59 +582,88 @@ const cards = computed(() => {
       state = 'past'
     } else if (filter.date === today && endMin <= nowMin) {
       state = 'past'
+    } else if (isMaintenance(p)) {
+      state = 'maintenance'
     } else if (isOccupied(p)) {
       state = 'occupied'
     } else {
       const next = periods.value[idx + 1]
-      state = next && isOccupied(next) ? 'pending' : 'free'
+      state = next && (isOccupied(next) || isMaintenance(next)) ? 'pending' : 'free'
     }
     return { ...p, state }
   })
 })
 
-function isInRange(periodNo) {
-  if (!selectedRange.value.length) return false
-  const [start, end] = selectedRange.value
-  return periodNo >= start && periodNo <= end
+/** 场地三色总览派生：当日有维修时段=灰（优先）；未过去节次全空闲=绿；全占用=红；其余=橙 */
+const spaceCards = computed(() => {
+  const nowMin = toMin(nowShanghaiClock())
+  const remaining = periods.value.filter((p) => {
+    if (filter.date > today) return true
+    if (filter.date < today) return false
+    return toMin(p.endClock) > nowMin
+  })
+  return overview.value.map((s) => {
+    let state
+    if (s.maintenance && s.maintenance.length) {
+      state = 'maintenance'
+    } else if (!remaining.length) {
+      state = 'none'
+    } else {
+      const freeCount = remaining.filter((p) => !isOccupiedBy(s.occupied, p)).length
+      state = freeCount === remaining.length ? 'all' : (freeCount === 0 ? 'none' : 'partial')
+    }
+    return { ...s, state }
+  })
+})
+
+function isSelected(periodNo) {
+  return selectedPeriodNos.value.includes(periodNo)
 }
 
+/** 节次点按 toggle：空闲节次可任意跳选/取消，组合在提交时按连续段拆分 */
 function onPeriodClick(card) {
+  if (isReadonly.value) return
   if (card.state !== 'free') {
     ElMessage.warning(PERIOD_CARD_MAP[card.state].tip)
     return
   }
-  if (!selectedRange.value.length) {
-    selectedRange.value = [card.periodNo, card.periodNo]
-    return
+  const idx = selectedPeriodNos.value.indexOf(card.periodNo)
+  if (idx >= 0) {
+    selectedPeriodNos.value = selectedPeriodNos.value.filter((n) => n !== card.periodNo)
+  } else {
+    selectedPeriodNos.value = [...selectedPeriodNos.value, card.periodNo].sort((a, b) => a - b)
   }
-  const [start] = selectedRange.value
-  const min = Math.min(start, card.periodNo)
-  const max = Math.max(start, card.periodNo)
-  // 成段选择要求区间内全部空闲
-  const rangeOk = cards.value
-    .filter((c) => c.periodNo >= min && c.periodNo <= max)
-    .every((c) => c.state === 'free')
-  if (!rangeOk) {
-    ElMessage.warning('所选区间包含已占用节次，请重新选择')
-    selectedRange.value = [card.periodNo, card.periodNo]
-    return
-  }
-  selectedRange.value = [min, max]
 }
 
-const selectionTip = computed(() => {
-  if (!selectedRange.value.length) return ''
-  const [start, end] = selectedRange.value
-  const p = periods.value.filter((item) => item.periodNo >= start && item.periodNo <= end)
-  if (!p.length) return ''
-  return `${p[0].periodName} ~ ${p[p.length - 1].periodName}（${p[0].startClock} - ${p[p.length - 1].endClock}）`
+/** 已选节次的连续段分组：[3,4,5,8] → [[3,5],[8,8]]（提交拆单依据） */
+const selectedSegments = computed(() => {
+  const sorted = [...selectedPeriodNos.value].sort((a, b) => a - b)
+  const groups = []
+  for (const n of sorted) {
+    const last = groups[groups.length - 1]
+    if (last && n === last[1] + 1) {
+      last[1] = n
+    } else {
+      groups.push([n, n])
+    }
+  }
+  return groups
 })
 
-const canBookSelected = computed(() => !isReadonly.value && !!filter.spaceId && !!filter.date && !!selectedRange.value.length)
+const selectionTip = computed(() => {
+  if (!selectedPeriodNos.value.length) return ''
+  const names = selectedPeriodNos.value
+    .map((no) => periods.value.find((p) => p.periodNo === no)?.periodName || `第${no}节`)
+  const segCount = selectedSegments.value.length
+  const suffix = segCount > 1 ? `，将拆为 ${segCount} 个预约单` : ''
+  return `${names.join('、')}（共 ${names.length} 节${suffix}）`
+})
+
+const canBookSelected = computed(() => !isReadonly.value && !!filter.spaceId && !!filter.date && !!selectedPeriodNos.value.length)
 
 function openBook() {
   if (!canBookSelected.value) {
-    ElMessage.warning('请先选择场地，并在节次卡片中点选空闲节次')
+    ElMessage.warning('请先选择场地，并在节次卡片中点按空闲节次')
     return
   }
   bookVisible.value = true
@@ -563,7 +671,11 @@ function openBook() {
 
 function openSeries() {
   if (!filter.spaceId) {
-    ElMessage.warning('请先在上方选择场地')
+    ElMessage.warning('请先点上方场地卡片或输入场地名称选择场地')
+    return
+  }
+  if (!selectedPeriodNos.value.length) {
+    ElMessage.warning('请先在节次卡片中点按空闲节次')
     return
   }
   seriesVisible.value = true
@@ -588,6 +700,32 @@ async function refreshTimeline() {
   } finally {
     periodsLoading.value = false
     recentLoading.value = false
+  }
+  // 占用/维修状态刷新后，清掉已选中但当前不可约的节次（避免选中项卡死）
+  if (selectedPeriodNos.value.length) {
+    const freeNos = new Set(cards.value.filter((c) => c.state === 'free').map((c) => c.periodNo))
+    const kept = selectedPeriodNos.value.filter((no) => freeNos.has(no))
+    if (kept.length !== selectedPeriodNos.value.length) {
+      selectedPeriodNos.value = kept
+      ElMessage.warning('部分已选节次已变为不可约（被占用或维修），已自动移除')
+    }
+  }
+  loadList()
+}
+
+/** 全部场地当日占用总览（只选日期的三色场地卡片） */
+async function loadOverview() {
+  if (!filter.date) {
+    overview.value = []
+    return
+  }
+  overviewLoading.value = true
+  try {
+    overview.value = (await getAvailabilityAll(filter.date)) || []
+  } catch {
+    overview.value = []
+  } finally {
+    overviewLoading.value = false
   }
   loadList()
 }
@@ -628,18 +766,28 @@ async function loadList() {
   }
 }
 
-async function onBookingSubmitted(payload) {
-  if (!payload) return
-  await createBooking(payload)
-  ElMessage.success('预约已提交，等待管理员核对')
+async function onBookingSubmitted(payloads) {
+  if (!payloads || !payloads.length) return
+  // 连续段拆分多单：逐段提交，任一失败即中断并提示（已成功的单不重复提交）
+  for (let i = 0; i < payloads.length; i++) {
+    try {
+      await createBooking(payloads[i])
+    } catch (e) {
+      ElMessage.error(`第 ${i + 1}/${payloads.length} 个预约单提交失败：${e?.message || '请稍后重试'}`)
+      return
+    }
+  }
+  ElMessage.success(payloads.length > 1
+    ? `${payloads.length} 个预约单已提交，等待管理员核对`
+    : '预约已提交，等待管理员核对')
   bookVisible.value = false
-  selectedRange.value = []
+  selectedPeriodNos.value = []
   refreshTimeline()
 }
 
 async function onSeriesSubmitted() {
   seriesVisible.value = false
-  selectedRange.value = []
+  selectedPeriodNos.value = []
   refreshTimeline()
 }
 
@@ -669,7 +817,11 @@ async function onCancel(row) {
   }
   await cancelBooking(row.id, reason || undefined)
   ElMessage.success('预约已取消')
-  refreshTimeline()
+  if (filter.spaceId) {
+    refreshTimeline()
+  } else {
+    loadOverview()
+  }
 }
 
 onMounted(async () => {
@@ -678,8 +830,8 @@ onMounted(async () => {
   } catch {
     periods.value = []
   }
-  // 学生只读同样加载默认列表（不预选场地）
-  loadList()
+  // 初始为「只选日期」总览模式；学生只读同样加载默认列表（不预选场地）
+  loadOverview()
 })
 </script>
 

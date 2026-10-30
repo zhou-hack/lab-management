@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.labmanage.roles.dto.UserPageQueryDTO;
 import com.labmanage.roles.entity.SysUser;
 import com.labmanage.roles.vo.AdminOptionVO;
+import com.labmanage.roles.vo.StudentOptionVO;
 import com.labmanage.roles.vo.UserPageItemVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -74,4 +75,25 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
             </script>
             """)
     List<AdminOptionVO> selectAdminOptions(@Param("keyword") String keyword);
+
+    @Select("""
+            <script>
+            SELECT CONCAT('', u.id) AS id,
+                   u.real_name AS realName,
+                   u.person_no AS personNo
+            FROM sys_user u
+            WHERE u.deleted = 0 AND u.enabled = 1 AND u.user_type = 'STUDENT'
+            <if test="keyword != null and keyword != ''">
+                AND (u.real_name LIKE CONCAT('%', #{keyword}, '%')
+                     OR u.person_no LIKE CONCAT('%', #{keyword}, '%')
+                     OR u.account_name LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+            ORDER BY u.id ASC
+            LIMIT 50
+            </script>
+            """)
+    List<StudentOptionVO> selectStudentOptions(@Param("keyword") String keyword);
+
+    @Select("SELECT * FROM sys_user WHERE id = #{id} AND deleted = 0 FOR UPDATE")
+    SysUser selectByIdForUpdate(@Param("id") Long id);
 }

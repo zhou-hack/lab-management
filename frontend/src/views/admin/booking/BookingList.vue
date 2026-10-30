@@ -134,7 +134,7 @@
           </template>
         </el-table-column>
         <el-table-column
-          label="使用时段（上海）"
+          label="使用时段"
           min-width="180"
         >
           <template #default="{ row }">

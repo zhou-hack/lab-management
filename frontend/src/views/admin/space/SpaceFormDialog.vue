@@ -167,7 +167,7 @@ const emptyForm = () => ({
   capacity: 40,
   facilities: '',
   openStart: '08:00',
-  openEnd: '21:00',
+  openEnd: '22:00',
   status: 'AVAILABLE'
 })
 
@@ -220,7 +220,7 @@ watch(
         capacity: props.space.capacity,
         facilities: props.space.facilities || '',
         openStart: props.space.openStart || '08:00',
-        openEnd: props.space.openEnd || '21:00',
+        openEnd: props.space.openEnd || '22:00',
         status: props.space.status
       })
     }

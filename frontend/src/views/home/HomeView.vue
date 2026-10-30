@@ -1,6 +1,5 @@
 <template>
   <div class="home_view">
-    <!-- 页头：问候 + 角色 -->
     <header class="home_view__header">
       <div>
         <h1 class="home_view__hello">
@@ -12,7 +11,6 @@
       </div>
     </header>
 
-    <!-- KPI 指标行：按账号权限展示真实统计 -->
     <div
       v-if="kpis.length"
       class="grid-responsive home_view__section"
@@ -41,127 +39,6 @@
       </div>
     </div>
 
-    <!-- 可视化图表：设备状态环形 + 实验室设备分布（真实数据聚合，无虚构） -->
-    <div
-      v-if="canViewAssets"
-      class="home_view__charts home_view__section"
-    >
-      <div class="card card--pad0 home_view__chart_card">
-        <div class="card__head">
-          <span class="card__title">设备状态分布</span>
-          <span
-            v-if="dashboard.partial"
-            class="t-hint"
-          >统计前 {{ dashboard.assetRows.length }} 条</span>
-        </div>
-        <div class="card__body">
-          <div
-            v-if="dashboard.loading"
-            class="home_view__chart_loading"
-          >
-            <span class="skeleton home_view__sk_donut" />
-            <div class="home_view__sk_col">
-              <span class="skeleton home_view__sk_line" />
-              <span class="skeleton home_view__sk_line" />
-              <span class="skeleton home_view__sk_line" />
-            </div>
-          </div>
-          <div
-            v-else-if="!dashboard.assetRows.length"
-            class="empty"
-          >
-            <div class="empty__icon">
-              ∅
-            </div>
-            <div class="empty__text">
-              暂无设备资产
-            </div>
-          </div>
-          <div
-            v-else
-            class="home_view__donut_row"
-          >
-            <div
-              class="home_view__donut"
-              :style="donutStyle"
-            >
-              <div class="home_view__donut_hole">
-                <span class="home_view__donut_total t-num">{{ dashboard.assetRows.length }}</span>
-                <span class="home_view__donut_unit">台设备</span>
-              </div>
-            </div>
-            <ul class="home_view__legend">
-              <li
-                v-for="seg in statusAgg"
-                :key="seg.key"
-              >
-                <span
-                  class="home_view__legend_dot"
-                  :style="{ background: seg.color }"
-                />
-                <span class="home_view__legend_label">{{ seg.label }}</span>
-                <span class="home_view__figure home_view__legend_count">{{ seg.count }}</span>
-                <span class="home_view__figure home_view__legend_pct">{{ seg.pct }}</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      <div class="card card--pad0 home_view__chart_card">
-        <div class="card__head">
-          <span class="card__title">实验室设备分布</span>
-        </div>
-        <div class="card__body">
-          <div
-            v-if="dashboard.loading"
-            class="home_view__chart_loading"
-          >
-            <div class="home_view__sk_col home_view__sk_col--full">
-              <span class="skeleton home_view__sk_line" />
-              <span class="skeleton home_view__sk_line" />
-              <span class="skeleton home_view__sk_line" />
-              <span class="skeleton home_view__sk_line" />
-            </div>
-          </div>
-          <div
-            v-else-if="!labAgg.length"
-            class="empty"
-          >
-            <div class="empty__icon">
-              ∅
-            </div>
-            <div class="empty__text">
-              暂无分布数据
-            </div>
-          </div>
-          <div
-            v-else
-            class="home_view__bars"
-          >
-            <div
-              v-for="item in labAgg"
-              :key="item.name"
-              class="home_view__bar_row"
-            >
-              <span
-                class="home_view__bar_label"
-                :title="item.name"
-              >{{ item.name }}</span>
-              <span class="home_view__bar_track">
-                <span
-                  class="home_view__bar_fill"
-                  :style="{ width: (item.count / labMax * 100) + '%' }"
-                />
-              </span>
-              <span class="home_view__figure home_view__bar_value">{{ item.count }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 功能入口：按当前账号权限与可用菜单动态启用 -->
     <section class="home_view__section">
       <h3 class="sechead">
         常用功能
@@ -171,7 +48,7 @@
           v-for="entry in entries"
           :key="entry.name"
           class="entry card"
-          :class="{ 'entry--disabled': !entry.path }"
+          :class="{ 'entry--disabled': !entry.path && !entry.action }"
           type="button"
           @click="go(entry)"
         >
@@ -190,14 +67,39 @@
     </section>
 
     <div class="home_view__columns">
-      <!-- 待办：空态（接口接入前不展示虚构数据） -->
       <section class="home_view__section">
         <div class="card card--pad0">
           <div class="card__head">
             <span class="card__title">待我处理</span>
           </div>
           <div class="card__body">
-            <div class="empty">
+            <el-skeleton
+              v-if="homeLists.pendingLoading"
+              :rows="3"
+              animated
+            />
+            <div
+              v-else-if="homeLists.pending.length"
+              class="home_list"
+            >
+              <button
+                v-for="item in homeLists.pending"
+                :key="item.id"
+                type="button"
+                class="home_list__item"
+                @click="router.push(item.route)"
+              >
+                <span class="home_list__content">
+                  <strong>{{ item.title }}</strong>
+                  <span>{{ item.meta }}</span>
+                </span>
+                <time>{{ formatInstant(item.time) }}</time>
+              </button>
+            </div>
+            <div
+              v-else
+              class="empty"
+            >
               <div class="empty__icon">
                 ✓
               </div>
@@ -209,14 +111,39 @@
         </div>
       </section>
 
-      <!-- 最近使用记录：空态 -->
       <section class="home_view__section">
         <div class="card card--pad0">
           <div class="card__head">
             <span class="card__title">最近使用记录</span>
           </div>
           <div class="card__body">
-            <div class="empty">
+            <el-skeleton
+              v-if="homeLists.recentLoading"
+              :rows="3"
+              animated
+            />
+            <div
+              v-else-if="homeLists.recent.length"
+              class="home_list"
+            >
+              <button
+                v-for="item in homeLists.recent"
+                :key="item.id"
+                type="button"
+                class="home_list__item"
+                @click="router.push(item.route)"
+              >
+                <span class="home_list__content">
+                  <strong>{{ item.title }}</strong>
+                  <span>{{ item.meta }}</span>
+                </span>
+                <time>{{ formatInstant(item.time) }}</time>
+              </button>
+            </div>
+            <div
+              v-else
+              class="empty"
+            >
               <div class="empty__icon">
                 ∅
               </div>
@@ -235,143 +162,135 @@
 import { computed, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import {
-  Bell,
-  Box,
-  Calendar,
-  Collection,
-  DataLine,
-  Grid,
-  Location,
-  Monitor,
-  Notebook
-} from '@element-plus/icons-vue'
+import { Bell, Box, Calendar, Document, Location } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
-import { pageAssets, pageModels } from '@/api/equipment'
+import { useNotificationStore } from '@/store/notification'
 import { pageSpaces } from '@/api/space'
-import { EQUIPMENT_STATUS } from '@/utils/enums'
+import { pageAllBookings, pageMyBookings } from '@/api/booking'
+import { pageAdminClaims, pageDocuments } from '@/api/item/workflow'
+import { pageMyClaims } from '@/api/item/claim'
+import { pagePickups } from '@/api/item/pickup'
+import { formatInstant } from '@/utils/datetime'
+import {
+  latestItems,
+  mapBookingTodo,
+  mapBookingUsage,
+  mapClaimTodo,
+  mapClaimUsage,
+  mapDocumentUsage,
+  mapPickupTodo
+} from './home.rules'
 
 const router = useRouter()
 const store = useUserStore()
-
-/* ---------- 权限门控：统计与图表仅对有权限的模块拉取 ---------- */
-const PERMS = {
-  space: 'space:space:list',
-  model: 'equipment:model:list',
-  asset: 'equipment:asset:list'
-}
-
+const notification = useNotificationStore()
+const SPACE_LIST = 'space:space:list'
 const hasPerm = (perm) => store.permissions.includes(perm)
-const canViewAssets = computed(() => hasPerm(PERMS.asset))
 
-/* ---------- 仪表数据：真实接口聚合；单项失败回退“—”，不虚构 ---------- */
 const dashboard = reactive({
   loading: true,
-  spaceTotal: null,
-  modelTotal: null,
-  assetTotal: null,
-  assetRows: [],
-  partial: false
+  spaceTotal: null
 })
+const homeLists = reactive({
+  pending: [],
+  recent: [],
+  pendingLoading: false,
+  recentLoading: false
+})
+
+function recordsOf(result) {
+  return result?.records || []
+}
+
+function settledItems(results) {
+  return results.flatMap((result) => {
+    if (result.status !== 'fulfilled') return []
+    const { kind, data } = result.value
+    const records = recordsOf(data)
+    if (kind === 'claimTodo') return records.map(mapClaimTodo)
+    if (kind === 'bookingTodo') return records.map(mapBookingTodo)
+    if (kind === 'documentUsage') return records.map(mapDocumentUsage)
+    if (kind === 'bookingUsage') return records.map((item) => mapBookingUsage(item, true))
+    if (kind === 'ownBookingUsage') return records.map((item) => mapBookingUsage(item, false))
+    if (kind === 'claimUsage') return records.map(mapClaimUsage)
+    if (kind === 'pickupTodo') return records.map(mapPickupTodo)
+    return []
+  })
+}
+
+async function loadPendingItems() {
+  const requests = []
+  if (hasPerm('booking:lab:approve')) {
+    requests.push(pageAllBookings({ status: 'PENDING', pageNum: 1, pageSize: 5 })
+      .then((data) => ({ kind: 'bookingTodo', data })))
+  }
+  if (hasPerm('item:claim:review')) {
+    requests.push(pageAdminClaims({
+      status: 'PENDING', managedOnly: true, pageNum: 1, pageSize: 5,
+      sortBy: 'createTime', sortOrder: 'desc'
+    }).then((data) => ({ kind: 'claimTodo', data })))
+  }
+  if (hasPerm('item:pickup:list')) {
+    requests.push(pagePickups({ pageNum: 1, pageSize: 5 })
+      .then((data) => ({ kind: 'pickupTodo', data })))
+  }
+  if (!requests.length) return
+  homeLists.pendingLoading = true
+  try {
+    homeLists.pending = latestItems(settledItems(await Promise.allSettled(requests)))
+  } finally {
+    homeLists.pendingLoading = false
+  }
+}
+
+async function loadRecentItems() {
+  const requests = []
+  if (hasPerm('booking:lab:approve')) {
+    requests.push(pageAllBookings({ status: 'APPROVED', pageNum: 1, pageSize: 100 })
+      .then((data) => ({ kind: 'bookingUsage', data })))
+  } else if (hasPerm('booking:lab:list')) {
+    requests.push(pageMyBookings({ status: 'APPROVED', pageNum: 1, pageSize: 100 })
+      .then((data) => ({ kind: 'ownBookingUsage', data })))
+  }
+  if (hasPerm('item:document:list')) {
+    requests.push(pageDocuments({
+      businessScene: 'CLAIM_ISSUE', pageNum: 1, pageSize: 5,
+      sortBy: 'occurredAt', sortOrder: 'desc'
+    }).then((data) => ({ kind: 'documentUsage', data })))
+  } else if (hasPerm('item:claim:list')) {
+    requests.push(pageMyClaims({ pageNum: 1, pageSize: 5, sortBy: 'createTime', sortOrder: 'desc' })
+      .then((data) => ({ kind: 'claimUsage', data })))
+  }
+  if (!requests.length) return
+  homeLists.recentLoading = true
+  try {
+    homeLists.recent = latestItems(settledItems(await Promise.allSettled(requests)))
+  } finally {
+    homeLists.recentLoading = false
+  }
+}
 
 async function loadDashboard() {
-  const jobs = []
-  const fetchTotal = (api, key) =>
-    api({ pageNum: 1, pageSize: 1 })
-      .then((r) => { dashboard[key] = r.total })
-      .catch(() => {})
-  if (hasPerm(PERMS.space)) jobs.push(fetchTotal(pageSpaces, 'spaceTotal'))
-  if (hasPerm(PERMS.model)) jobs.push(fetchTotal(pageModels, 'modelTotal'))
-  if (canViewAssets.value) {
-    jobs.push(
-      pageAssets({ pageNum: 1, pageSize: 100 })
-        .then((r) => {
-          dashboard.assetTotal = r.total
-          dashboard.assetRows = r.records || []
-          dashboard.partial = r.total > dashboard.assetRows.length
-        })
-        .catch(() => {})
-    )
+  if (hasPerm(SPACE_LIST)) {
+    try {
+      const result = await pageSpaces({ pageNum: 1, pageSize: 1 })
+      dashboard.spaceTotal = result.total
+    } catch {
+      // 统计失败时保持占位，不影响首页其他功能
+    }
   }
-  await Promise.all(jobs)
   dashboard.loading = false
 }
-onMounted(loadDashboard)
-
-const kpis = computed(() => {
-  const list = []
-  if (hasPerm(PERMS.space)) {
-    list.push({ label: '场地', icon: Location, value: dashboard.spaceTotal })
-  }
-  if (hasPerm(PERMS.model)) {
-    list.push({ label: '设备型号', icon: Grid, value: dashboard.modelTotal })
-  }
-  if (hasPerm(PERMS.asset)) {
-    list.push({ label: '设备资产', icon: Monitor, value: dashboard.assetTotal })
-  }
-  return list
+onMounted(() => {
+  loadDashboard()
+  loadPendingItems()
+  loadRecentItems()
 })
 
-/* 状态环形图：语义色只出现在语义状态（空闲绿 / 维护橙 / 报废灰） */
-const STATUS_COLORS = {
-  IDLE: 'var(--ok)',
-  MAINTAINING: 'var(--warn)',
-  SCRAPPED: 'var(--g4)'
-}
-const STATUS_ORDER = ['IDLE', 'MAINTAINING', 'SCRAPPED']
+const kpis = computed(() => hasPerm(SPACE_LIST)
+  ? [{ label: '场地', icon: Location, value: dashboard.spaceTotal }]
+  : [])
 
-const statusAgg = computed(() => {
-  const counts = new Map()
-  for (const row of dashboard.assetRows) {
-    const key = row.status || 'UNKNOWN'
-    counts.set(key, (counts.get(key) || 0) + 1)
-  }
-  const total = dashboard.assetRows.length
-  return [...counts.entries()]
-    .map(([key, count]) => ({
-      key,
-      count,
-      label: EQUIPMENT_STATUS[key]?.label || '未登记',
-      color: STATUS_COLORS[key] || 'var(--brand)',
-      pct: total ? Math.round((count / total) * 100) + '%' : '0%'
-    }))
-    .sort((a, b) => {
-      const ai = STATUS_ORDER.indexOf(a.key)
-      const bi = STATUS_ORDER.indexOf(b.key)
-      return (ai === -1 ? STATUS_ORDER.length : ai) - (bi === -1 ? STATUS_ORDER.length : bi)
-    })
-})
-
-const donutStyle = computed(() => {
-  const total = dashboard.assetRows.length
-  if (!total) return {}
-  let acc = 0
-  const stops = []
-  for (const seg of statusAgg.value) {
-    const from = (acc / total) * 360
-    acc += seg.count
-    const to = (acc / total) * 360
-    if (to > from) stops.push(`${seg.color} ${from}deg ${to}deg`)
-  }
-  return { background: stops.length ? `conic-gradient(${stops.join(', ')})` : 'var(--surface-sunken)' }
-})
-
-/* 实验室设备分布：取保有量前六的实验室 */
-const labAgg = computed(() => {
-  const map = new Map()
-  for (const row of dashboard.assetRows) {
-    const name = row.labName || '未指定实验室'
-    map.set(name, (map.get(name) || 0) + 1)
-  }
-  return [...map.entries()]
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 6)
-})
-
-const labMax = computed(() => Math.max(1, ...labAgg.value.map((i) => i.count)))
-
-/* ---------- 问候与日期 ---------- */
 const greeting = computed(() => {
   const h = new Date().getHours()
   if (h < 6) return '夜深了'
@@ -391,10 +310,9 @@ const todayText = computed(() =>
   }).format(new Date())
 )
 
-const ROLE_TEXT = { ADMIN: '管理员', TEACHER: '教师', STUDENT: '学生', ASSISTANT: '教师助理', OPS_ADMIN: '运维管理员' }
+const ROLE_TEXT = { ADMIN: '管理员', TEACHER: '教师', STUDENT: '学生', OPS_ADMIN: '运维管理员' }
 const roleText = computed(() => store.roles.map((r) => ROLE_TEXT[r] || r).join(' · ') || '实验室用户')
 
-/** 当前账号菜单树中已开放的页面路径集合（入口可用性以此为准） */
 const openPaths = computed(() => {
   const paths = new Set()
   const walk = (nodes) => {
@@ -407,7 +325,6 @@ const openPaths = computed(() => {
   return paths
 })
 
-// 已开放入口指向菜单中的真实页面；未开放模块置灰（path 为空）
 const entries = computed(() => [
   {
     name: '场地预约',
@@ -423,59 +340,49 @@ const entries = computed(() => [
     tone: 'brand',
     path: openPaths.value.has('/admin/space/labs') ? '/admin/space/labs' : ''
   },
-  {
-    name: '设备管理',
-    desc: '型号规格 · 设备台账 · 分类目录',
-    icon: Monitor,
-    tone: 'brand',
-    path: openPaths.value.has('/admin/equipment') ? '/admin/equipment' : ''
-  },
-  {
-    name: '设备目录',
-    desc: '浏览在架设备并发起使用申请',
-    icon: Collection,
-    tone: 'brand',
-    path: openPaths.value.has('/equipment/directory') ? '/equipment/directory' : ''
-  },
-  {
-    name: '我的设备申请',
-    desc: '申请进度 · 撤销 · 归还确认',
-    icon: Notebook,
-    tone: 'brand',
-    path: openPaths.value.has('/equipment/bookings/my') ? '/equipment/bookings/my' : ''
-  },
-  {
-    name: '设备申请初审',
-    desc: '教师初审学生设备申请',
-    icon: Grid,
-    tone: 'brand',
-    path: openPaths.value.has('/equipment/bookings/teacher') ? '/equipment/bookings/teacher' : ''
-  },
-  {
-    name: '设备使用审批',
-    desc: '终审代批 · 借出归还登记',
-    icon: DataLine,
-    tone: 'warn',
-    path: openPaths.value.has('/admin/equipment/bookings') ? '/admin/equipment/bookings' : ''
-  },
-  {
-    name: '物料代领',
-    desc: '学生代理领取已批物料',
-    icon: Box,
-    tone: 'warn',
-    path: openPaths.value.has('/admin/item/assistant_pickup') ? '/admin/item/assistant_pickup' : ''
-  },
-  {
+  ...(hasPerm('item:material:list') && openPaths.value.has('/admin/item/workspace') ? [{
     name: '物料工作台',
-    desc: '库存与申领一站式',
+    desc: '物料档案、库存与申领处理',
     icon: Box,
-    tone: 'warn',
-    path: openPaths.value.has('/admin/item/workspace') ? '/admin/item/workspace' : ''
-  },
-  { name: '通知消息', desc: '审批与催办提醒', icon: Bell, tone: 'muted', path: '' }
-].filter((entry) => entry.path || entry.tone === 'muted'))
+    tone: 'brand',
+    path: '/admin/item/workspace'
+  }] : []),
+  ...(hasPerm('item:claim:list') && openPaths.value.has('/item/claims') ? [{
+    name: '我的物料申领',
+    desc: '申领、归还与逾期处理',
+    icon: Box,
+    tone: 'ok',
+    path: '/item/claims'
+  }] : []),
+  ...(hasPerm('item:pickup:list') && openPaths.value.has('/item/pickups') ? [{
+    name: '我的代领任务',
+    desc: '查看老师推送的物料代领安排',
+    icon: Box,
+    tone: 'ok',
+    path: '/item/pickups'
+  }] : []),
+  ...(hasPerm('item:plan:list') && openPaths.value.has('/item/plans') ? [{
+    name: '我的预设方案',
+    desc: '维护常用物料申领方案',
+    icon: Document,
+    tone: 'brand',
+    path: '/item/plans'
+  }] : []),
+  ...(hasPerm('item:notification:list') ? [{
+    name: '通知消息',
+    desc: notification.unreadCount ? `${notification.unreadCount} 条未读通知` : '审批与催办提醒',
+    icon: Bell,
+    tone: 'brand',
+    action: 'notifications',
+    path: ''
+  }] : [])
+].filter((entry) => entry.path || entry.action))
 
 function go(entry) {
+  if (entry.action === 'notifications') {
+    notification.openDrawer()
+    return
+  }
   if (!entry.path) {
     ElMessage.info('该功能建设中，敬请期待')
     return
@@ -500,7 +407,6 @@ function go(entry) {
   margin-bottom: 18px;
 }
 
-/* KPI 统计卡：图标容器 + 指标数字 + 标签 */
 .home_view__stat {
   display: flex;
   align-items: center;
@@ -531,179 +437,6 @@ function go(entry) {
   color: var(--g3);
 }
 
-/* 图表区：双列卡片 */
-.home_view__charts {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-
-.home_view__chart_loading {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 12px 0;
-}
-
-.home_view__sk_donut {
-  width: 132px;
-  height: 132px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.home_view__sk_col {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.home_view__sk_col--full {
-  padding: 10px 0;
-}
-
-.home_view__sk_line {
-  height: 14px;
-  border-radius: var(--r-xs);
-}
-
-/* 环形图（conic-gradient 语义分色）+ 图例 */
-.home_view__donut_row {
-  display: flex;
-  align-items: center;
-  gap: 28px;
-  padding: 8px 0 4px;
-}
-
-.home_view__donut {
-  width: 148px;
-  height: 148px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-}
-
-.home_view__donut_hole {
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  background: var(--surface);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-}
-
-.home_view__donut_total {
-  font-size: 26px;
-  line-height: 1.1;
-}
-
-.home_view__donut_unit {
-  font-size: 12px;
-  color: var(--g3);
-}
-
-.home_view__legend {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.home_view__legend li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.home_view__legend_dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.home_view__legend_label {
-  font-size: 13px;
-  color: var(--g2);
-}
-
-.home_view__legend_count {
-  margin-left: auto;
-  font-size: 13px;
-  font-weight: var(--fw-medium);
-  color: var(--g1);
-}
-
-.home_view__legend_pct {
-  width: 40px;
-  text-align: right;
-  font-size: 12px;
-  color: var(--g3);
-}
-
-/* 条形排行：实验室保有量 */
-.home_view__bars {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 6px 0 2px;
-}
-
-.home_view__bar_row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.home_view__bar_label {
-  width: 88px;
-  font-size: 13px;
-  color: var(--g2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex-shrink: 0;
-}
-
-.home_view__bar_track {
-  flex: 1;
-  height: 10px;
-  border-radius: var(--r-full);
-  background: var(--surface-sunken);
-  overflow: hidden;
-}
-
-.home_view__bar_fill {
-  display: block;
-  height: 100%;
-  border-radius: var(--r-full);
-  background: var(--brand);
-  transition: width var(--dur-slow) var(--ease);
-}
-
-.home_view__bar_value {
-  width: 28px;
-  text-align: right;
-  font-size: 13px;
-  font-weight: var(--fw-medium);
-  color: var(--g1);
-}
-
-/* 数字等宽：图例计数 / 占比 / 条形值 */
-.home_view__figure {
-  font-variant-numeric: tabular-nums;
-}
-
-/* 功能入口：桌面三列网格，卡片悬浮描边变蓝 */
 .home_view__grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -752,7 +485,6 @@ function go(entry) {
   color: var(--g3);
 }
 
-/* 下半区双列 */
 .home_view__columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -767,14 +499,64 @@ function go(entry) {
   padding: 4px 18px 8px;
 }
 
-.home_view__chart_card .card__body {
-  padding: 14px 20px 16px;
+.home_list {
+  display: flex;
+  flex-direction: column;
+}
+
+.home_list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border: 0;
+  border-bottom: .5px solid var(--hair);
+  background: transparent;
+  color: var(--g2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.home_list__item:last-child {
+  border-bottom: 0;
+}
+
+.home_list__item:hover {
+  color: var(--brand);
+}
+
+.home_list__content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 3px;
+}
+
+.home_list__content strong,
+.home_list__content span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home_list__content strong {
+  font-weight: var(--fw-medium);
+  color: var(--g1);
+}
+
+.home_list__content span,
+.home_list__item time {
+  font-size: 12px;
+  color: var(--g3);
+}
+
+.home_list__item time {
+  flex-shrink: 0;
 }
 
 @media (max-width: 900px) {
-  .home_view__charts { grid-template-columns: 1fr; }
   .home_view__grid { grid-template-columns: repeat(2, 1fr); }
   .home_view__columns { grid-template-columns: 1fr; }
-  .home_view__donut_row { flex-direction: column; }
 }
 </style>

@@ -1,20 +1,24 @@
 package com.labmanage.module.item.controller;
 
-import com.labmanage.common.security.RequirePermission;
 import com.labmanage.common.result.PageResult;
 import com.labmanage.common.result.Result;
-import com.labmanage.module.item.dto.StockLocationCreateDTO;
-import com.labmanage.module.item.dto.StockLocationQuery;
-import com.labmanage.module.item.dto.StockLocationUpdateDTO;
+import com.labmanage.common.security.RequirePermission;
+import com.labmanage.common.utils.Ids;
+import com.labmanage.module.item.dto.StockLocationAdminsDTO;
+import com.labmanage.module.item.dto.StockLocationPageQuery;
+import com.labmanage.module.item.dto.StockLocationResponsibleHistoryPageQuery;
+import com.labmanage.module.item.dto.StockLocationUpsertDTO;
 import com.labmanage.module.item.service.StockLocationService;
+import com.labmanage.module.item.vo.LocationInventoryVO;
+import com.labmanage.module.item.vo.StockLocationAdminVO;
+import com.labmanage.module.item.vo.StockLocationChangeVO;
+import com.labmanage.module.item.vo.StockLocationOptionVO;
+import com.labmanage.module.item.vo.StockLocationResponsibleHistoryVO;
 import com.labmanage.module.item.vo.StockLocationVO;
-import com.labmanage.module.item.vo.SysUserOptionVO;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -25,12 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/**
- * 库位管理
- */
-@Tag(name = "库位管理", description = "库位的维护与查询（库存归属具体实验室）")
 @RestController
-@RequestMapping("/api/v1/stock-locations")
+@RequestMapping("/api/v1/item/locations")
 public class StockLocationController {
 
     private final StockLocationService locationService;
@@ -39,59 +39,74 @@ public class StockLocationController {
         this.locationService = locationService;
     }
 
-    @Operation(summary = "分页查询库位")
+    @GetMapping
     @RequirePermission("item:location:list")
-    @GetMapping("/page")
-    public Result<PageResult<StockLocationVO>> page(@Valid StockLocationQuery query) {
+    public Result<PageResult<StockLocationVO>> page(@Valid @ModelAttribute StockLocationPageQuery query) {
         return Result.success(locationService.page(query));
     }
 
-    @Operation(summary = "保管人候选搜索", description = "按姓名/账号/学工号前缀搜索启用用户（跨模块只读，库位维护选择保管人用）")
-    @RequirePermission("item:location:list")
-    @GetMapping("/custodian-options")
-    public Result<List<SysUserOptionVO>> custodianOptions(
-            @Parameter(description = "关键字（姓名/账号/学工号前缀）") @RequestParam(required = false) String keyword) {
-        return Result.success(locationService.custodianOptions(keyword));
+    @GetMapping("/options")
+    @RequirePermission(value = {"item:location:list", "item:claim:create"}, mode = RequirePermission.Mode.OR)
+    public Result<List<StockLocationOptionVO>> options(@RequestParam(required = false) String keyword) {
+        return Result.success(locationService.options(keyword));
     }
 
-    @Operation(summary = "库位详情")
+    @GetMapping("/admin_options")
+    @RequirePermission("item:location:manage")
+    public Result<List<StockLocationAdminVO>> adminOptions(@RequestParam(required = false) String keyword) {
+        return Result.success(locationService.adminOptions(keyword));
+    }
+
+    @GetMapping("/responsible_history")
     @RequirePermission("item:location:list")
+    public Result<PageResult<StockLocationResponsibleHistoryVO>> responsibleHistory(
+            @Valid @ModelAttribute StockLocationResponsibleHistoryPageQuery query) {
+        return Result.success(locationService.responsibleHistory(query));
+    }
+
+    @GetMapping("/change_history")
+    @RequirePermission("item:location:list")
+    public Result<PageResult<StockLocationChangeVO>> changeHistory(
+            @Valid @ModelAttribute StockLocationResponsibleHistoryPageQuery query) {
+        return Result.success(locationService.changeHistory(query));
+    }
+
+    @GetMapping("/{id}/inventory")
+    @RequirePermission("item:location:list")
+    public Result<LocationInventoryVO> inventory(@PathVariable String id) {
+        return Result.success(locationService.inventory(Ids.parse(id)));
+    }
+
     @GetMapping("/{id}")
-    public Result<StockLocationVO> get(@Parameter(description = "库位 ID") @PathVariable String id) {
-        return Result.success(locationService.get(id));
+    @RequirePermission("item:location:list")
+    public Result<StockLocationVO> detail(@PathVariable String id) {
+        return Result.success(locationService.detail(Ids.parse(id)));
     }
 
-    @Operation(summary = "新增库位")
-    @RequirePermission("item:location:create")
     @PostMapping
-    public Result<Void> create(@Valid @RequestBody StockLocationCreateDTO dto) {
-        locationService.create(dto);
-        return Result.success();
+    @RequirePermission("item:location:manage")
+    public Result<StockLocationVO> create(@Valid @RequestBody StockLocationUpsertDTO dto) {
+        return Result.success(locationService.create(dto));
     }
 
-    @Operation(summary = "修改库位")
-    @RequirePermission("item:location:update")
-    @PutMapping
-    public Result<Void> update(@Valid @RequestBody StockLocationUpdateDTO dto) {
-        locationService.update(dto);
-        return Result.success();
+    @PutMapping("/{id}")
+    @RequirePermission("item:location:manage")
+    public Result<StockLocationVO> update(@PathVariable String id,
+                                          @Valid @RequestBody StockLocationUpsertDTO dto) {
+        return Result.success(locationService.update(Ids.parse(id), dto));
     }
 
-    @Operation(summary = "启用/停用库位")
-    @RequirePermission("item:location:enable")
-    @PutMapping("/{id}/status")
-    public Result<Void> updateStatus(
-            @Parameter(description = "库位 ID") @PathVariable String id,
-            @Parameter(description = "true 启用 / false 停用") @RequestParam boolean enabled) {
-        locationService.updateStatus(id, enabled);
-        return Result.success();
-    }
-
-    @Operation(summary = "删除库位（逻辑删除；被库存余额/单据明细引用时拒绝）")
-    @RequirePermission("item:location:delete")
     @DeleteMapping("/{id}")
-    public Result<Void> delete(@Parameter(description = "库位 ID") @PathVariable String id) {
-        locationService.delete(id);
+    @RequirePermission("item:location:manage")
+    public Result<Void> delete(@PathVariable String id) {
+        locationService.delete(Ids.parse(id));
         return Result.success();
+    }
+
+    @PutMapping("/{id}/admins")
+    @RequirePermission("item:location:manage")
+    public Result<StockLocationVO> updateAdmins(@PathVariable String id,
+                                                @Valid @RequestBody StockLocationAdminsDTO dto) {
+        return Result.success(locationService.updateAdmins(Ids.parse(id), dto));
     }
 }

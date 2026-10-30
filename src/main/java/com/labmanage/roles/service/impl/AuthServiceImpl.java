@@ -14,7 +14,6 @@ import com.labmanage.roles.entity.SysRole;
 import com.labmanage.roles.entity.SysUser;
 import com.labmanage.roles.entity.SysUserRole;
 import com.labmanage.roles.enums.RoleCode;
-import com.labmanage.roles.mapper.AssistantGrantMapper;
 import com.labmanage.roles.mapper.SysMenuMapper;
 import com.labmanage.roles.mapper.SysPermissionMapper;
 import com.labmanage.roles.mapper.SysRoleMapper;
@@ -63,22 +62,18 @@ public class AuthServiceImpl implements AuthService {
 
     private final SysMenuMapper menuMapper;
 
-    private final AssistantGrantMapper grantMapper;
-
     private final PolicyService policyService;
 
     private final JwtService jwtService;
 
     public AuthServiceImpl(SysUserMapper userMapper, SysUserRoleMapper userRoleMapper,
                            SysRoleMapper roleMapper, SysPermissionMapper permissionMapper,
-                           SysMenuMapper menuMapper, AssistantGrantMapper grantMapper,
-                           PolicyService policyService, JwtService jwtService) {
+                           SysMenuMapper menuMapper, PolicyService policyService, JwtService jwtService) {
         this.userMapper = userMapper;
         this.userRoleMapper = userRoleMapper;
         this.roleMapper = roleMapper;
         this.permissionMapper = permissionMapper;
         this.menuMapper = menuMapper;
-        this.grantMapper = grantMapper;
         this.policyService = policyService;
         this.jwtService = jwtService;
     }
@@ -150,7 +145,7 @@ public class AuthServiceImpl implements AuthService {
         }
         List<String> heldRoles = loadRoleCodes(user.getId());
         String target = dto.roleCode().trim();
-        if (RoleCode.ASSISTANT.name().equals(target) || !heldRoles.contains(target)) {
+        if (!heldRoles.contains(target)) {
             throw new BusinessException(40300, "未持有该角色，无法切换");
         }
         return issueTokens(user, target, heldRoles);
@@ -182,14 +177,10 @@ public class AuthServiceImpl implements AuthService {
         }
         List<String> heldRoles = loadRoleCodes(userId);
         String activeRole = resolveActiveRole(user, heldRoles, claimedActiveRole);
-        boolean assistant = heldRoles.contains(RoleCode.ASSISTANT.name());
         List<String> roles = new ArrayList<>();
         roles.add(activeRole);
-        if (assistant) {
-            roles.add(RoleCode.ASSISTANT.name());
-        }
         List<String> permissions = permissionMapper.selectPermissionCodesByRoleIds(
-                assembleRoleIds(activeRole, assistant));
+                assembleRoleIds(activeRole));
         return new LoginUser(userId, activeRole, roles, permissions, null);
     }
 
@@ -206,9 +197,6 @@ public class AuthServiceImpl implements AuthService {
                     .map(SysRole::getRoleCode)
                     .forEach(codes::add);
         }
-        if (grantMapper.countValidGrant(userId, Instant.now()) > 0) {
-            codes.add(RoleCode.ASSISTANT.name());
-        }
         return codes;
     }
 
@@ -224,53 +212,41 @@ public class AuthServiceImpl implements AuthService {
 
     /**
      * 默认活动角色：主身份（user_type 派生，与角色码一致）若持有则取之；
-     * 否则取第一个持有的非 ASSISTANT 角色（如 opsadmin 仅持 OPS_ADMIN 的兜底）。
+     * 否则取第一个持有角色（如 opsadmin 仅持 OPS_ADMIN 的兜底）。
      */
     private String defaultActiveRole(SysUser user, List<String> heldRoles) {
         if (heldRoles.contains(user.getUserType())) {
             return user.getUserType();
         }
         return heldRoles.stream()
-                .filter(code -> !RoleCode.ASSISTANT.name().equals(code))
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(40100, "账号未分配有效角色"));
     }
 
-    /**
-     * 校验 token 声明的活动角色：须为当前持有且非 ASSISTANT 的角色，否则回退默认。
-     */
+    /** 校验 token 声明的活动角色：须为当前持有角色，否则回退默认。 */
     private String resolveActiveRole(SysUser user, List<String> heldRoles, String claimed) {
-        if (claimed != null && !claimed.isBlank()
-                && !RoleCode.ASSISTANT.name().equals(claimed)
-                && heldRoles.contains(claimed)) {
+        if (claimed != null && !claimed.isBlank() && heldRoles.contains(claimed)) {
             return claimed;
         }
         return defaultActiveRole(user, heldRoles);
     }
 
-    /** 活动角色（+有效助理授权的 ASSISTANT）→ 装配用角色 ID 集合 */
-    private List<Long> assembleRoleIds(String activeRole, boolean assistant) {
+    /** 活动角色 → 装配用角色 ID 集合 */
+    private List<Long> assembleRoleIds(String activeRole) {
         List<Long> roleIds = new ArrayList<>();
         roleIds.add(RoleCode.valueOf(activeRole).getId());
-        if (assistant) {
-            roleIds.add(RoleCode.ASSISTANT.getId());
-        }
         return roleIds;
     }
 
     /** 按活动角色装配身份响应（角色/权限/菜单 + 可切换角色） */
     private ProfileVO assembleProfile(SysUser user, String activeRole, List<String> heldRoles) {
-        boolean assistant = heldRoles.contains(RoleCode.ASSISTANT.name());
         List<String> roles = new ArrayList<>();
         roles.add(activeRole);
-        if (assistant) {
-            roles.add(RoleCode.ASSISTANT.name());
-        }
         List<String> permissions = permissionMapper.selectPermissionCodesByRoleIds(
-                assembleRoleIds(activeRole, assistant));
-        List<MenuVO> menus = buildMenuTree(menuMapper.selectMenusByRoleIds(assembleRoleIds(activeRole, assistant)));
+                assembleRoleIds(activeRole));
+        List<MenuVO> menus = buildMenuTree(menuMapper.selectMenusByRoleIds(assembleRoleIds(activeRole)));
         List<String> switchableRoles = heldRoles.stream()
-                .filter(code -> !RoleCode.ASSISTANT.name().equals(code) && !code.equals(activeRole))
+                .filter(code -> !code.equals(activeRole))
                 .toList();
         return new ProfileVO(String.valueOf(user.getId()), user.getRealName(), user.getUserType(),
                 user.getAccountName(), roles, permissions, menus, activeRole, switchableRoles);
@@ -278,12 +254,8 @@ public class AuthServiceImpl implements AuthService {
 
     /** 签发 access+refresh token 并装配响应（roles 按活动角色口径） */
     private LoginVO issueTokens(SysUser user, String activeRole, List<String> heldRoles) {
-        boolean assistant = heldRoles.contains(RoleCode.ASSISTANT.name());
         List<String> roles = new ArrayList<>();
         roles.add(activeRole);
-        if (assistant) {
-            roles.add(RoleCode.ASSISTANT.name());
-        }
         return new LoginVO(jwtService.issueAccess(user.getId(), activeRole),
                 jwtService.issueRefresh(user.getId(), activeRole),
                 jwtService.getAccessTtlSeconds(), String.valueOf(user.getId()), user.getRealName(),

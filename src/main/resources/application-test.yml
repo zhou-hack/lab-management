@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/lab_management_test?useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&preserveInstants=true&serverTimezone=UTC
+    url: jdbc:mysql://localhost:3306/new_system_test?useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&preserveInstants=true&serverTimezone=UTC
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -10,6 +10,9 @@ spring:
 app:
   jwt:
     secret: ${JWT_SECRET:dev-only-jwt-secret-32-bytes-minimum!!}
+  cors:
+    # 同 dev：本地回环 + 私网网段任意端口；生产用环境变量收敛
+    allowed-origin-patterns: http://localhost:*,http://127.0.0.1:*,http://192.168.*:*,http://10.*:*,http://172.*:*
 
 springdoc:
   api-docs:

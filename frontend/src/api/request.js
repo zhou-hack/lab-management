@@ -139,7 +139,9 @@ service.interceptors.response.use(
       return handleUnauthorized(msg)
     }
     if (status === 403) {
-      ElMessage.error('无权限')
+      // 优先展示后端业务原因（如「申请人不审自己的单」），无 msg 再回退通用提示
+      const serverMsg = error.response.data && error.response.data.msg
+      ElMessage.error(serverMsg || '无权限')
       return Promise.reject(error)
     }
     if (error.response && isJsonBlob(error.response.data)) {

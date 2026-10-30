@@ -8,38 +8,64 @@ import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
 
-/**
- * 库存余额 Mapper
- */
 @Mapper
 public interface StockBalanceMapper extends BaseMapper<StockBalance> {
 
-    /**
-     * 行锁读取库位+SKU 余额（过账在事务内按 location_id、sku_id 排序加锁）
-     */
-    @Select("SELECT * FROM stock_balance WHERE location_id = #{locationId} AND sku_id = #{skuId} AND deleted = 0 FOR UPDATE")
-    StockBalance lockByLocationAndSku(@Param("locationId") Long locationId, @Param("skuId") Long skuId);
+    @Select("""
+            <script>
+            SELECT * FROM stock_balance
+            WHERE material_id = #{materialId} AND deleted = 0
+            ORDER BY location_id ASC, id ASC
+            <if test="forUpdate">FOR UPDATE</if>
+            </script>
+            """)
+    List<StockBalance> selectByMaterialId(@Param("materialId") Long materialId,
+                                          @Param("forUpdate") boolean forUpdate);
 
-    /**
-     * 过账更新余额（行锁保护下更新，version 条件递增；行数为 0 表示版本冲突）
-     */
-    @Update("UPDATE stock_balance SET stock_qty = #{stockQty}, moving_average_price = #{avgPrice}, "
-            + "version = version + 1, update_time = UTC_TIMESTAMP(3) "
-            + "WHERE id = #{id} AND version = #{version} AND deleted = 0")
-    int updatePostBalance(@Param("id") Long id,
-                          @Param("version") Integer version,
-                          @Param("stockQty") BigDecimal stockQty,
-                          @Param("avgPrice") BigDecimal avgPrice);
+    @Select("""
+            SELECT * FROM stock_balance
+            WHERE material_id = #{materialId} AND location_id = #{locationId}
+              AND (position_text = #{positionText} OR (position_text IS NULL AND #{positionText} IS NULL))
+              AND deleted = 0
+            FOR UPDATE
+            """)
+    StockBalance selectForUpdate(@Param("materialId") Long materialId,
+                                 @Param("locationId") Long locationId,
+                                 @Param("positionText") String positionText);
 
-    /**
-     * 更新预警配置（安全库存与补货目标；version 条件更新，0 行表示并发冲突）
-     */
-    @Update("UPDATE stock_balance SET safe_qty = #{safeQty}, target_qty = #{targetQty}, "
-            + "version = version + 1, update_time = UTC_TIMESTAMP(3) "
-            + "WHERE id = #{id} AND version = #{version} AND deleted = 0")
-    int updateWarningConfig(@Param("id") Long id,
-                            @Param("version") Integer version,
-                            @Param("safeQty") BigDecimal safeQty,
-                            @Param("targetQty") BigDecimal targetQty);
+    @Update("""
+            UPDATE stock_balance
+            SET owned_quantity = owned_quantity + #{ownedDelta},
+                available_quantity = available_quantity + #{availableDelta},
+                version = version + 1,
+                update_time = #{updateTime},
+                update_user_id = #{operatorId}
+            WHERE id = #{id} AND version = #{expectedVersion} AND deleted = 0
+              AND owned_quantity + #{ownedDelta} >= 0
+              AND available_quantity + #{availableDelta} >= 0
+              AND owned_quantity + #{ownedDelta} >= available_quantity + #{availableDelta}
+            """)
+    int applyDelta(@Param("id") Long id,
+                   @Param("expectedVersion") Integer expectedVersion,
+                   @Param("ownedDelta") BigDecimal ownedDelta,
+                   @Param("availableDelta") BigDecimal availableDelta,
+                   @Param("updateTime") Instant updateTime,
+                   @Param("operatorId") Long operatorId);
+
+    @Update("""
+            UPDATE stock_balance
+            SET position_text = #{positionText},
+                version = version + 1,
+                update_time = #{updateTime},
+                update_user_id = #{operatorId}
+            WHERE id = #{id} AND version = #{expectedVersion} AND deleted = 0
+            """)
+    int updatePosition(@Param("id") Long id,
+                       @Param("expectedVersion") Integer expectedVersion,
+                       @Param("positionText") String positionText,
+                       @Param("updateTime") Instant updateTime,
+                       @Param("operatorId") Long operatorId);
 }

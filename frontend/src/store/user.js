@@ -6,7 +6,7 @@ import {
   switchRole as apiSwitchRole
 } from '@/api/user'
 import { getToken, setToken, setRefreshToken, removeToken } from '@/utils/token'
-import { registerDynamicRoutes, removeDynamicRoutes } from '@/router/dynamic'
+import { registerDynamicRoutes, removeDynamicRoutes, filterMenus } from '@/router/dynamic'
 
 export const useUserStore = defineStore('user', {
   state: () => ({
@@ -16,7 +16,7 @@ export const useUserStore = defineStore('user', {
     permissions: [],
     menus: [],
     activeRole: '', // 活动角色（当前生效的身份视图，多角色用户可切换）
-    switchableRoles: [], // 可切换的其他持有角色（不含动态 ASSISTANT）
+    switchableRoles: [], // 可切换的其他持有角色
     routesLoaded: false
   }),
   getters: {
@@ -57,7 +57,7 @@ export const useUserStore = defineStore('user', {
       }
       this.roles = data.roles || []
       this.permissions = data.permissions || []
-      this.menus = data.menus || []
+      this.menus = filterMenus(data.menus)
       this.activeRole = data.activeRole || ''
       this.switchableRoles = data.switchableRoles || []
     },

@@ -30,16 +30,13 @@ import { computed } from 'vue'
 import {
   Avatar,
   Bell,
-  Box,
   Calendar,
   DataLine,
-  Document,
   Histogram,
   Key,
   Menu as MenuIcon,
   OfficeBuilding,
   Setting,
-  Tools,
   User,
   UserFilled
 } from '@element-plus/icons-vue'
@@ -64,9 +61,7 @@ const ICON_MAP = {
   SystemRole: Avatar,
   SystemScope: Key,
   SystemLog: Histogram,
-  SystemPolicy: Setting,
-  SystemGrantAudit: Document,
-  GrantManage: Document
+  SystemPolicy: Setting
 }
 
 const KEYWORD_ICON = [
@@ -74,9 +69,7 @@ const KEYWORD_ICON = [
   [/部门|组织/, OfficeBuilding],
   [/角色|权限|授权/, Key],
   [/日志|统计|看板/, DataLine],
-  [/器材|设备|工具/, Tools],
   [/场地|实验室|教室/, Calendar],
-  [/物料|库存|耗材/, Box],
   [/通知|消息/, Bell],
   [/设置|配置|策略/, Setting]
 ]

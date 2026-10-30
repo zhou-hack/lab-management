@@ -19,7 +19,7 @@
 - 文档集成采用 `com.github.xiaoymin:knife4j-openapi3-ui:4.5.0` 加 `org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1`，OpenAPI 输出配置为 `OPENAPI_3_0`。不直接使用面向 Boot 3 的 Knife4j Jakarta starter；初始化时验证页面、资源、OpenAPI 配置端点及 Bearer token 调试，此组合尚未进行应用级运行验证。
 - 上述 MyBatis-Plus、Knife4j 版本按 2026-10-13 官方发布记录与 Maven Central 核实为最新稳定版；jjwt 固定 0.12.6 稳定版。发布均未标注 LTS，不宣称它们是 LTS。
 - 仓库为单体布局：后端 Maven 工程在仓库根目录（`pom.xml`、`src/main`、`src/test`、`.mvn`），前端独立工程在 `frontend/`，数据库脚本在 `sql/`，产品与规范文档在 `docs/`。
-- 根包固定为 `com.labmanage`，启动类为 `LabApplication`。公共代码放在 `common`，配置放在 `config`，用户、角色、菜单及权限放在 `roles`，场地、设备、物料业务放在 `module` 的对应子包。
+- 根包固定为 `com.labmanage`，启动类为 `LabApplication`。公共代码放在 `common`，配置放在 `config`，用户、角色、菜单及权限放在 `roles`；现行 `module` 包含 `space`、`booking`、`document`、`item` 等业务子包，分别承载场地、场地预约、共享单据、物料与固定资产业务。
 - 控制器负责校验和请求编排，service 负责业务，mapper 负责数据库访问；使用 DTO / VO 定义接口契约，不直接暴露实体或 ORM 分页对象。
 - 后端公共地基已建立，新增模块在 `roles` 或 `module/{业务}` 下自行搭建，并复用公共层：
   - `common/core`: `BaseEntity`（含 id/createTime/updateTime/deleted）、`BasePageQuery`（pageNum/pageSize 校验）
@@ -47,16 +47,16 @@
 
 ## 数据库与实体（Final）
 
-- Schema 以 [docs/数据库设计.md](docs/数据库设计.md)（评审稿 v1.0）为准；建表脚本按模块放 `sql/`，RBAC 已定稿为 [sql/sys_rbac.sql](sql/sys_rbac.sql)（11 张表：部门、名单、用户、角色、权限、菜单、三组关联、数据范围、预约限制）。space 模块（校区/楼栋/实验室）已于 2026-10-20 整体下线；后续模块脚本按实施分组 B→E 补充，原依赖 space 表的设计待重新评审。
+- Schema 以 [docs/数据库设计.md](docs/数据库设计.md)（评审稿 v1.0）为准；建表脚本按模块放 `sql/`，RBAC 已定稿为 [sql/sys_rbac.sql](sql/sys_rbac.sql)（11 张表：部门、名单、用户、角色、权限、菜单、三组关联、数据范围、预约限制）。现行 `module` 仅保留 `space`、`booking`、`document` 等业务；space 使用单表 lab 场地模型，后续脚本按现行实施范围补充，已删除模块的设计不再作为开发依据。
 - 主键统一雪花 ID：`BIGINT`（MyBatis-Plus `ASSIGN_ID`），接口序列化为字符串，避免 JavaScript 精度损失；关联字段同类型。初始数据使用固定小 ID（如角色 1-4、管理员 1），与雪花 ID 不冲突。
-- 公共字段：`id/create_time/update_time/deleted/create_user_id/update_user_id`；当前 `BaseEntity` 已覆盖前四项，后续接入数据库时补齐操作者字段。`version` 仅余额等需并发控制的可变表使用，从 0 起条件更新递增。
+- 公共字段：`id/create_time/update_time/deleted/create_user_id/update_user_id`；当前 `BaseEntity` 已覆盖前四项，后续接入数据库时补齐操作者字段。`version` 仅需并发控制的可变表使用，从 0 起条件更新递增。
 - 时间列 `DATETIME(3)` 存 UTC，列默认值 `UTC_TIMESTAMP(3)`；会话 `+00:00` 时 `ON UPDATE CURRENT_TIMESTAMP(3)` 即 UTC。
 - 类型记号：`CODE=VARCHAR(64)`、`NAME=VARCHAR(128)`、`SHORT=VARCHAR(32)`（Java 枚举映射，不用 MySQL ENUM）、`BOOL=TINYINT`（仅 0/1，加 CHECK）、`QTY=DECIMAL(18,3)`、`MONEY=DECIMAL(18,2)`、`PRICE=DECIMAL(18,4)`、`DATE=DATE`（纯日期）、`CLOCK=TIME(0)`（上海本地节次）。
-- 外键默认 `RESTRICT`，不级联删除历史业务；审计字段 `create_user_id/update_user_id` 不建外键（避免组织/用户循环依赖）；跨模块引用（如 `source_document_id`）只建列与索引，外键由所属模块脚本补充；`sys_user_data_scope` 与 `assistant_grant_scope` 的 campus/building/lab 列为预留（空间功能已于 2026-10-20 下线），不建外键。
-- 唯一与删除：业务码、学工号逻辑删除后不复用；关系表保持一行唯一（组合唯一建索引），不用 `(业务键, deleted)` 解决重复创建；含可空列的目标去重使用生成列归一（参照 `sys_user_data_scope.scope_target_id`）。
-- RBAC 定稿规则：预置角色 `ADMIN/TEACHER/STUDENT/ASSISTANT/OPS_ADMIN`；学生/老师账号由管理员预建（短信验证码登录与名单首登建档已于 2026-10-20 随登录重写下线，`sys_person_roster` 名单保留用于身份核验预留），不能自行提升身份；老师账号可经用户管理页叠加绑定/解绑 `ADMIN` 角色（`system:user:bind_role`，仅老师可绑、调用方须全校写，JWT 无状态会话不踢人，变更随 access 短时效自然生效）；一人多角色时登录默认以主身份角色为活动角色，权限/菜单按活动角色装配，`POST /api/v1/auth/switch_role` 校验持有后重签双 token；`ASSISTANT` 不持久化到 `sys_user_role`，由有效 `assistant_grant` 动态计算；`OPS_ADMIN`（运维管理员）为最高级运维角色，仅 SQL 预置不开放页面创建，绑定全部权限（后续模块新增权限随各自脚本同步绑定），不受数据范围约束，opsadmin 账号仅 OPS_ADMIN 本人可编辑/启停/重置；角色本身仍 SQL 预置不可增删，但 OPS_ADMIN 角色权限绑定锁定不可页面调整（40900），其余 4 个预置角色的权限绑定可由运维管理员整集替换（`system:role:assign` 仅绑 OPS_ADMIN，变更随持有者 access 过期自然生效）；系统管理（用户/名单/组织/角色/数据范围/参数配置/授权审计）整体归 OPS_ADMIN 专属（2026-10-20 起；预约限制页面与接口 2026-10-21 下线，`user_booking_restriction` 表与 Mapper 保留供预约模块逾期冻结使用），ADMIN 仅保留操作日志页且仅可见业务模块日志（module_code 不含 system/auth）；管理员数据范围用 `sys_user_data_scope`（一期开放 ALL/DEPARTMENT + READ/WRITE；CAMPUS/BUILDING/LAB 预留不开放），无范围记录不自动授予全校数据。
-- 初始数据：预置部门"设备处"（id=1）、5 个角色、管理员 `admin`（id=1）与运维管理员 `opsadmin`（id=2）（密码哈希均为占位值，部署前必须替换并强制首登修改）；权限与菜单初始数据由业务模块脚本按 `模块:资源:操作` 规范登记。
-- 权限标识规范 `模块:资源:操作`（如 `item:material:create`），前后端一致，登记在 `sys_permission`。
+- 外键默认 `RESTRICT`，不级联删除历史业务；审计字段 `create_user_id/update_user_id` 不建外键（避免组织/用户循环依赖）；跨模块引用（如 `source_document_id`）只建列与索引，外键由所属模块脚本补充；`sys_user_data_scope` 的 campus/building/lab 列为预留，不开放也不建外键，现行空间主档采用单表 lab 场地模型。
+- 唯一与删除：除 `stock_location.location_code` 按 2026-10-29 需求仅未删除行唯一、删除后可复用外，其他业务码、学工号逻辑删除后不复用；关系表保持一行唯一（组合唯一建索引），不用 `(业务键, deleted)` 解决重复创建；含可空列的目标去重使用生成列归一（参照 `sys_user_data_scope.scope_target_id` 和库位 `active_location_code`）。
+- RBAC 定稿规则：预置角色 `ADMIN/TEACHER/STUDENT/OPS_ADMIN`；学生/老师账号由管理员预建（短信验证码登录与名单首登建档已于 2026-10-20 随登录重写下线，`sys_person_roster` 名单保留用于身份核验预留），不能自行提升身份；老师账号可经用户管理页叠加绑定/解绑 `ADMIN` 角色（`system:user:bind_role`，仅老师可绑、调用方须全校写，JWT 无状态会话不踢人，变更随 access 短时效自然生效）；一人多角色时登录默认以主身份角色为活动角色，权限/菜单按活动角色装配，`POST /api/v1/auth/switch_role` 校验持有后重签双 token；`OPS_ADMIN`（运维管理员）为最高级运维角色，仅 SQL 预置不开放页面创建，仅绑定 system 模块权限和 system% 菜单，不参与场地、预约、物料等业务流程，不受数据范围约束，opsadmin 账号仅 OPS_ADMIN 本人可编辑/启停/重置；角色本身仍 SQL 预置不可增删，但 OPS_ADMIN 角色权限绑定锁定不可页面调整（40900），其余 3 个预置角色的权限绑定可由运维管理员整集替换（`system:role:assign` 仅绑 OPS_ADMIN，变更随持有者 access 过期自然生效）；系统管理（用户/名单/组织/角色/数据范围/参数配置）整体归 OPS_ADMIN 专属（2026-10-20 起；预约限制页面与接口 2026-10-21 下线，`user_booking_restriction` 表与 Mapper 保留供预约模块逾期冻结使用），ADMIN 仅保留操作日志页且仅可见业务模块日志（module_code 不含 system/auth）；管理员数据范围用 `sys_user_data_scope`（一期开放 ALL/DEPARTMENT + READ/WRITE；CAMPUS/BUILDING/LAB 预留不开放），无范围记录不自动授予全校数据。
+- 初始数据：预置部门"设备处"（id=1）、4 个角色、管理员 `admin`（id=1）与运维管理员 `opsadmin`（id=2）（密码哈希均为占位值，部署前必须替换并强制首登修改）；权限与菜单初始数据由业务模块脚本按 `模块:资源:操作` 规范登记。
+- 权限标识规范 `模块:资源:操作`（如 `booking:lab:create`），前后端一致，登记在 `sys_permission`。
 
 ## 时间与 UTC
 
@@ -86,7 +86,7 @@
 - 仓库为 `https://github.com/zhou-hack/lab-management`。禁止直接推送 `main` 或他人分支，不得强推或改写他人历史。
 - 远端 ruleset 要求提交带验证签名（GH013）：含协作者未签名历史提交的分支直推会被拒，沿用 `git commit-tree "HEAD^{tree}" -p <全签名祖先> -S` 签名压单后推送该提交为新分支头，不改写他人历史；压单分支与本地多提交历史不同构，本地不对其 pull/merge。`release/*` 分支受删除保护，需管理员在仓库 rules 临时放行后删除（0_1/0_1_1/0_2 已于 2026-10-22 清理）。
 - 执行 git 网络操作（clone/fetch/pull/push/ls-remote）及依赖下载前，先探测本地 Clash Verge 代理端口 `127.0.0.1:7897` 是否可连接（如 `Test-NetConnection 127.0.0.1 -Port 7897`）；可用则本次操作走代理：git 用命令级参数 `git -c http.proxy=http://127.0.0.1:7897 <command>`，其他工具用环境变量 `HTTP_PROXY`/`HTTPS_PROXY` 指向 `http://127.0.0.1:7897`。不得修改全局或仓库 git config，端口不可用时直连并在失败时报告，不重试堆积。
-- 个人分支使用 `dev/{desc}`，描述仅包含小写英文字母、数字和下划线，并以字母开头，例如 `dev/item`、`dev/permission`、`dev/user_management`；同模块可用英文姓名或账号后缀，如 `dev/item_someone`。禁止中文或横杠，该规则优先于工具默认分支前缀。
+- 个人分支使用 `dev/{desc}`，描述仅包含小写英文字母、数字和下划线，并以字母开头，例如 `dev/booking`、`dev/permission`、`dev/user_management`；同模块可用英文姓名或账号后缀，如 `dev/booking_someone`。禁止中文或横杠，该规则优先于工具默认分支前缀。
 - 为协作者首次初始化开发环境前，先只读检测 Git 仓库、远端地址和当前分支。目标仓库为 `zhou-hack/lab-management`，其 HTTPS 或 SSH 远端地址均可；当前分支须匹配 `^dev/[a-z][a-z0-9_]*$`，且不能是游离 HEAD 或已知属于他人的分支。
 - 检测到仓库和当前分支符合上述要求时，直接沿用当前分支继续初始化，不再询问，不重新克隆、创建或切换分支。若本次会话已明确指定另一分支及新建或复用意图，按用户指示执行，不重复询问。
 - 仅在检测不符合要求且本次会话未明确分支信息时，询问本人要使用的个人分支名，以及新建还是复用已有分支；远端缺失或指向其他仓库时一并确认仓库信息。在回复前只做只读检查，暂停分支创建或切换及后续项目初始化，不自行猜测或分配分支。

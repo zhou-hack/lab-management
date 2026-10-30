@@ -32,9 +32,12 @@ import com.labmanage.module.booking.vo.AvailabilityVO;
 import com.labmanage.module.booking.vo.BookingDetailVO;
 import com.labmanage.module.booking.vo.BookingStatsVO;
 import com.labmanage.module.booking.vo.BookingVO;
+import com.labmanage.module.booking.vo.SpaceDayAvailabilityVO;
 import com.labmanage.module.space.entity.BizSpace;
+import com.labmanage.module.space.entity.LabMaintenanceWindow;
 import com.labmanage.module.space.enums.SpaceStatus;
 import com.labmanage.module.space.mapper.BizSpaceMapper;
+import com.labmanage.module.space.mapper.LabMaintenanceWindowMapper;
 import com.labmanage.roles.entity.SysUser;
 import com.labmanage.roles.mapper.SysUserMapper;
 import org.slf4j.Logger;
@@ -47,6 +50,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -75,6 +79,7 @@ public class BookingServiceImpl implements BookingService {
     private final LabSlotMapper slotMapper;
     private final ClassPeriodMapper periodMapper;
     private final BizSpaceMapper spaceMapper;
+    private final LabMaintenanceWindowMapper maintenanceMapper;
     private final SysUserMapper userMapper;
     private final BookingFlowService flowService;
     private final BookingExpiryService expiryService;
@@ -83,6 +88,7 @@ public class BookingServiceImpl implements BookingService {
                               LabSlotMapper slotMapper,
                               ClassPeriodMapper periodMapper,
                               BizSpaceMapper spaceMapper,
+                              LabMaintenanceWindowMapper maintenanceMapper,
                               SysUserMapper userMapper,
                               BookingFlowService flowService,
                               BookingExpiryService expiryService) {
@@ -90,6 +96,7 @@ public class BookingServiceImpl implements BookingService {
         this.slotMapper = slotMapper;
         this.periodMapper = periodMapper;
         this.spaceMapper = spaceMapper;
+        this.maintenanceMapper = maintenanceMapper;
         this.userMapper = userMapper;
         this.flowService = flowService;
         this.expiryService = expiryService;
@@ -136,6 +143,8 @@ public class BookingServiceImpl implements BookingService {
                     operatorId, dto.spaceId(), dto.startAt(), dto.endAt(), conflicts);
             throw new BusinessException(ResultCode.CONFLICT.getCode(), "所选时段已被占用，请调整起止时间");
         }
+        // 维修时段重叠拦截（维修窗口内禁止新预约）
+        requireNoMaintenance(dto.spaceId(), dto.startAt(), dto.endAt(), operatorId, "预约提交");
 
         LabBooking booking = new LabBooking();
         booking.setLabId(dto.spaceId());
@@ -227,6 +236,8 @@ public class BookingServiceImpl implements BookingService {
             throw new BusinessException(ResultCode.CONFLICT.getCode(),
                     "时段已被其他预约占用（提交时无冲突，审批时被抢占），请驳回或要求调整时间");
         }
+        // 维修时段重叠拦截（提交后设置的维修窗口，审批时兜底拦下）
+        requireNoMaintenance(booking.getLabId(), booking.getStartAt(), booking.getEndAt(), operatorId, "预约核对批准");
 
         LabSlot slot = new LabSlot();
         slot.setLabId(booking.getLabId());
@@ -400,7 +411,7 @@ public class BookingServiceImpl implements BookingService {
         Long operatorId = SecurityUtils.currentUserId();
         BizSpace space = requireSpace(spaceId);
 
-        // 上海本地当天 [零点, 次日零点) 转 UTC 后查询未释放占用
+        // 上海本地当天 [零点, 次日零点) 转 UTC 后查询未释放占用与生效中维修时段
         Instant dayStart = date.atStartOfDay(SHANGHAI).toInstant();
         Instant dayEnd = date.plusDays(1).atStartOfDay(SHANGHAI).toInstant();
         List<AvailabilityVO.OccupiedSegment> occupied = slotMapper
@@ -408,9 +419,14 @@ public class BookingServiceImpl implements BookingService {
                 .map(slot -> new AvailabilityVO.OccupiedSegment(
                         String.valueOf(slot.getBookingId()), slot.getStartAt(), slot.getEndAt()))
                 .toList();
+        List<AvailabilityVO.OccupiedSegment> maintenance = maintenanceMapper
+                .listActiveInRangeForLabs(List.of(spaceId), dayStart, dayEnd).stream()
+                .map(w -> new AvailabilityVO.OccupiedSegment(
+                        String.valueOf(w.getId()), w.getStartAt(), w.getEndAt()))
+                .toList();
 
-        log.info("[可用时段] 完成：操作人={}, 场地ID={}, 日期={}, 占用段数={}, 开放窗口={}~{}",
-                operatorId, spaceId, date, occupied.size(), space.getOpenStart(), space.getOpenEnd());
+        log.info("[可用时段] 完成：操作人={}, 场地ID={}, 日期={}, 占用段数={}, 维修段数={}, 开放窗口={}~{}",
+                operatorId, spaceId, date, occupied.size(), maintenance.size(), space.getOpenStart(), space.getOpenEnd());
         return new AvailabilityVO(
                 String.valueOf(space.getId()),
                 space.getLabName(),
@@ -418,8 +434,48 @@ public class BookingServiceImpl implements BookingService {
                 formatTime(space.getOpenStart()),
                 formatTime(space.getOpenEnd()),
                 date.toString(),
-                occupied
+                occupied,
+                maintenance
         );
+    }
+
+    @Override
+    public List<SpaceDayAvailabilityVO> availabilityAll(LocalDate date) {
+        Long operatorId = SecurityUtils.currentUserId();
+        List<BizSpace> spaces = spaceMapper.selectList(new LambdaQueryWrapper<BizSpace>()
+                .eq(BizSpace::getStatus, SpaceStatus.AVAILABLE)
+                .orderByAsc(BizSpace::getId));
+        if (spaces.isEmpty()) {
+            return List.of();
+        }
+        // 上海本地当天 [零点, 次日零点) 转 UTC 后一次性查全部场地未释放占用与生效中维修时段
+        Instant dayStart = date.atStartOfDay(SHANGHAI).toInstant();
+        Instant dayEnd = date.plusDays(1).atStartOfDay(SHANGHAI).toInstant();
+        List<Long> labIds = spaces.stream().map(BizSpace::getId).toList();
+        Map<Long, List<AvailabilityVO.OccupiedSegment>> occupiedByLab = new HashMap<>();
+        for (LabSlot slot : slotMapper.listOccupiedInRangeForLabs(labIds, dayStart, dayEnd)) {
+            occupiedByLab.computeIfAbsent(slot.getLabId(), k -> new ArrayList<>())
+                    .add(new AvailabilityVO.OccupiedSegment(
+                            String.valueOf(slot.getBookingId()), slot.getStartAt(), slot.getEndAt()));
+        }
+        Map<Long, List<AvailabilityVO.OccupiedSegment>> maintenanceByLab = new HashMap<>();
+        for (LabMaintenanceWindow w : maintenanceMapper.listActiveInRangeForLabs(labIds, dayStart, dayEnd)) {
+            maintenanceByLab.computeIfAbsent(w.getLabId(), k -> new ArrayList<>())
+                    .add(new AvailabilityVO.OccupiedSegment(
+                            String.valueOf(w.getId()), w.getStartAt(), w.getEndAt()));
+        }
+        List<SpaceDayAvailabilityVO> result = spaces.stream()
+                .map(s -> new SpaceDayAvailabilityVO(
+                        String.valueOf(s.getId()),
+                        s.getLabName(),
+                        s.getCapacity(),
+                        formatTime(s.getOpenStart()),
+                        formatTime(s.getOpenEnd()),
+                        occupiedByLab.getOrDefault(s.getId(), List.of()),
+                        maintenanceByLab.getOrDefault(s.getId(), List.of())))
+                .toList();
+        log.info("[全部场地占用总览] 完成：操作人={}, 日期={}, 场地数={}", operatorId, date, result.size());
+        return result;
     }
 
     @Override
@@ -797,6 +853,17 @@ public class BookingServiceImpl implements BookingService {
         }
         String v = value.trim();
         return v.isEmpty() ? null : v;
+    }
+
+    /** 维修时段重叠拦截：生效中维修窗口与 [startAt, endAt) 重叠 → 40900 */
+    private void requireNoMaintenance(Long labId, Instant startAt, Instant endAt, Long operatorId, String action) {
+        long hits = maintenanceMapper.countOverlap(labId, startAt, endAt);
+        if (hits > 0) {
+            log.warn("[{}] 时段处于维修窗口，拒绝：操作人={}, 场地ID={}, 时段=[{} ~ {}], 重叠维修数={}",
+                    action, operatorId, labId, startAt, endAt, hits);
+            throw new BusinessException(ResultCode.CONFLICT.getCode(),
+                    "该时段场地有维修安排，请选择其他时段");
+        }
     }
 
     /** 上海时区窗口校验：起止同日、不早于开放开始、不晚于开放结束 */

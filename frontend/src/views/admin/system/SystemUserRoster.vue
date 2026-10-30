@@ -749,8 +749,8 @@ import { formatInstant } from '@/utils/datetime'
 
 const PERSON_TYPE_LABELS = { STUDENT: '学生', TEACHER: '老师', ADMIN: '管理员' }
 const PERSON_TYPE_TAG = { STUDENT: 'success', TEACHER: 'primary', ADMIN: 'warning' }
-const ROLE_LABELS = { ADMIN: '管理员', TEACHER: '老师', STUDENT: '学生', ASSISTANT: '老师助理', OPS_ADMIN: '运维管理员' }
-const ROLE_TAG = { ADMIN: 'warning', OPS_ADMIN: 'danger', TEACHER: 'primary', STUDENT: 'success', ASSISTANT: 'info' }
+const ROLE_LABELS = { ADMIN: '管理员', TEACHER: '老师', STUDENT: '学生', OPS_ADMIN: '运维管理员' }
+const ROLE_TAG = { ADMIN: 'warning', OPS_ADMIN: 'danger', TEACHER: 'primary', STUDENT: 'success' }
 const STATUS_META = {
   UNFILED: { label: '未建档', type: 'info' },
   NORMAL: { label: '正常', type: 'success' },

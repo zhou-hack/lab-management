@@ -14,27 +14,17 @@ const viewModules = {
   SystemScope: () => import('@/views/admin/system/SystemScope.vue'),
   SystemLog: () => import('@/views/admin/system/SystemLog.vue'),
   SystemPolicy: () => import('@/views/admin/system/SystemPolicy.vue'),
-  SystemGrantAudit: () => import('@/views/admin/system/SystemGrantAudit.vue'),
-  GrantManage: () => import('@/views/admin/grant/GrantManage.vue'),
   // space 模块
   SpaceLabList: () => import('@/views/admin/space/LabList.vue'),
   // booking 模块
   BookingAdminList: () => import('@/views/admin/booking/BookingList.vue'),
   BookingApproval: () => import('@/views/admin/booking/BookingApproval.vue'),
   BookingUserList: () => import('@/views/booking/BookingList.vue'),
-  // equipment 模块（单页定稿：菜单 EquipmentManage；旧两菜单 key 保留兼容）
-  EquipmentManage: () => import('@/views/admin/equipment/EquipmentManage.vue'),
-  EquipmentModel: () => import('@/views/admin/equipment/EquipmentManage.vue'),
-  EquipmentAsset: () => import('@/views/admin/equipment/EquipmentManage.vue'),
-  // equipment 三权级设备使用申请（用户端三页 + 管理端审批页）
-  EquipmentDirectory: () => import('@/views/equipment/EquipmentDirectory.vue'),
-  MyEquipmentBookings: () => import('@/views/equipment/MyEquipmentBookings.vue'),
-  EquipmentTeacherApprove: () => import('@/views/equipment/EquipmentTeacherApprove.vue'),
-  EquipmentBookingManage: () => import('@/views/admin/equipment/EquipmentBookingManage.vue'),
-  // item 模块（单工作台形态，内部分页签）
-  ItemWorkspace: () => import('@/views/item/ItemWorkspace.vue'),
-  // item 学生代理代领（菜单 205；复用申领面板，领取由后端 assistant_grant 动态放行）
-  ItemAssistantPickup: () => import('@/views/item/ItemAssistantPickup.vue')
+  // item 模块
+  ItemWorkspace: () => import('@/views/admin/item/ItemWorkspace.vue'),
+  ItemClaimCenter: () => import('@/views/item/ItemClaimCenter.vue'),
+  ItemPickupCenter: () => import('@/views/item/ItemPickupCenter.vue'),
+  ItemPlanList: () => import('@/views/item/ItemPlanList.vue')
 }
 
 const addedRouteNames = []
@@ -58,9 +48,24 @@ function walkMenus(menus, visit) {
   }
 }
 
+/**
+ * 仅保留能命中本地组件白名单的 PAGE，递归剔除失效页面、ACTION 和空目录。
+ * 路由、侧栏与首页统一使用该结果，避免旧数据库菜单形成可点击的 404。
+ */
+export function filterMenus(menus) {
+  return (menus || []).flatMap((menu) => {
+    const children = filterMenus(menu.children)
+    if (menu.menuType === 'PAGE') {
+      if (!menu.routePath || !menu.componentKey || !viewModules[menu.componentKey]) return []
+      return [{ ...menu, children }]
+    }
+    return children.length ? [{ ...menu, children }] : []
+  })
+}
+
 /** 将后端菜单树映射为动态路由，统一挂到 AdminLayout 下（全部账号同一布局） */
 export function registerDynamicRoutes(menus) {
-  walkMenus(menus, (menu) => {
+  walkMenus(filterMenus(menus), (menu) => {
     if (menu.menuType !== 'PAGE' || !menu.routePath || !menu.componentKey) return
     const load = viewModules[menu.componentKey]
     if (!load) {

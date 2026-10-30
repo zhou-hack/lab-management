@@ -34,6 +34,7 @@ import com.labmanage.module.booking.vo.TeacherOptionVO;
 import com.labmanage.module.space.entity.BizSpace;
 import com.labmanage.module.space.enums.SpaceStatus;
 import com.labmanage.module.space.mapper.BizSpaceMapper;
+import com.labmanage.module.space.mapper.LabMaintenanceWindowMapper;
 import com.labmanage.roles.entity.SysUser;
 import com.labmanage.roles.mapper.SysUserMapper;
 import org.slf4j.Logger;
@@ -80,6 +81,7 @@ public class BookingSeriesServiceImpl implements BookingSeriesService {
     private final LabBookingMapper bookingMapper;
     private final LabSlotMapper slotMapper;
     private final BizSpaceMapper spaceMapper;
+    private final LabMaintenanceWindowMapper maintenanceMapper;
     private final SysUserMapper userMapper;
     private final BookingFlowService flowService;
 
@@ -88,6 +90,7 @@ public class BookingSeriesServiceImpl implements BookingSeriesService {
                                     LabBookingMapper bookingMapper,
                                     LabSlotMapper slotMapper,
                                     BizSpaceMapper spaceMapper,
+                                    LabMaintenanceWindowMapper maintenanceMapper,
                                     SysUserMapper userMapper,
                                     BookingFlowService flowService) {
         this.seriesMapper = seriesMapper;
@@ -95,6 +98,7 @@ public class BookingSeriesServiceImpl implements BookingSeriesService {
         this.bookingMapper = bookingMapper;
         this.slotMapper = slotMapper;
         this.spaceMapper = spaceMapper;
+        this.maintenanceMapper = maintenanceMapper;
         this.userMapper = userMapper;
         this.flowService = flowService;
     }
@@ -646,12 +650,16 @@ public class BookingSeriesServiceImpl implements BookingSeriesService {
         return LocalDateTime.of(date, clock).atZone(SHANGHAI).toInstant();
     }
 
-    /** 逐段冲突校验：命中即 40900 并单独列出冲突日期与时间段 */
+    /** 逐段冲突校验：命中即 40900 并单独列出冲突日期与时间段（占用与维修窗口一并检查） */
     private void checkConflicts(Long labId, List<Segment> segments, String phase) {
         List<String> conflicts = new ArrayList<>();
+        List<String> maintenanceHits = new ArrayList<>();
         for (Segment seg : segments) {
             if (slotMapper.countConflict(labId, seg.startAt(), seg.endAt()) > 0) {
                 conflicts.add(seg.date() + " " + formatRange(seg.startAt(), seg.endAt()));
+            }
+            if (maintenanceMapper.countOverlap(labId, seg.startAt(), seg.endAt()) > 0) {
+                maintenanceHits.add(seg.date() + " " + formatRange(seg.startAt(), seg.endAt()));
             }
         }
         if (!conflicts.isEmpty()) {
@@ -659,6 +667,12 @@ public class BookingSeriesServiceImpl implements BookingSeriesService {
             log.warn("[周期预约{}] 时段冲突，拒绝：场地ID={}, 冲突明细={}", phase, labId, detail);
             throw new BusinessException(ResultCode.CONFLICT.getCode(),
                     "周期内以下时段已被其他预约占用（" + phase + "阶段校验）：" + detail);
+        }
+        if (!maintenanceHits.isEmpty()) {
+            String detail = String.join("；", maintenanceHits);
+            log.warn("[周期预约{}] 维修窗口冲突，拒绝：场地ID={}, 冲突明细={}", phase, labId, detail);
+            throw new BusinessException(ResultCode.CONFLICT.getCode(),
+                    "周期内以下时段场地有维修安排（" + phase + "阶段校验）：" + detail);
         }
     }
 

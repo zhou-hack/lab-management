@@ -7,6 +7,7 @@
 -- ============================================================================
 
 DROP TABLE IF EXISTS lab_slot;
+DROP TABLE IF EXISTS lab_maintenance_window;
 DROP TABLE IF EXISTS lab_booking;
 DROP TABLE IF EXISTS lab_booking_series;
 DROP TABLE IF EXISTS class_period;
@@ -56,6 +57,23 @@ CREATE TABLE lab (
     update_user_id BIGINT        NULL,
     PRIMARY KEY (id),
     CONSTRAINT chk_lab_status CHECK (status IN ('AVAILABLE', 'MAINTAINING', 'CLOSED'))
+);
+
+-- 场地维修时段（对齐 lab_management_all.sql 1.3；H2 无 UTC_TIMESTAMP 默认值）
+CREATE TABLE lab_maintenance_window (
+    id             BIGINT        NOT NULL,
+    lab_id         BIGINT        NOT NULL,
+    start_at       TIMESTAMP(3)  NOT NULL,
+    end_at         TIMESTAMP(3)  NOT NULL,
+    reason         VARCHAR(512)  NULL,
+    cancelled_at   TIMESTAMP(3)  NULL,
+    create_time    TIMESTAMP(3)  NOT NULL,
+    update_time    TIMESTAMP(3)  NOT NULL,
+    deleted        TINYINT       NOT NULL DEFAULT 0,
+    create_user_id BIGINT        NULL,
+    update_user_id BIGINT        NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT chk_mw_time CHECK (start_at < end_at)
 );
 
 CREATE TABLE lab_booking (

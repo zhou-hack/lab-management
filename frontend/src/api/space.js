@@ -67,3 +67,22 @@ export function disableSpace(id) {
 export function deleteSpace(id) {
   return request.delete(`/space/spaces/${id}`)
 }
+
+// ---------------------------------------------------------------------------
+// 场地维修时段（窗口内禁止新预约；与已批准预约重叠时拒绝设置）
+// ---------------------------------------------------------------------------
+
+/** 场地生效中的维修时段（含进行中与未来，按开始时间升序） */
+export function listMaintenanceWindows(spaceId) {
+  return request.get(`/space/spaces/${spaceId}/maintenance_windows`)
+}
+
+/** 设置维修时段：{ startAt, endAt, reason }（UTC/带偏移 ISO 时间点） */
+export function createMaintenanceWindow(spaceId, data) {
+  return request.post(`/space/spaces/${spaceId}/maintenance_windows`, data)
+}
+
+/** 取消维修时段（幂等） */
+export function cancelMaintenanceWindow(spaceId, windowId) {
+  return request.post(`/space/spaces/${spaceId}/maintenance_windows/${windowId}/cancel`)
+}

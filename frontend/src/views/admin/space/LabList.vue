@@ -232,6 +232,33 @@
           </template>
         </el-table-column>
         <el-table-column
+          label="近期维修时段"
+          min-width="180"
+        >
+          <template #default="{ row }">
+            <template v-if="row.upcomingMaintenance && row.upcomingMaintenance.length">
+              <el-tag
+                v-for="w in row.upcomingMaintenance.slice(0, 2)"
+                :key="w.id"
+                size="small"
+                type="warning"
+                effect="plain"
+                class="space_list__mw"
+              >
+                {{ formatRange(w.startAt, w.endAt) }}
+              </el-tag>
+              <span
+                v-if="row.upcomingMaintenance.length > 2"
+                class="t-hint"
+              >等 {{ row.upcomingMaintenance.length }} 段</span>
+            </template>
+            <span
+              v-else
+              class="t-hint"
+            >—</span>
+          </template>
+        </el-table-column>
+        <el-table-column
           prop="facilities"
           label="设备清单"
           min-width="180"
@@ -276,6 +303,14 @@
                 @click="onEdit(row)"
               >
                 编辑
+              </el-button>
+              <el-button
+                v-permission="'space:space:update'"
+                link
+                type="warning"
+                @click="onMaintenance(row)"
+              >
+                维修时段
               </el-button>
               <el-button
                 v-if="row.status !== 'CLOSED'"
@@ -341,6 +376,12 @@
       @close="importVisible = false"
       @success="onImported"
     />
+    <SpaceMaintenanceDialog
+      v-model="maintenanceVisible"
+      :space="maintenanceSpace"
+      @close="maintenanceVisible = false"
+      @changed="loadData"
+    />
   </div>
 </template>
 
@@ -350,7 +391,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import SpaceFormDialog from './SpaceFormDialog.vue'
 import SpaceDetailDrawer from './SpaceDetailDrawer.vue'
 import SpaceImportDialog from './SpaceImportDialog.vue'
+import SpaceMaintenanceDialog from './SpaceMaintenanceDialog.vue'
 import { SPACE_TYPES, SPACE_TYPE_MAP, SPACE_STATUS, SPACE_STATUS_MAP } from './space.constants'
+import { formatRange } from '@/utils/datetime'
 import {
   pageSpaces,
   getSpaceStats,
@@ -387,6 +430,9 @@ const editingSpace = ref(null)
 const detailVisible = ref(false)
 const detailSpace = ref(null)
 const importVisible = ref(false)
+// 维修时段弹窗
+const maintenanceVisible = ref(false)
+const maintenanceSpace = ref(null)
 
 async function loadStats() {
   try {
@@ -454,6 +500,12 @@ function onImported() {
 function onEdit(row) {
   editingSpace.value = row
   formVisible.value = true
+}
+
+/** 维修时段弹窗（新增/取消后由 changed 事件刷新列表的近期维修列） */
+function onMaintenance(row) {
+  maintenanceSpace.value = row
+  maintenanceVisible.value = true
 }
 
 async function onDetail(row) {
@@ -713,6 +765,11 @@ onMounted(() => {
 /* 场地名称：仅作文本展示，不绑定点击交互 */
 .space_list__name {
   color: var(--g1);
+}
+
+/* 近期维修时段标签间距 */
+.space_list__mw {
+  margin: 0 6px 4px 0;
 }
 
 @media (max-width: 768px) {

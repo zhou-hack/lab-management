@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS class_period (
     CONSTRAINT chk_class_period_deleted CHECK (deleted IN (0, 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='节次定义表（预约按日期+节次选择，CLOCK 为上海本地时刻）';
 
--- 节次种子（示例作息，部署前由运维按学校实际作息调整）
+-- 节次种子（一天 12 节，部署前由运维按学校实际作息调整）
 INSERT IGNORE INTO class_period (id, period_no, period_name, start_clock, end_clock) VALUES
 (1, 1, '第1节', '08:00:00', '08:45:00'),
 (2, 2, '第2节', '08:55:00', '09:40:00'),
@@ -47,7 +47,11 @@ INSERT IGNORE INTO class_period (id, period_no, period_name, start_clock, end_cl
 (5, 5, '第5节', '14:00:00', '14:45:00'),
 (6, 6, '第6节', '14:55:00', '15:40:00'),
 (7, 7, '第7节', '16:00:00', '16:45:00'),
-(8, 8, '第8节', '16:55:00', '17:40:00');
+(8, 8, '第8节', '16:55:00', '17:40:00'),
+(9, 9, '第9节', '18:30:00', '19:15:00'),
+(10, 10, '第10节', '19:20:00', '20:05:00'),
+(11, 11, '第11节', '20:10:00', '20:55:00'),
+(12, 12, '第12节', '21:00:00', '21:45:00');
 
 -- 2) 周期预约规则表（一次审批，批量生成各周预约单与占用槽）---------------------
 CREATE TABLE IF NOT EXISTS lab_booking_series (
