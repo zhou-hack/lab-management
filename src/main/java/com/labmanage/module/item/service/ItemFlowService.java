@@ -48,13 +48,9 @@ public class ItemFlowService {
         this.clock = clock;
     }
 
-    /** 创建统一单据；相同 documentNo 已存在时返回原单据。 */
+    /** 创建统一单据；幂等复用仅按归属人、单据类型和幂等键判定。 */
     @Transactional(rollbackFor = Exception.class)
     public BizDocument createDocument(BizDocument document) {
-        BizDocument existing = documentMapper.selectByDocumentNo(document.getDocumentNo());
-        if (existing != null) {
-            return existing;
-        }
         if (document.getSubmittedAt() == null) {
             document.setSubmittedAt(now());
         }

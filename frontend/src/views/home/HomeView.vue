@@ -1,16 +1,5 @@
 <template>
   <div class="home_view">
-    <header class="home_view__header">
-      <div>
-        <h1 class="home_view__hello">
-          {{ greeting }}，{{ store.user?.realName || '用户' }}
-        </h1>
-        <p class="t-sub">
-          {{ roleText }} · {{ todayText }}
-        </p>
-      </div>
-    </header>
-
     <div
       v-if="kpis.length"
       class="grid-responsive home_view__section"
@@ -291,28 +280,6 @@ const kpis = computed(() => hasPerm(SPACE_LIST)
   ? [{ label: '场地', icon: Location, value: dashboard.spaceTotal }]
   : [])
 
-const greeting = computed(() => {
-  const h = new Date().getHours()
-  if (h < 6) return '夜深了'
-  if (h < 12) return '早上好'
-  if (h < 14) return '中午好'
-  if (h < 18) return '下午好'
-  return '晚上好'
-})
-
-const todayText = computed(() =>
-  new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'long'
-  }).format(new Date())
-)
-
-const ROLE_TEXT = { ADMIN: '管理员', TEACHER: '教师', STUDENT: '学生', OPS_ADMIN: '运维管理员' }
-const roleText = computed(() => store.roles.map((r) => ROLE_TEXT[r] || r).join(' · ') || '实验室用户')
-
 const openPaths = computed(() => {
   const paths = new Set()
   const walk = (nodes) => {
@@ -392,17 +359,6 @@ function go(entry) {
 </script>
 
 <style scoped>
-.home_view__header {
-  padding: 8px 2px 18px;
-}
-
-.home_view__hello {
-  margin: 0 0 4px;
-  font-size: 22px;
-  font-weight: var(--fw-semibold);
-  color: var(--g1);
-}
-
 .home_view__section {
   margin-bottom: 18px;
 }

@@ -10,8 +10,10 @@
       >
         <div class="card material_archive__card">
           <div class="material_archive__toolbar">
-            <el-input
+            <el-autocomplete
               v-model="materialQuery.materialName"
+              :fetch-suggestions="fetchMaterialNameSuggestions"
+              :debounce="300"
               placeholder="物料名称"
               clearable
               class="material_archive__keyword"
@@ -323,7 +325,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   createMaterial,
@@ -350,6 +352,38 @@ const materialTotal = ref(0)
 const materialLoading = ref(false)
 const togglingMaterialId = ref('')
 const deletingMaterialId = ref('')
+let materialNameSuggestionSerial = 0
+
+async function fetchMaterialNameSuggestions(keyword, callback) {
+  const serial = ++materialNameSuggestionSerial
+  const snapshot = { ...materialQuery }
+  const trimmedKeyword = keyword.trim()
+  if (!trimmedKeyword) {
+    callback([])
+    return
+  }
+  try {
+    const result = await getMaterials(cleanParams({
+      ...snapshot,
+      pageNum: 1,
+      pageSize: 100,
+      materialName: trimmedKeyword
+    }))
+    const queryUnchanged = ['materialName', 'materialType', 'enabled']
+      .every((key) => snapshot[key] === materialQuery[key])
+    if (serial !== materialNameSuggestionSerial || !queryUnchanged) return
+    const suggestions = [...new Set(
+      (result?.records || []).map((record) => record.materialName?.trim()).filter(Boolean)
+    )].slice(0, 10).map((value) => ({ value }))
+    callback(suggestions)
+  } catch {
+    if (serial === materialNameSuggestionSerial) callback([])
+  }
+}
+
+function invalidateMaterialNameSuggestions() {
+  materialNameSuggestionSerial += 1
+}
 
 function cleanParams(query) {
   return Object.fromEntries(Object.entries(query).filter(([, value]) => value !== '' && value !== null && value !== undefined))
@@ -370,11 +404,13 @@ async function loadMaterials() {
 }
 
 function searchMaterials() {
+  invalidateMaterialNameSuggestions()
   materialQuery.pageNum = 1
   loadMaterials()
 }
 
 function resetMaterials() {
+  invalidateMaterialNameSuggestions()
   Object.assign(materialQuery, { materialName: '', materialType: '', enabled: '', pageNum: 1, pageSize: 10 })
   loadMaterials()
 }
@@ -490,6 +526,7 @@ async function confirmDeleteMaterial(row) {
 }
 
 onMounted(loadMaterials)
+onBeforeUnmount(invalidateMaterialNameSuggestions)
 </script>
 
 <style scoped>
@@ -509,8 +546,8 @@ onMounted(loadMaterials)
   flex-shrink: 0;
 }
 
-.material_archive__keyword {
-  width: 180px;
+.material_archive__toolbar > :deep(.material_archive__keyword) {
+  width: 140px;
 }
 
 .material_archive__type {
@@ -539,6 +576,13 @@ onMounted(loadMaterials)
 .material_archive__switch_text {
   margin-left: 10px;
   color: var(--g3);
+}
+
+@media (max-width: 1024px) {
+  .material_archive__toolbar {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
 }
 
 @media (max-width: 768px) {

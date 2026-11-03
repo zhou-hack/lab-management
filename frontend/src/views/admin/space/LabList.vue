@@ -129,14 +129,6 @@
     <!-- 表格区 -->
     <div class="card space_list__table_card">
       <div class="space_list__toolbar">
-        <div>
-          <h2 class="t-title space_list__title">
-            场地档案
-          </h2>
-          <p class="t-sub">
-            教室/实训室建档与状态维护 · 开放时段为上海本地时间（不做时区转换）
-          </p>
-        </div>
         <div class="space_list__toolbar_actions">
           <el-button
             v-permission="'space:space:create'"
@@ -707,7 +699,7 @@ onMounted(() => {
 .space_list__toolbar {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   margin-bottom: 14px;
 }
@@ -726,11 +718,6 @@ onMounted(() => {
   margin-bottom: 12px;
   background: var(--surface-sunken, #f5f7fa);
   border-radius: 8px;
-}
-
-.space_list__title {
-  margin: 0 0 4px;
-  font-size: 18px;
 }
 
 .space_list__pager {

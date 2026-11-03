@@ -46,14 +46,6 @@
 
     <div class="card">
       <div class="claim_review__head">
-        <div>
-          <h2 class="t-title">
-            申领审核与实发
-          </h2>
-          <p class="t-sub">
-            完整申领可见；审核、实发和关闭操作以当前详情 canX 状态及权限为准
-          </p>
-        </div>
         <el-button
           :loading="loading"
           @click="loadData"
@@ -80,8 +72,33 @@
               >
                 {{ row.documentNo }}
               </el-button>
-              <span class="t-hint">ID {{ row.id }} · v{{ row.revisionNo }}</span>
+              <span class="t-hint">v{{ row.revisionNo }}</span>
             </div>
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="库位 / 父单关联"
+          min-width="200"
+        >
+          <template #default="{ row }">
+            <template v-if="row.claimKind === 'CHILD'">
+              <div>{{ row.locationName || row.locationId || '—' }}</div>
+              <div class="t-hint">
+                {{ row.locationCode || '库位子单' }}
+              </div>
+            </template>
+            <span
+              v-else-if="row.claimKind === 'ROOT'"
+              class="t-hint"
+            >
+              申领总单
+            </span>
+            <span
+              v-else
+              class="t-hint"
+            >
+              独立申领
+            </span>
           </template>
         </el-table-column>
         <el-table-column
@@ -308,11 +325,6 @@
             min-width="180"
           />
           <el-table-column
-            prop="document.id"
-            label="库存单据ID"
-            min-width="180"
-          />
-          <el-table-column
             label="类型"
             width="130"
           >
@@ -532,9 +544,7 @@ defineExpose({ reload: loadData })
 .claim_review__filters { margin-bottom: 16px; }
 .claim_review__filters :deep(.el-form-item) { margin-bottom: 0; }
 .claim_review__status { width: 150px; }
-.claim_review__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
-.claim_review__head h2 { margin: 0 0 5px; }
-.claim_review__head p { margin: 0; }
+.claim_review__head { display: flex; align-items: flex-start; justify-content: flex-end; gap: 16px; margin-bottom: 16px; }
 .claim_review__document { display: flex; flex-direction: column; align-items: flex-start; }
 .claim_review__pager { display: flex; justify-content: flex-end; margin-top: 16px; overflow-x: auto; }
 .claim_review__check_alert { margin-bottom: 12px; }

@@ -72,6 +72,7 @@ public class StockSettlementService {
     private final StockDocumentService documentService;
     private final ItemFlowService flowService;
     private final ItemTimeService timeService;
+    private final ItemDocumentNoService documentNoService;
     private final ItemLocationAccessService locationAccessService;
     private final TransferService transferService;
     private final MaterialQuantityValidator quantityValidator;
@@ -88,6 +89,7 @@ public class StockSettlementService {
                                   StockDocumentService documentService,
                                   ItemFlowService flowService,
                                   ItemTimeService timeService,
+                                  ItemDocumentNoService documentNoService,
                                   ItemLocationAccessService locationAccessService,
                                   TransferService transferService,
                                   MaterialQuantityValidator quantityValidator) {
@@ -103,6 +105,7 @@ public class StockSettlementService {
         this.documentService = documentService;
         this.flowService = flowService;
         this.timeService = timeService;
+        this.documentNoService = documentNoService;
         this.locationAccessService = locationAccessService;
         this.transferService = transferService;
         this.quantityValidator = quantityValidator;
@@ -517,7 +520,8 @@ public class StockSettlementService {
     private MaterialDocument createDocument(String type, Long operatorId, Long locationId,
                                             String idem, String remark, Instant now) {
         Long documentId = IdWorker.getId();
-        String documentNo = "IM" + documentId;
+        String documentNo = TYPE_SCRAP.equals(type)
+                ? documentNoService.nextDocumentNo("BF", now) : "IM" + documentId;
         SysUser operator = userMapper.selectById(operatorId);
         BizDocument shared = new BizDocument();
         shared.setId(IdWorker.getId());

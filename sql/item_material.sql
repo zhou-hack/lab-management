@@ -240,6 +240,10 @@ CREATE TABLE IF NOT EXISTS material_booking_plan_line (
 CREATE TABLE IF NOT EXISTS material_claim (
   id BIGINT NOT NULL COMMENT '申领ID及业务链ID',
   biz_document_id BIGINT NOT NULL COMMENT '共享单据ID',
+  business_chain_no VARCHAR(64) DEFAULT NULL COMMENT '新申领外部业务链编号（ALL+yyyyMMdd+5位随机数字），历史为NULL',
+  claim_kind VARCHAR(32) NOT NULL DEFAULT 'STANDALONE' COMMENT 'STANDALONE独立申领/ROOT拆分父单/CHILD库位子单',
+  parent_claim_id BIGINT DEFAULT NULL COMMENT '父申领ID，仅CHILD非空',
+  location_id BIGINT DEFAULT NULL COMMENT '子单所属库位ID，仅CHILD非空',
   applicant_id BIGINT NOT NULL COMMENT '申请教师',
   purpose VARCHAR(512) NOT NULL COMMENT '用途',
   booking_date DATE NOT NULL COMMENT '上海预约日期',
@@ -268,6 +272,9 @@ CREATE TABLE IF NOT EXISTS material_claim (
   update_user_id BIGINT DEFAULT NULL COMMENT '最后操作人，审计不建外键',
   PRIMARY KEY (id),
   UNIQUE KEY uk_material_claim_biz_document (biz_document_id),
+  KEY idx_material_claim_business_chain_no (business_chain_no),
+  UNIQUE KEY uk_material_claim_parent_location (parent_claim_id, location_id),
+  KEY idx_material_claim_location (location_id),
   KEY idx_material_claim_applicant (applicant_id, create_time),
   KEY idx_material_claim_status_time (status, booking_start_at, booking_end_at),
   KEY idx_material_claim_approved_by (approved_by),
@@ -275,6 +282,8 @@ CREATE TABLE IF NOT EXISTS material_claim (
   KEY idx_material_claim_closed_by (closed_by),
   KEY idx_material_claim_cancelled_by (cancelled_by),
   CONSTRAINT fk_material_claim_biz_document FOREIGN KEY (biz_document_id) REFERENCES biz_document (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT fk_material_claim_parent FOREIGN KEY (parent_claim_id) REFERENCES material_claim (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT fk_material_claim_location FOREIGN KEY (location_id) REFERENCES stock_location (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_material_claim_applicant FOREIGN KEY (applicant_id) REFERENCES sys_user (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_material_claim_start_period FOREIGN KEY (start_period_id) REFERENCES class_period (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_material_claim_end_period FOREIGN KEY (end_period_id) REFERENCES class_period (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
@@ -285,6 +294,11 @@ CREATE TABLE IF NOT EXISTS material_claim (
   CONSTRAINT chk_material_claim_window CHECK (booking_start_at < booking_end_at AND return_deadline >= booking_end_at),
   CONSTRAINT chk_material_claim_revision CHECK (revision_no >= 1),
   CONSTRAINT chk_material_claim_status CHECK (status IN ('PENDING', 'APPROVED', 'PARTIALLY_ISSUED', 'EXPIRED', 'CANCELLED', 'CLOSED', 'REJECTED')),
+  CONSTRAINT chk_material_claim_kind CHECK (claim_kind IN ('STANDALONE', 'ROOT', 'CHILD')),
+  CONSTRAINT chk_material_claim_split CHECK (
+    (claim_kind = 'CHILD' AND parent_claim_id IS NOT NULL AND location_id IS NOT NULL AND parent_claim_id <> id)
+    OR (claim_kind IN ('STANDALONE', 'ROOT') AND parent_claim_id IS NULL AND location_id IS NULL)
+  ),
   CONSTRAINT chk_material_claim_close_reason CHECK (close_reason IS NULL OR close_reason IN ('FULFILLED', 'ABANDONED')),
   CONSTRAINT chk_material_claim_deleted CHECK (deleted = 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='物料申领主表';

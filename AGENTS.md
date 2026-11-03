@@ -58,6 +58,24 @@
 - 初始数据：预置部门"设备处"（id=1）、4 个角色、管理员 `admin`（id=1）与运维管理员 `opsadmin`（id=2）（密码哈希均为占位值，部署前必须替换并强制首登修改）；权限与菜单初始数据由业务模块脚本按 `模块:资源:操作` 规范登记。
 - 权限标识规范 `模块:资源:操作`（如 `booking:lab:create`），前后端一致，登记在 `sys_permission`。
 
+### 公共业务编号矩阵
+
+| 业务场景 | 编号规则 |
+| --- | --- |
+| 申领 | 新数据使用 `SL+yyyyMMdd+5位随机数字` |
+| 库位子申领 | 在父申领单号末尾按子单创建顺序追加 `1、2、3…`，历史子单号不回填 |
+| 申领实发 | 新数据使用 `CK+yyyyMMdd+5位随机数字` |
+| 申领归还 | 新数据使用 `RK+yyyyMMdd+5位随机数字` |
+| 在库报废 | 新数据使用 `BF+yyyyMMdd+5位随机数字` |
+| 期初 | 新数据使用 `FSRK+yyyyMMdd+5位随机数字` |
+| 补货 | 新数据使用 `BH+yyyyMMdd+5位随机数字` |
+| 新申领外部业务链 | ROOT 使用 `ALL+yyyyMMdd+5位随机数字`，CHILD 继承 ROOT，同一父子组共享，存于 `material_claim.business_chain_no` |
+| 在库调整（ADJUST） | 保持 `IM+雪花ID` |
+| 库位移动及子单（TRANSFER*） | 新数据使用 `YD+yyyyMMdd+5位随机数字`，历史 `IM+雪花ID` 不回填 |
+
+- 新号只用于新数据；历史 ITC/IM 编号及数值业务链 ID 不回填、不改写，历史 `material_claim.business_chain_no` 保持 `NULL`。
+- 主键、共享 `biz_document.id/biz_document_id`、内部 `material_document.business_chain_id` 外键仍为 `BIGINT` 雪花数值，共享 `bizDocumentId` 保留。`ALL` 外部业务链编号不替代内部数值业务链外键或共享单据 ID，两类标识不能混用。
+
 ## 时间与 UTC
 
 - 页面展示、本地日历和业务日界线使用 `Asia/Shanghai`；JVM 使用 `-Duser.timezone=UTC`，容器时区也设 UTC。通过 UTC 时钟与显式 `ZoneId` 处理时间，不依赖系统或浏览器默认时区，不手动加减八小时。

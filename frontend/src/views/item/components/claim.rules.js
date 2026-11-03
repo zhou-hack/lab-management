@@ -6,6 +6,7 @@ export function buildClaimPayload(form, lines, allocations) {
     bookingDate: form.bookingDate,
     startPeriodId: String(form.startPeriodId),
     endPeriodId: String(form.endPeriodId),
+    periodIds: (form.periodIds || []).map((id) => String(id)),
     lines: lines.map((line) => ({
       materialId: String(line.materialId),
       requestedQuantity: Number(line.requestedQuantity)
@@ -22,6 +23,85 @@ export function buildClaimSubmissionPayload(mode, payload, { revisionNo, idempot
   return mode === 'edit'
     ? { ...payload, revisionNo }
     : { ...payload, idempotencyKey }
+}
+
+export function groupClaimAllocationsByLocation(allocations = []) {
+  const groups = new Map()
+  for (const allocation of allocations) {
+    const locationId = allocation.locationId === null || allocation.locationId === undefined
+      ? ''
+      : String(allocation.locationId)
+    if (!groups.has(locationId)) {
+      groups.set(locationId, {
+        locationId,
+        locationCode: allocation.locationCode || '',
+        locationName: allocation.locationName || '',
+        allocations: []
+      })
+    }
+    const group = groups.get(locationId)
+    if (!group.locationCode && allocation.locationCode) group.locationCode = allocation.locationCode
+    if (!group.locationName && allocation.locationName) group.locationName = allocation.locationName
+    group.allocations.push(allocation)
+  }
+  return [...groups.values()]
+}
+
+export function canReviewClaim(claim) {
+  return claim?.claimKind !== 'ROOT' && Boolean(claim?.canReview)
+}
+
+export function canIssueClaim(claim) {
+  return claim?.claimKind !== 'ROOT' && Boolean(claim?.canIssue)
+}
+
+export function getClaimIssueLocationId(claim, selectedLocationId = '') {
+  if (claim?.claimKind === 'CHILD') {
+    return claim.locationId === null || claim.locationId === undefined ? '' : String(claim.locationId)
+  }
+  return selectedLocationId === null || selectedLocationId === undefined ? '' : String(selectedLocationId)
+}
+
+export function toggleClaimPeriod(selectedPeriodNos, periodNo) {
+  const selected = new Set((selectedPeriodNos || []).map((item) => Number(item)))
+  const value = Number(periodNo)
+  if (selected.has(value)) selected.delete(value)
+  else selected.add(value)
+  return [...selected].sort((a, b) => a - b)
+}
+
+export function groupContiguousPeriods(selectedPeriodNos) {
+  const sorted = [...new Set((selectedPeriodNos || []).map((item) => Number(item)))]
+    .sort((a, b) => a - b)
+  const groups = []
+  for (const periodNo of sorted) {
+    const group = groups[groups.length - 1]
+    if (group && periodNo === group[group.length - 1] + 1) group.push(periodNo)
+    else groups.push([periodNo])
+  }
+  return groups
+}
+
+export function resolveClaimPeriodIds(detail, periods) {
+  const sortedPeriods = [...(periods || [])]
+    .sort((a, b) => Number(a.periodNo) - Number(b.periodNo))
+  const segments = detail?.segments?.length
+    ? detail.segments
+    : [{ startPeriodId: detail?.startPeriodId, endPeriodId: detail?.endPeriodId }]
+  const selectedIds = new Set()
+  for (const segment of segments) {
+    const start = sortedPeriods.find((period) => String(period.id) === String(segment.startPeriodId))
+    const end = sortedPeriods.find((period) => String(period.id) === String(segment.endPeriodId))
+    if (!start || !end) continue
+    for (const period of sortedPeriods) {
+      if (period.periodNo >= start.periodNo && period.periodNo <= end.periodNo) {
+        selectedIds.add(String(period.id))
+      }
+    }
+  }
+  return sortedPeriods
+    .filter((period) => selectedIds.has(String(period.id)))
+    .map((period) => String(period.id))
 }
 
 export function addClaimLine(lines, material, requestedQuantity) {

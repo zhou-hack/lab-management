@@ -100,17 +100,6 @@
 
     <!-- 表格区 -->
     <div class="card bk_admin__table_card">
-      <div class="bk_admin__toolbar">
-        <div>
-          <h2 class="t-title bk_admin__title">
-            全部预约
-          </h2>
-          <p class="t-sub">
-            时段按上海本地时间展示 · 管理员仅查看与审批：待审批项可批准/驳回，批准即时占用时段
-          </p>
-        </div>
-      </div>
-
       <el-table
         v-loading="loading"
         :data="records"
@@ -507,19 +496,6 @@ onMounted(() => {
   padding: 20px;
 }
 
-.bk_admin__toolbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.bk_admin__title {
-  margin: 0 0 4px;
-  font-size: 18px;
-}
-
 .bk_admin__space {
   font-weight: var(--fw-medium, 500);
 }
@@ -533,11 +509,6 @@ onMounted(() => {
 @media (max-width: 768px) {
   .bk_admin__stats {
     grid-template-columns: repeat(2, 1fr);
-  }
-
-  .bk_admin__toolbar {
-    flex-direction: column;
-    align-items: stretch;
   }
 
   .bk_admin__select,

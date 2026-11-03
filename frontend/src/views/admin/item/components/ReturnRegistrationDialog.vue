@@ -49,7 +49,7 @@
           class="return_dialog__alert"
         />
         <p class="t-sub return_dialog__hint">
-          默认按剩余数量全部回库；如有未归还物料，请调整回库数量。可多次归还，四类数量合计不得超过剩余量，消耗、丢失和损坏须分别填写原因。
+          默认按剩余数量全部回库；填写消耗、丢失或损坏后，回库数量会自动对应减少。可多次归还，四类数量合计不得超过剩余量，仅丢失和损坏须分别填写原因。
         </p>
         <el-table
           :data="forms"
@@ -62,18 +62,6 @@
                 label-position="top"
                 class="return_dialog__reasons"
               >
-                <el-form-item
-                  v-if="Number(row.consumedQuantity) > 0"
-                  label="教学消耗原因"
-                  required
-                >
-                  <el-input
-                    v-model="row.consumedReason"
-                    type="textarea"
-                    maxlength="512"
-                    show-word-limit
-                  />
-                </el-form-item>
                 <el-form-item
                   v-if="Number(row.lostQuantity) > 0"
                   label="丢失原因"
@@ -183,6 +171,7 @@
                 controls-position="right"
                 class="return_dialog__number"
                 :disabled="row.materialType === 'FIXED_ASSET'"
+                @change="syncReturnQuantity(row)"
               />
             </template>
           </el-table-column>
@@ -199,6 +188,7 @@
                 :step="1"
                 controls-position="right"
                 class="return_dialog__number"
+                @change="syncReturnQuantity(row)"
               />
             </template>
           </el-table-column>
@@ -215,6 +205,7 @@
                 :step="1"
                 controls-position="right"
                 class="return_dialog__number"
+                @change="syncReturnQuantity(row)"
               />
             </template>
           </el-table-column>
@@ -298,6 +289,12 @@ const formatTime = (value) => formatInstant(value) || '—'
 const hasAnyQuantity = (row) => ['returnQuantity', 'consumedQuantity', 'lostQuantity', 'damagedQuantity']
   .some((key) => Number(row[key]) > 0)
 
+function syncReturnQuantity(row) {
+  const settledQuantity = ['consumedQuantity', 'lostQuantity', 'damagedQuantity']
+    .reduce((sum, key) => sum + Number(row[key] || 0), 0)
+  row.returnQuantity = Math.max(Number(row.remainingQuantity || 0) - settledQuantity, 0)
+}
+
 watch(visible, (value) => {
   if (value) loadContext()
 })
@@ -328,7 +325,6 @@ async function loadContext() {
       consumedQuantity: 0,
       lostQuantity: 0,
       damagedQuantity: 0,
-      consumedReason: '',
       lostReason: '',
       damagedReason: '',
       positionText: line.sourcePositionText || ''
@@ -364,7 +360,7 @@ function validate(lines) {
       ElMessage.warning(`${row.materialName} 为固定资产，须逐台处理且不能教学消耗`)
       return false
     }
-    for (const [key, label] of [['consumed', '教学消耗'], ['lost', '丢失'], ['damaged', '损坏']]) {
+    for (const [key, label] of [['lost', '丢失'], ['damaged', '损坏']]) {
       if (Number(row[`${key}Quantity`]) > 0 && !row[`${key}Reason`]?.trim()) {
         ElMessage.warning(`请填写 ${row.materialName} 的${label}原因`)
         return false
@@ -381,7 +377,6 @@ async function submit() {
     consumedQuantity: Number(row.consumedQuantity || 0),
     lostQuantity: Number(row.lostQuantity || 0),
     damagedQuantity: Number(row.damagedQuantity || 0),
-    consumedReason: Number(row.consumedQuantity) > 0 ? row.consumedReason.trim() : undefined,
     lostReason: Number(row.lostQuantity) > 0 ? row.lostReason.trim() : undefined,
     damagedReason: Number(row.damagedQuantity) > 0 ? row.damagedReason.trim() : undefined,
     positionText: Number(row.returnQuantity) > 0 ? row.positionText || '' : undefined

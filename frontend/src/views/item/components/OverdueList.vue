@@ -1,14 +1,6 @@
 <template>
   <section class="card overdue_list">
     <div class="overdue_list__head">
-      <div>
-        <h3 class="overdue_list__title">
-          逾期归还
-        </h3>
-        <p class="t-sub">
-          这里只展示本人名下的逾期实发与归还记录，归还期限按上海时间展示。
-        </p>
-      </div>
       <el-button
         :loading="loading"
         @click="load"
@@ -339,20 +331,9 @@ onMounted(load)
 .overdue_list__head {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   margin-bottom: 16px;
-}
-
-.overdue_list__title {
-  margin: 0 0 5px;
-  font-size: 16px;
-  font-weight: var(--fw-semibold);
-  color: var(--g1);
-}
-
-.overdue_list__head p {
-  margin: 0;
 }
 
 .overdue_list__notice {

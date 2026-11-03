@@ -9,7 +9,7 @@ public class StockDocumentPageQuery extends ItemPageQuery {
     private String documentNo;
     private String documentType;
     private String businessScene;
-    private Long businessChainId;
+    private String businessChainId;
     private Long locationId;
     private Long operatorId;
 
@@ -25,8 +25,8 @@ public class StockDocumentPageQuery extends ItemPageQuery {
     public void setDocumentType(String documentType) { this.documentType = documentType; }
     public String getBusinessScene() { return businessScene; }
     public void setBusinessScene(String businessScene) { this.businessScene = businessScene; }
-    public Long getBusinessChainId() { return businessChainId; }
-    public void setBusinessChainId(Long businessChainId) { this.businessChainId = businessChainId; }
+    public String getBusinessChainId() { return businessChainId; }
+    public void setBusinessChainId(String businessChainId) { this.businessChainId = businessChainId; }
     public Long getLocationId() { return locationId; }
     public void setLocationId(Long locationId) { this.locationId = locationId; }
     public Long getOperatorId() { return operatorId; }

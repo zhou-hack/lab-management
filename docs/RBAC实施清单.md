@@ -105,6 +105,7 @@ OPS_ADMIN（运维管理员）为最高级预置运维角色，仅 SQL 预置不
 - 首页待办过滤：`GET /api/v1/item/admin/claims?managedOnly=true` 在原有 ADMIN 审核权限上，再按当前版本计划库位与当前用户的 `stock_location_admin` 关系过滤，供首页“待我处理”使用；未传该参数时仍返回原管理端申领分页，不改变既有行为。
 - 库存单据筛选：`GET /api/v1/item/documents` 支持 `businessChainId` 精确筛选，沿用 `item:document:list` 权限；前端以字符串提交完整雪花 ID，后端按 Long 精确匹配 `material_document.business_chain_id`。
 - 耗材库内位置编辑：`PUT /api/v1/item/balances/{id}/position` 复用 `item:stock:inbound` 权限并另校验当前用户为库存所属库位管理员；入参仅 `positionText/version`，数量、物料和所属库位不可通过该接口修改，目标位置已有同种耗材时返回 40900，版本失效时提示刷新。
+- 核销明细分页：`GET /api/v1/item/settlements` 复用 `item:document:list` 权限，按核销行跨单据分页，支持单据号、物料、核销类型、库位、复核状态和上海发生日期筛选；待复核与已驳回记录同样保留，响应以 `reviewStatus/postedAt` 区分未过账与已过账，不向教师、学生或 OPS_ADMIN 开放。
 
 ---
 

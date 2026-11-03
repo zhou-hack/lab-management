@@ -8,8 +8,10 @@
     />
     <div class="card consumable_stock__card">
       <div class="consumable_stock__toolbar">
-        <el-input
+        <el-autocomplete
           v-model="query.materialName"
+          :fetch-suggestions="fetchMaterialNameSuggestions"
+          :debounce="300"
           placeholder="耗材名称"
           clearable
           class="consumable_stock__name"
@@ -197,7 +199,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import ItemLocationSelect from '@/components/item/ItemLocationSelect.vue'
 import ItemQuantityText from '@/components/item/ItemQuantityText.vue'
@@ -213,6 +215,38 @@ const positionDialogVisible = ref(false)
 const positionSaving = ref(false)
 const editingRow = ref(null)
 const positionText = ref('')
+let materialNameSuggestionSerial = 0
+
+async function fetchMaterialNameSuggestions(keyword, callback) {
+  const serial = ++materialNameSuggestionSerial
+  const snapshot = { ...query }
+  const trimmedKeyword = keyword.trim()
+  if (!trimmedKeyword) {
+    callback([])
+    return
+  }
+  try {
+    const result = await getBalances({
+      pageNum: 1,
+      pageSize: 100,
+      materialName: trimmedKeyword,
+      locationId: snapshot.locationId || undefined
+    })
+    const queryUnchanged = ['materialName', 'locationId']
+      .every((key) => snapshot[key] === query[key])
+    if (serial !== materialNameSuggestionSerial || !queryUnchanged) return
+    const suggestions = [...new Set(
+      (result?.records || []).map((record) => record.materialName?.trim()).filter(Boolean)
+    )].slice(0, 10).map((value) => ({ value }))
+    callback(suggestions)
+  } catch {
+    if (serial === materialNameSuggestionSerial) callback([])
+  }
+}
+
+function invalidateMaterialNameSuggestions() {
+  materialNameSuggestionSerial += 1
+}
 
 function openPositionDialog(row) {
   editingRow.value = row
@@ -257,11 +291,13 @@ async function loadData() {
 }
 
 function search() {
+  invalidateMaterialNameSuggestions()
   query.pageNum = 1
   loadData()
 }
 
 function reset() {
+  invalidateMaterialNameSuggestions()
   Object.assign(query, { materialName: '', locationId: '', pageNum: 1, pageSize: 20 })
   loadData()
 }
@@ -272,6 +308,7 @@ function onSizeChange() {
 }
 
 onMounted(loadData)
+onBeforeUnmount(invalidateMaterialNameSuggestions)
 </script>
 
 <style scoped>
@@ -295,7 +332,10 @@ onMounted(loadData)
   flex-shrink: 0;
 }
 
-.consumable_stock__name,
+.consumable_stock__toolbar > :deep(.consumable_stock__name) {
+  width: 140px;
+}
+
 .consumable_stock__location {
   width: 200px;
 }

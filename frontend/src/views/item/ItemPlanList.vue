@@ -1,14 +1,6 @@
 <template>
   <div class="plan_list">
     <div class="plan_list__head">
-      <div>
-        <h2 class="t-title plan_list__title">
-          我的物料预设方案
-        </h2>
-        <p class="t-sub">
-          维护常用物料及默认数量，申领时可一键载入后重新选择日期、节次和计划分配。
-        </p>
-      </div>
       <el-button
         type="primary"
         @click="openCreate"
@@ -113,9 +105,6 @@
           <template #default="{ row }">
             <div class="plan_list__name">
               {{ row.planName }}
-            </div>
-            <div class="t-hint">
-              方案 ID：{{ row.id }}
             </div>
           </template>
         </el-table-column>
@@ -319,13 +308,8 @@ onMounted(load)
 .plan_list__head {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
-}
-
-.plan_list__title {
-  margin: 0 0 5px;
-  font-size: 21px;
 }
 
 .plan_list__card {

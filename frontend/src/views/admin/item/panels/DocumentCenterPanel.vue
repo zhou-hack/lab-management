@@ -17,7 +17,7 @@
           <el-input
             v-model="query.businessChainId"
             clearable
-            placeholder="输入完整业务链ID"
+            placeholder="ALL业务链号或历史数值ID"
             class="document_center__chain"
             @keyup.enter="search"
           />
@@ -84,14 +84,6 @@
 
     <div class="card">
       <div class="document_center__head">
-        <div>
-          <h2 class="t-title">
-            出入库与移动子单
-          </h2>
-          <p class="t-sub">
-            期初、补货、申领出入库、移动接收/退回/核销及在库核销单据；详情保留业务链与每单独立 ID
-          </p>
-        </div>
         <el-button
           :loading="loading"
           @click="loadData"
@@ -118,7 +110,7 @@
               >
                 {{ row.documentNo }}
               </el-button>
-              <span class="t-hint">ID {{ row.id }} · 序号 {{ row.documentSeq ?? '—' }}</span>
+              <span class="t-hint">序号 {{ row.documentSeq ?? '—' }}</span>
             </div>
           </template>
         </el-table-column>
@@ -340,9 +332,7 @@ defineExpose({ reload: loadData })
 .document_center__chain { width: 210px; }
 .document_center__scene { width: 160px; }
 .document_center__location { width: 200px; }
-.document_center__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
-.document_center__head h2 { margin: 0 0 5px; }
-.document_center__head p { margin: 0; }
+.document_center__head { display: flex; align-items: flex-start; justify-content: flex-end; gap: 16px; margin-bottom: 16px; }
 .document_center__document, .document_center__type { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .document_center__return_status { display: block; margin-top: 4px; }
 .document_center__pager { display: flex; justify-content: flex-end; margin-top: 16px; overflow-x: auto; }

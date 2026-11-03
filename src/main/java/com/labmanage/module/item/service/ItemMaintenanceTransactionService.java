@@ -37,6 +37,7 @@ public class ItemMaintenanceTransactionService {
     private final MaterialNotificationMapper notificationMapper;
     private final StockLocationAdminMapper locationAdminMapper;
     private final ReservationService reservationService;
+    private final ClaimGroupService groupService;
     private final ItemFlowService flowService;
     private final ItemTimeService timeService;
     private final NotificationService notificationService;
@@ -47,6 +48,7 @@ public class ItemMaintenanceTransactionService {
                                              MaterialNotificationMapper notificationMapper,
                                              StockLocationAdminMapper locationAdminMapper,
                                              ReservationService reservationService,
+                                             ClaimGroupService groupService,
                                              ItemFlowService flowService,
                                              ItemTimeService timeService,
                                              NotificationService notificationService) {
@@ -56,6 +58,7 @@ public class ItemMaintenanceTransactionService {
         this.notificationMapper = notificationMapper;
         this.locationAdminMapper = locationAdminMapper;
         this.reservationService = reservationService;
+        this.groupService = groupService;
         this.flowService = flowService;
         this.timeService = timeService;
         this.notificationService = notificationService;
@@ -64,8 +67,8 @@ public class ItemMaintenanceTransactionService {
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class,
             isolation = Isolation.READ_COMMITTED)
     public int expireOne(Long claimId, Instant now) {
-        MaterialClaim claim = claimMapper.selectByIdForUpdate(claimId);
-        if (claim == null || !isExpirable(claim, now) || hasOutbound(claimId)) {
+        MaterialClaim claim = groupService.requireClaimForUpdate(claimId);
+        if (!isExpirable(claim, now) || hasOutbound(claimId)) {
             return 0;
         }
         ClaimStatus previousStatus = claim.getStatus();
@@ -97,6 +100,7 @@ public class ItemMaintenanceTransactionService {
         event.setDeleted(0);
         event.setRequestKey("ITEM_CLAIM:" + claimId + ":" + claim.getRevisionNo() + ":EXPIRE");
         flowService.appendEvent(event);
+        groupService.syncParentStatus(claim, null);
         return 1;
     }
 

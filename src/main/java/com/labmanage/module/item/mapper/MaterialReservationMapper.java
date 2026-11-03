@@ -21,6 +21,11 @@ public interface MaterialReservationMapper extends BaseMapper<MaterialReservatio
               AND reservation_start_at &lt; #{endAt} AND reservation_end_at &gt; #{startAt}
             <if test="excludeClaimId != null">
               AND claim_id &lt;&gt; #{excludeClaimId}
+              AND NOT EXISTS (
+                  SELECT 1 FROM material_claim excluded_claim
+                  WHERE excluded_claim.id = material_reservation.claim_id
+                    AND excluded_claim.parent_claim_id = #{excludeClaimId}
+              )
             </if>
             ORDER BY location_id ASC, id ASC
             </script>

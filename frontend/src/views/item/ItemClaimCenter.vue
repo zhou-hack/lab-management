@@ -1,14 +1,6 @@
 <template>
   <div class="claim_center">
     <div class="claim_center__head">
-      <div>
-        <h2 class="t-title claim_center__title">
-          我的物料申领
-        </h2>
-        <p class="t-sub">
-          管理本人申领与助理授权、查看三单业务链，并跟踪待归还与已归还的逾期记录。
-        </p>
-      </div>
       <div class="claim_center__actions">
         <el-button @click="goToPlans">
           我的预设方案
@@ -95,9 +87,6 @@
                 >
                   {{ row.documentNo || row.id }}
                 </el-button>
-                <div class="t-hint">
-                  ID：{{ row.id }}
-                </div>
               </template>
             </el-table-column>
             <el-table-column
@@ -228,10 +217,11 @@
     <ClaimDetailDrawer
       v-model="detailVisible"
       :claim-id="detailId"
-      @close="detailVisible = false"
+      @close="closeDetail"
       @edit="openEdit"
       @rebook="openRebook"
       @changed="loadClaims"
+      @view-child="openChildDetail"
     />
   </div>
 </template>
@@ -266,6 +256,7 @@ const formClaimId = ref('')
 const formPlanId = ref('')
 const detailVisible = ref(false)
 const detailId = ref('')
+const detailParentId = ref('')
 
 const activeTab = computed({
   get: () => ['overdues', 'assistants'].includes(route.query.tab) ? route.query.tab : 'claims',
@@ -342,8 +333,25 @@ function openRebook(detail) {
 }
 
 function openDetail(id) {
+  detailParentId.value = ''
   detailId.value = String(id)
   detailVisible.value = true
+}
+
+function openChildDetail(id, parentId) {
+  detailParentId.value = String(parentId)
+  detailId.value = String(id)
+  detailVisible.value = true
+}
+
+function closeDetail() {
+  if (detailParentId.value) {
+    detailId.value = detailParentId.value
+    detailParentId.value = ''
+    detailVisible.value = true
+    return
+  }
+  detailVisible.value = false
 }
 
 function onClaimSaved() {
@@ -390,13 +398,8 @@ onMounted(() => {
 .claim_center__head {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
-}
-
-.claim_center__title {
-  margin: 0 0 5px;
-  font-size: 21px;
 }
 
 .claim_center__actions {

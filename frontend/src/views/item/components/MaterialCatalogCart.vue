@@ -8,7 +8,7 @@
         <p class="t-hint">
           {{ mode === 'plan'
             ? '从耗材或固定资产目录选择物料并填写默认数量；同一物料重复添加会自动合并数量。'
-            : '按当前预约日期与节次查询预计可约量；同一物料重复添加会自动合并数量。' }}
+            : '按当前预约日期与节次查询预计可约量；直接填写申请数量即可加入申领，清空数量可移除。' }}
         </p>
       </div>
     </div>
@@ -113,10 +113,12 @@
             :disabled="!canAdd(row)"
             placeholder="数量"
             class="material_catalog__number"
+            @update:model-value="handleQuantityInput(row, $event)"
           />
         </template>
       </el-table-column>
       <el-table-column
+        v-if="mode === 'plan'"
         label="操作"
         width="75"
         fixed="right"
@@ -154,7 +156,9 @@
           购物车
         </h4>
         <p class="t-hint">
-          可继续修改或删除物料；所有物料数量必须为整数，保存时不能为空。
+          {{ mode === 'plan'
+            ? '可继续修改或删除物料；所有物料数量必须为整数，保存时不能为空。'
+            : '申请数量已自动带入，可继续修改或删除；所有物料数量必须为整数。' }}
         </p>
       </div>
       <span class="t-hint">已选 {{ modelValue.length }} 项</span>
@@ -164,9 +168,9 @@
         :model-value="modelValue"
         :quantity-field="cartQuantityField"
         :quantity-label="quantityLabel"
+        :allow-add="mode === 'plan'"
         allow-empty
-        @update:model-value="emit('update:modelValue', $event)"
-        @change="emit('change', $event)"
+        @update:model-value="updateLinesFromEditor"
       />
     </div>
   </div>
@@ -177,7 +181,7 @@ import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import ItemQuantityText from '@/components/item/ItemQuantityText.vue'
 import MaterialLinesEditor from './MaterialLinesEditor.vue'
-import { addMaterialLine } from './materialCart.rules'
+import { addMaterialLine, normalizeClaimDraftLines, setMaterialQuantity } from './materialCart.rules'
 
 const props = defineProps({
   mode: {
@@ -189,7 +193,8 @@ const props = defineProps({
   loadCatalog: { type: Function, required: true },
   active: { type: Boolean, default: true },
   refreshKey: { type: [String, Number], default: '' },
-  quantityField: { type: String, default: '' }
+  quantityField: { type: String, default: '' },
+  draftKey: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
@@ -208,6 +213,29 @@ let catalogSerial = 0
 const cartQuantityField = computed(() => props.quantityField
   || (props.mode === 'plan' ? 'defaultQuantity' : 'requestedQuantity'))
 const quantityLabel = computed(() => props.mode === 'plan' ? '默认数量' : '申请数量')
+
+function readDraftLines() {
+  if (props.mode !== 'claim' || !props.draftKey || props.modelValue.length) return
+  try {
+    const saved = JSON.parse(globalThis.localStorage.getItem(props.draftKey) || '[]')
+    const lines = normalizeClaimDraftLines(saved)
+    if (lines.length) emit('update:modelValue', lines)
+  } catch {
+    globalThis.localStorage.removeItem(props.draftKey)
+  }
+}
+
+function emitLines(lines) {
+  if (props.mode === 'claim' && props.draftKey) {
+    globalThis.localStorage.setItem(props.draftKey, JSON.stringify(normalizeClaimDraftLines(lines)))
+  }
+  emit('update:modelValue', lines)
+  emit('change', lines)
+}
+
+function updateLinesFromEditor(lines) {
+  emitLines(lines)
+}
 
 function resetCatalog() {
   catalogType.value = 'CONSUMABLE'
@@ -239,7 +267,10 @@ async function reload() {
     }))
     catalogRecords.value = records
     catalogTotal.value = Number(result?.total) || 0
-    catalogDrafts.value = Object.fromEntries(records.map((record) => [record.materialId, null]))
+    catalogDrafts.value = Object.fromEntries(records.map((record) => {
+      const line = props.modelValue.find((item) => String(item.materialId) === record.materialId)
+      return [record.materialId, line ? line[cartQuantityField.value] : null]
+    }))
   } catch (error) {
     if (serial !== catalogSerial || !props.active) return
     catalogRecords.value = []
@@ -260,6 +291,26 @@ function canAdd(material) {
   return props.mode === 'plan' || Number(material.availableQuantity) > 0
 }
 
+function handleQuantityInput(material, value) {
+  if (props.mode !== 'claim') return
+  const result = setMaterialQuantity(
+    props.modelValue,
+    material,
+    value,
+    { mode: props.mode, quantityField: cartQuantityField.value }
+  )
+  if (result.error) {
+    ElMessage.warning(result.error)
+    const line = props.modelValue.find((item) => String(item.materialId) === String(material.materialId))
+    catalogDrafts.value[material.materialId] = line ? line[cartQuantityField.value] : null
+    return
+  }
+  catalogDrafts.value[material.materialId] = value === null || value === undefined || value === ''
+    ? null
+    : Number(value)
+  emitLines(result.lines)
+}
+
 function addToCart(material) {
   const result = addMaterialLine(
     props.modelValue,
@@ -271,8 +322,7 @@ function addToCart(material) {
     ElMessage.warning(result.error)
     return
   }
-  emit('update:modelValue', result.lines)
-  emit('change', result.lines)
+  emitLines(result.lines)
   catalogDrafts.value[material.materialId] = null
 }
 
@@ -281,7 +331,10 @@ watch(
   (active) => {
     catalogSerial += 1
     resetCatalog()
-    if (active) reload()
+    if (active) {
+      readDraftLines()
+      reload()
+    }
   },
   { immediate: true }
 )

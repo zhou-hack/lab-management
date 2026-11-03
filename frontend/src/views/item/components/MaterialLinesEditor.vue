@@ -46,7 +46,10 @@
       </el-button>
     </div>
 
-    <div class="material_lines__footer">
+    <div
+      v-if="allowAdd"
+      class="material_lines__footer"
+    >
       <el-button
         :disabled="disabled"
         @click="addLine"
@@ -66,7 +69,8 @@ const props = defineProps({
   quantityField: { type: String, default: 'requestedQuantity' },
   quantityLabel: { type: String, default: '申请数量' },
   disabled: { type: Boolean, default: false },
-  allowEmpty: { type: Boolean, default: false }
+  allowEmpty: { type: Boolean, default: false },
+  allowAdd: { type: Boolean, default: true }
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])

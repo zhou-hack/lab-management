@@ -30,15 +30,18 @@ import com.labmanage.module.item.entity.Material;
 import com.labmanage.module.item.entity.MaterialClaim;
 import com.labmanage.module.item.entity.MaterialClaimAllocation;
 import com.labmanage.module.item.entity.MaterialClaimLine;
+import com.labmanage.module.item.entity.MaterialClaimSegment;
 import com.labmanage.module.item.entity.MaterialNotification;
 import com.labmanage.module.item.entity.MaterialReservation;
 import com.labmanage.module.item.entity.StockLocation;
 import com.labmanage.module.item.entity.StockLocationAdmin;
+import com.labmanage.module.item.enums.ClaimKind;
 import com.labmanage.module.item.enums.ClaimStatus;
 import com.labmanage.module.item.enums.PickupMode;
 import com.labmanage.module.item.mapper.MaterialClaimAllocationMapper;
 import com.labmanage.module.item.mapper.MaterialClaimLineMapper;
 import com.labmanage.module.item.mapper.MaterialClaimMapper;
+import com.labmanage.module.item.mapper.MaterialClaimSegmentMapper;
 import com.labmanage.module.item.mapper.MaterialDocumentLineMapper;
 import com.labmanage.module.item.mapper.MaterialMapper;
 import com.labmanage.module.item.mapper.FixedAssetMapper;
@@ -52,8 +55,11 @@ import com.labmanage.module.item.vo.ClaimAllocationVO;
 import com.labmanage.module.item.vo.ClaimDetailVO;
 import com.labmanage.module.item.vo.ClaimDocumentChainVO;
 import com.labmanage.module.item.vo.ClaimLineVO;
+import com.labmanage.module.item.vo.ClaimPlannedAllocationVO;
+import com.labmanage.module.item.vo.ClaimPreviewLineVO;
 import com.labmanage.module.item.vo.ClaimPreviewVO;
 import com.labmanage.module.item.vo.ClaimReservationVO;
+import com.labmanage.module.item.vo.ClaimSegmentVO;
 import com.labmanage.module.item.vo.ClaimShortageVO;
 import com.labmanage.module.item.vo.ClaimSummaryVO;
 import com.labmanage.module.item.vo.ClaimTemplateLineVO;
@@ -98,6 +104,7 @@ public class ClaimService {
 
     private final MaterialClaimMapper claimMapper;
     private final MaterialClaimLineMapper lineMapper;
+    private final MaterialClaimSegmentMapper segmentMapper;
     private final MaterialClaimAllocationMapper allocationMapper;
     private final MaterialDocumentLineMapper documentLineMapper;
     private final MaterialMapper materialMapper;
@@ -105,9 +112,11 @@ public class ClaimService {
     private final FixedAssetMapper assetMapper;
     private final SysUserMapper userMapper;
     private final ClaimPlanService planService;
+    private final ClaimGroupService groupService;
     private final ReservationService reservationService;
     private final ItemFlowService flowService;
     private final ItemTimeService timeService;
+    private final ItemDocumentNoService documentNoService;
     private final ItemLocationAccessService locationAccessService;
     private final StockDocumentService stockDocumentService;
     private final AssistantGrantService assistantGrantService;
@@ -116,6 +125,7 @@ public class ClaimService {
 
     public ClaimService(MaterialClaimMapper claimMapper,
                         MaterialClaimLineMapper lineMapper,
+                        MaterialClaimSegmentMapper segmentMapper,
                         MaterialClaimAllocationMapper allocationMapper,
                         MaterialDocumentLineMapper documentLineMapper,
                         MaterialMapper materialMapper,
@@ -123,9 +133,11 @@ public class ClaimService {
                         FixedAssetMapper assetMapper,
                         SysUserMapper userMapper,
                         ClaimPlanService planService,
+                        ClaimGroupService groupService,
                         ReservationService reservationService,
                         ItemFlowService flowService,
                         ItemTimeService timeService,
+                        ItemDocumentNoService documentNoService,
                         ItemLocationAccessService locationAccessService,
                         StockDocumentService stockDocumentService,
                         AssistantGrantService assistantGrantService,
@@ -133,6 +145,7 @@ public class ClaimService {
                         NotificationService notificationService) {
         this.claimMapper = claimMapper;
         this.lineMapper = lineMapper;
+        this.segmentMapper = segmentMapper;
         this.allocationMapper = allocationMapper;
         this.documentLineMapper = documentLineMapper;
         this.materialMapper = materialMapper;
@@ -140,9 +153,11 @@ public class ClaimService {
         this.assetMapper = assetMapper;
         this.userMapper = userMapper;
         this.planService = planService;
+        this.groupService = groupService;
         this.reservationService = reservationService;
         this.flowService = flowService;
         this.timeService = timeService;
+        this.documentNoService = documentNoService;
         this.locationAccessService = locationAccessService;
         this.stockDocumentService = stockDocumentService;
         this.assistantGrantService = assistantGrantService;
@@ -151,7 +166,7 @@ public class ClaimService {
     }
 
     public PageResult<ClaimSummaryVO> pageMine(ClaimPageQuery query) {
-        return page(query, SecurityUtils.currentUserId());
+        return page(query, SecurityUtils.currentUserId(), Set.of(), true);
     }
 
     public PageResult<ClaimAvailabilityVO> availability(ClaimAvailabilityQuery query) {
@@ -192,7 +207,8 @@ public class ClaimService {
                 && !SecurityUtils.hasPermission("item:claim:review")) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "申领单不存在");
         }
-        return new ClaimDocumentChainVO(str(id), str(id), stockDocumentService.listClaimDocuments(id));
+        return new ClaimDocumentChainVO(str(id), ItemDocumentNoService.displayBusinessChainId(claim),
+                stockDocumentService.listClaimDocuments(groupService.documentClaimIds(claim)));
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -206,7 +222,7 @@ public class ClaimService {
 
         ClaimPreviewVO preview = planService.preview(toPreviewDTO(
                 dto.purpose(), dto.bookingDate(), dto.startPeriodId(), dto.endPeriodId(),
-                dto.lines(), dto.allocations()));
+                dto.lines(), dto.allocations(), dto.periodIds()));
         requireNoShortages(preview);
 
         Instant now = timeService.now();
@@ -214,7 +230,7 @@ public class ClaimService {
         SysUser applicant = userMapper.selectById(applicantId);
         BizDocument shared = new BizDocument();
         shared.setId(IdWorker.getId());
-        shared.setDocumentNo("ITC" + claimId);
+        shared.setDocumentNo(documentNoService.nextDocumentNo("SL", now));
         shared.setDocumentType(DOCUMENT_TYPE);
         shared.setOwnerUserId(applicantId);
         shared.setDepartmentId(applicant == null || applicant.getDepartmentId() == null
@@ -235,18 +251,72 @@ public class ClaimService {
         MaterialClaim claim = new MaterialClaim();
         claim.setId(claimId);
         claim.setBizDocumentId(persistedShared.getId());
+        claim.setBusinessChainNo(documentNoService.nextBusinessChainNo(now));
         claim.setApplicantId(applicantId);
         claim.setPurpose(dto.purpose().trim());
         applySnapshot(claim, preview.bookingSnapshot());
         claim.setStatus(ClaimStatus.PENDING);
         claim.setPickupMode(PickupMode.SELF);
         claim.setRevisionNo(1);
+        claim.setClaimKind(ClaimKind.ROOT);
         claimMapper.insert(claim);
         insertVersionRows(claim, preview);
-
-        ApprovalTask task = createReviewTask(claim, 1, now);
-        appendEvent(claim, null, ClaimStatus.PENDING, "SUBMIT", task.getId(), null, now);
+        appendEvent(claim, null, ClaimStatus.PENDING, "SUBMIT", null, null, now);
+        createLocationChildren(claim, preview, now);
         return buildDetail(claim);
+    }
+
+    private void createLocationChildren(MaterialClaim root, ClaimPreviewVO preview, Instant now) {
+        Map<Long, List<ClaimPlannedAllocationVO>> allocationsByLocation = preview.allocations().stream()
+                .collect(Collectors.groupingBy(allocation -> Ids.parse(allocation.locationId()),
+                        LinkedHashMap::new, Collectors.toList()));
+        allocationsByLocation.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> createLocationChild(root, preview, entry.getKey(), entry.getValue(), now));
+    }
+
+    private void createLocationChild(MaterialClaim root, ClaimPreviewVO rootPreview, Long locationId,
+                                     List<ClaimPlannedAllocationVO> locationAllocations, Instant now) {
+        SysUser applicant = userMapper.selectById(root.getApplicantId());
+        BizDocument shared = new BizDocument();
+        shared.setId(IdWorker.getId());
+        String rootDocumentNo = flowService.findDocumentById(root.getBizDocumentId()).getDocumentNo();
+        int childSequence = groupService.allChildren(root).size() + 1;
+        shared.setDocumentNo(rootDocumentNo + childSequence);
+        shared.setDocumentType(DOCUMENT_TYPE);
+        shared.setOwnerUserId(root.getApplicantId());
+        shared.setDepartmentId(applicant == null || applicant.getDepartmentId() == null
+                ? DEFAULT_DEPARTMENT_ID : applicant.getDepartmentId());
+        shared.setSubmittedAt(now);
+        shared.setIdempotencyKey(root.getId() + ":" + locationId + ":" + root.getRevisionNo());
+        BizDocument persistedShared = flowService.createDocumentByOwnerIdempotency(shared);
+
+        MaterialClaim child = new MaterialClaim();
+        child.setId(IdWorker.getId());
+        child.setBizDocumentId(persistedShared.getId());
+        child.setBusinessChainNo(root.getBusinessChainNo());
+        child.setApplicantId(root.getApplicantId());
+        child.setPurpose(root.getPurpose());
+        child.setBookingDate(root.getBookingDate());
+        child.setStartPeriodId(root.getStartPeriodId());
+        child.setEndPeriodId(root.getEndPeriodId());
+        child.setBookingStartAt(root.getBookingStartAt());
+        child.setBookingEndAt(root.getBookingEndAt());
+        child.setReturnDeadline(root.getReturnDeadline());
+        child.setStatus(ClaimStatus.PENDING);
+        child.setPickupMode(root.getPickupMode());
+        child.setDelegateStudentId(root.getDelegateStudentId());
+        child.setDelegateGrantId(root.getDelegateGrantId());
+        child.setDelegatedAt(root.getDelegatedAt());
+        child.setRevisionNo(root.getRevisionNo());
+        child.setClaimKind(ClaimKind.CHILD);
+        child.setParentClaimId(root.getId());
+        child.setLocationId(locationId);
+        claimMapper.insert(child);
+
+        insertVersionRows(child, buildChildPreview(rootPreview, locationAllocations));
+        ApprovalTask task = createReviewTask(child, child.getRevisionNo(), now);
+        appendEvent(child, null, ClaimStatus.PENDING, "SUBMIT", task.getId(), null, now);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -254,6 +324,12 @@ public class ClaimService {
         Long operatorId = SecurityUtils.currentUserId();
         MaterialClaim claim = requireOwnedClaimForUpdate(id, operatorId);
         requireRevision(claim, dto.revisionNo());
+        if (groupService.isChild(claim)) {
+            throw conflict("请通过总申领单修改整组申领");
+        }
+        if (groupService.isRoot(claim)) {
+            return updateRootGroup(claim, dto, operatorId);
+        }
         if (hasOutbound(id)) {
             throw conflict("已产生出库行，禁止修改申领");
         }
@@ -268,7 +344,7 @@ public class ClaimService {
 
         ClaimPreviewVO preview = planService.preview(toPreviewDTO(
                 dto.purpose(), dto.bookingDate(), dto.startPeriodId(), dto.endPeriodId(),
-                dto.lines(), dto.allocations()), id);
+                dto.lines(), dto.allocations(), dto.periodIds()), id);
         requireNoShortages(preview);
         if (timeService.now().isAfter(claim.getBookingEndAt())) {
             throw conflict("预约已过期，禁止修改申领");
@@ -307,10 +383,157 @@ public class ClaimService {
         return buildDetail(updated);
     }
 
+    private ClaimDetailVO updateRootGroup(MaterialClaim root, ClaimUpdateDTO dto, Long operatorId) {
+        if (groupService.hasOutbound(root)) {
+            throw conflict("已产生出库行，禁止修改整组申领");
+        }
+        ClaimStatus previousStatus = root.getStatus();
+        if (previousStatus != ClaimStatus.PENDING && previousStatus != ClaimStatus.APPROVED) {
+            throw conflict("当前状态不可修改申领");
+        }
+        Instant now = timeService.now();
+        if (now.isAfter(root.getBookingEndAt())) {
+            throw conflict("预约已过期，禁止修改申领");
+        }
+        ClaimPreviewVO preview = planService.preview(toPreviewDTO(
+                dto.purpose(), dto.bookingDate(), dto.startPeriodId(), dto.endPeriodId(),
+                dto.lines(), dto.allocations(), dto.periodIds()), root.getId());
+        requireNoShortages(preview);
+
+        List<MaterialClaim> oldChildren = groupService.currentChildren(root);
+        for (MaterialClaim child : oldChildren) {
+            reservationService.releaseForClaim(child.getId(), operatorId);
+            flowService.cancelOpenTasks(child.getBizDocumentId(), operatorId, "修改后重新审核");
+        }
+        int newRevision = root.getRevisionNo() + 1;
+        BookingTimeSnapshotVO snapshot = preview.bookingSnapshot();
+        int rows = claimMapper.update(null, Wrappers.<MaterialClaim>lambdaUpdate()
+                .eq(MaterialClaim::getId, root.getId())
+                .eq(MaterialClaim::getRevisionNo, dto.revisionNo())
+                .in(MaterialClaim::getStatus, ClaimStatus.PENDING, ClaimStatus.APPROVED)
+                .set(MaterialClaim::getPurpose, dto.purpose().trim())
+                .set(MaterialClaim::getBookingDate, snapshot.bookingDate())
+                .set(MaterialClaim::getStartPeriodId, Ids.parse(snapshot.startPeriodId()))
+                .set(MaterialClaim::getEndPeriodId, Ids.parse(snapshot.endPeriodId()))
+                .set(MaterialClaim::getBookingStartAt, snapshot.bookingStartAt())
+                .set(MaterialClaim::getBookingEndAt, snapshot.bookingEndAt())
+                .set(MaterialClaim::getReturnDeadline, snapshot.returnDeadline())
+                .set(MaterialClaim::getStatus, ClaimStatus.PENDING)
+                .set(MaterialClaim::getRevisionNo, newRevision)
+                .set(MaterialClaim::getApprovedBy, null)
+                .set(MaterialClaim::getApprovedAt, null)
+                .set(MaterialClaim::getRejectReason, null)
+                .set(MaterialClaim::getUpdateTime, now)
+                .set(MaterialClaim::getUpdateUserId, operatorId));
+        if (rows != 1) {
+            throw conflict("申领已变化，请刷新后重试");
+        }
+        MaterialClaim updatedRoot = requireClaim(root.getId());
+        insertVersionRows(updatedRoot, preview);
+
+        Map<Long, MaterialClaim> oldByLocation = groupService.allChildren(updatedRoot).stream()
+                .collect(Collectors.toMap(MaterialClaim::getLocationId, java.util.function.Function.identity()));
+        Map<Long, List<ClaimPlannedAllocationVO>> allocationsByLocation = preview.allocations().stream()
+                .collect(Collectors.groupingBy(allocation -> Ids.parse(allocation.locationId()),
+                        LinkedHashMap::new, Collectors.toList()));
+        allocationsByLocation.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+            MaterialClaim existing = oldByLocation.remove(entry.getKey());
+            if (existing == null) {
+                createLocationChild(updatedRoot, preview, entry.getKey(), entry.getValue(), now);
+            } else {
+                reviseLocationChild(existing, updatedRoot, preview, entry.getValue(), operatorId, now);
+            }
+        });
+        for (MaterialClaim removed : oldByLocation.values()) {
+            if (removed.getStatus() == ClaimStatus.CANCELLED) {
+                continue;
+            }
+            Instant cancelledAt = timeService.now();
+            claimMapper.update(null, Wrappers.<MaterialClaim>lambdaUpdate()
+                    .eq(MaterialClaim::getId, removed.getId())
+                    .eq(MaterialClaim::getRevisionNo, removed.getRevisionNo())
+                    .set(MaterialClaim::getStatus, ClaimStatus.CANCELLED)
+                    .set(MaterialClaim::getCancelledBy, operatorId)
+                    .set(MaterialClaim::getCancelledAt, cancelledAt)
+                    .set(MaterialClaim::getUpdateTime, cancelledAt)
+                    .set(MaterialClaim::getUpdateUserId, operatorId));
+            appendEvent(removed, removed.getStatus(), ClaimStatus.CANCELLED, "CANCEL", null, "修改后移出库位", cancelledAt);
+        }
+        appendEvent(updatedRoot, previousStatus, ClaimStatus.PENDING, "MODIFY", null, null, now);
+        return buildDetail(updatedRoot);
+    }
+
+    private void reviseLocationChild(MaterialClaim child, MaterialClaim root, ClaimPreviewVO rootPreview,
+                                     List<ClaimPlannedAllocationVO> allocations, Long operatorId, Instant now) {
+        int newRevision = root.getRevisionNo();
+        BookingTimeSnapshotVO snapshot = rootPreview.bookingSnapshot();
+        int rows = claimMapper.update(null, Wrappers.<MaterialClaim>lambdaUpdate()
+                .eq(MaterialClaim::getId, child.getId())
+                .eq(MaterialClaim::getRevisionNo, child.getRevisionNo())
+                .set(MaterialClaim::getPurpose, root.getPurpose())
+                .set(MaterialClaim::getBookingDate, snapshot.bookingDate())
+                .set(MaterialClaim::getStartPeriodId, root.getStartPeriodId())
+                .set(MaterialClaim::getEndPeriodId, root.getEndPeriodId())
+                .set(MaterialClaim::getBookingStartAt, snapshot.bookingStartAt())
+                .set(MaterialClaim::getBookingEndAt, snapshot.bookingEndAt())
+                .set(MaterialClaim::getReturnDeadline, snapshot.returnDeadline())
+                .set(MaterialClaim::getStatus, ClaimStatus.PENDING)
+                .set(MaterialClaim::getRevisionNo, newRevision)
+                .set(MaterialClaim::getApprovedBy, null)
+                .set(MaterialClaim::getApprovedAt, null)
+                .set(MaterialClaim::getRejectReason, null)
+                .set(MaterialClaim::getAbandonRequestedBy, null)
+                .set(MaterialClaim::getAbandonRequestedAt, null)
+                .set(MaterialClaim::getAbandonReason, null)
+                .set(MaterialClaim::getCloseReason, null)
+                .set(MaterialClaim::getClosedBy, null)
+                .set(MaterialClaim::getClosedAt, null)
+                .set(MaterialClaim::getCancelledBy, null)
+                .set(MaterialClaim::getCancelledAt, null)
+                .set(MaterialClaim::getUpdateTime, now)
+                .set(MaterialClaim::getUpdateUserId, operatorId));
+        if (rows != 1) {
+            throw conflict("子申领已变化，请刷新后重试");
+        }
+        MaterialClaim revised = requireClaim(child.getId());
+        insertVersionRows(revised, buildChildPreview(rootPreview, allocations));
+        ApprovalTask task = createReviewTask(revised, newRevision, now);
+        appendEvent(revised, child.getStatus(), ClaimStatus.PENDING, "MODIFY", task.getId(), null, now);
+    }
+
+    private ClaimPreviewVO buildChildPreview(ClaimPreviewVO rootPreview,
+                                             List<ClaimPlannedAllocationVO> allocations) {
+        Map<String, BigDecimal> requestedByMaterial = allocations.stream()
+                .collect(Collectors.groupingBy(ClaimPlannedAllocationVO::materialId,
+                        Collectors.reducing(BigDecimal.ZERO,
+                                ClaimPlannedAllocationVO::plannedQuantity, BigDecimal::add)));
+        List<ClaimPreviewLineVO> childLines = rootPreview.lines().stream()
+                .filter(line -> requestedByMaterial.containsKey(line.materialId()))
+                .map(line -> new ClaimPreviewLineVO(
+                        line.materialId(),
+                        line.materialName(),
+                        line.specification(),
+                        line.materialType(),
+                        line.quantityMode(),
+                        line.baseUnit(),
+                        requestedByMaterial.get(line.materialId()),
+                        line.totalAvailableQuantity(),
+                        line.reservationRule(),
+                        line.reservationStartAt(),
+                        line.reservationEndAt(),
+                        line.ownedAssetTotal()))
+                .toList();
+        return new ClaimPreviewVO(true, childLines, allocations,
+                List.of(), rootPreview.warnings(), rootPreview.bookingSnapshot());
+    }
+
     @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
     public ClaimDetailVO delegate(Long id, ClaimDelegationDTO dto) {
         Long teacherId = SecurityUtils.currentUserId();
         MaterialClaim claim = requireOwnedClaimForUpdate(id, teacherId);
+        if (groupService.isChild(claim)) {
+            throw conflict("请通过总申领单委派代领");
+        }
         if (claim.getStatus() != ClaimStatus.PENDING && claim.getStatus() != ClaimStatus.APPROVED) {
             throw conflict("仅待审核或已审核申领可以委派代领");
         }
@@ -340,6 +563,7 @@ public class ClaimService {
             if (updated != 1) {
                 throw conflict("申领已变化，请刷新后重试");
             }
+            syncChildrenDelegation(claim, PickupMode.SELF, null, null, null, now, teacherId);
             appendDelegationEvent(claim, "UNDELEGATE", str(previousStudentId), now);
             return buildDetail(requireClaim(id));
         }
@@ -370,16 +594,41 @@ public class ClaimService {
         if (updated != 1) {
             throw conflict("申领已变化，请刷新后重试");
         }
+        syncChildrenDelegation(claim, PickupMode.ASSISTANT, studentId, grant.getId(), now, now, teacherId);
         DocumentEvent delegationEvent = appendDelegationEvent(claim,
                 previousMode == PickupMode.ASSISTANT ? "REDELEGATE" : "DELEGATE", str(studentId), now);
         notifyStudentDelegated(claim, studentId, delegationEvent.getId(), now);
         return buildDetail(requireClaim(id));
     }
 
+    private void syncChildrenDelegation(MaterialClaim root, PickupMode mode, Long studentId, Long grantId,
+                                        Instant delegatedAt, Instant now, Long operatorId) {
+        if (!groupService.isRoot(root)) {
+            return;
+        }
+        for (MaterialClaim child : groupService.currentChildren(root)) {
+            claimMapper.update(null, Wrappers.<MaterialClaim>lambdaUpdate()
+                    .eq(MaterialClaim::getId, child.getId())
+                    .eq(MaterialClaim::getRevisionNo, child.getRevisionNo())
+                    .set(MaterialClaim::getPickupMode, mode)
+                    .set(MaterialClaim::getDelegateStudentId, studentId)
+                    .set(MaterialClaim::getDelegateGrantId, grantId)
+                    .set(MaterialClaim::getDelegatedAt, delegatedAt)
+                    .set(MaterialClaim::getUpdateTime, now)
+                    .set(MaterialClaim::getUpdateUserId, operatorId));
+        }
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public ClaimDetailVO cancel(Long id, ClaimReasonDTO dto) {
         Long operatorId = SecurityUtils.currentUserId();
         MaterialClaim claim = requireOwnedClaimForUpdate(id, operatorId);
+        if (groupService.isChild(claim)) {
+            throw conflict("请通过总申领单取消整组申领");
+        }
+        if (groupService.isRoot(claim)) {
+            return cancelRootGroup(claim, dto, operatorId);
+        }
         if (hasOutbound(id)) {
             throw conflict("已产生出库行，不能取消整张申领");
         }
@@ -406,10 +655,47 @@ public class ClaimService {
         return buildDetail(requireClaim(id));
     }
 
+    private ClaimDetailVO cancelRootGroup(MaterialClaim root, ClaimReasonDTO dto, Long operatorId) {
+        if (groupService.hasOutbound(root)) {
+            throw conflict("已产生出库行，不能取消整组申领");
+        }
+        if (!isCancellableStatus(root.getStatus())) {
+            throw conflict("当前状态不可取消申领");
+        }
+        String reason = trimToNull(dto == null ? null : dto.reason());
+        Instant now = timeService.now();
+        for (MaterialClaim child : groupService.currentChildren(root)) {
+            reservationService.releaseForClaim(child.getId(), operatorId);
+            flowService.cancelOpenTasks(child.getBizDocumentId(), operatorId, reason);
+            claimMapper.update(null, Wrappers.<MaterialClaim>lambdaUpdate()
+                    .eq(MaterialClaim::getId, child.getId())
+                    .eq(MaterialClaim::getRevisionNo, child.getRevisionNo())
+                    .set(MaterialClaim::getStatus, ClaimStatus.CANCELLED)
+                    .set(MaterialClaim::getCancelledBy, operatorId)
+                    .set(MaterialClaim::getCancelledAt, now)
+                    .set(MaterialClaim::getUpdateTime, now)
+                    .set(MaterialClaim::getUpdateUserId, operatorId));
+            appendEvent(child, child.getStatus(), ClaimStatus.CANCELLED, "CANCEL", null, reason, now);
+        }
+        claimMapper.update(null, Wrappers.<MaterialClaim>lambdaUpdate()
+                .eq(MaterialClaim::getId, root.getId())
+                .eq(MaterialClaim::getRevisionNo, root.getRevisionNo())
+                .set(MaterialClaim::getStatus, ClaimStatus.CANCELLED)
+                .set(MaterialClaim::getCancelledBy, operatorId)
+                .set(MaterialClaim::getCancelledAt, now)
+                .set(MaterialClaim::getUpdateTime, now)
+                .set(MaterialClaim::getUpdateUserId, operatorId));
+        appendEvent(root, root.getStatus(), ClaimStatus.CANCELLED, "CANCEL", null, reason, now);
+        return buildDetail(requireClaim(root.getId()));
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public ClaimDetailVO abandon(Long id, ClaimReasonDTO dto) {
         Long operatorId = SecurityUtils.currentUserId();
         MaterialClaim claim = requireOwnedClaimForUpdate(id, operatorId);
+        if (groupService.isChild(claim)) {
+            throw conflict("请通过总申领单申请放弃剩余");
+        }
         if (claim.getStatus() != ClaimStatus.PARTIALLY_ISSUED) {
             throw conflict("仅部分实发的申领可以申请放弃剩余");
         }
@@ -432,6 +718,18 @@ public class ClaimService {
         }
         appendEvent(claim, ClaimStatus.PARTIALLY_ISSUED, ClaimStatus.PARTIALLY_ISSUED,
                 "ABANDON", null, reason, now);
+        if (groupService.isRoot(claim)) {
+            for (MaterialClaim child : groupService.currentChildren(claim)) {
+                claimMapper.update(null, Wrappers.<MaterialClaim>lambdaUpdate()
+                        .eq(MaterialClaim::getId, child.getId())
+                        .eq(MaterialClaim::getRevisionNo, child.getRevisionNo())
+                        .set(MaterialClaim::getAbandonRequestedBy, operatorId)
+                        .set(MaterialClaim::getAbandonRequestedAt, now)
+                        .set(MaterialClaim::getAbandonReason, reason)
+                        .set(MaterialClaim::getUpdateTime, now)
+                        .set(MaterialClaim::getUpdateUserId, operatorId));
+            }
+        }
         return buildDetail(requireClaim(id));
     }
 
@@ -492,6 +790,7 @@ public class ClaimService {
         appendEvent(claim, ClaimStatus.PENDING, ClaimStatus.APPROVED, "APPROVE",
                 task.getId(), null, now);
         notifyApplicantApproved(claim, now);
+        groupService.syncParentStatus(claim, operatorId);
         return buildDetail(requireClaim(id));
     }
 
@@ -522,6 +821,7 @@ public class ClaimService {
         flowService.completeTask(task.getId(), ApprovalTaskStatus.REJECTED, operatorId, reason);
         appendEvent(claim, ClaimStatus.PENDING, ClaimStatus.REJECTED, "REJECT",
                 task.getId(), reason, now);
+        groupService.syncParentStatus(claim, operatorId);
         return buildDetail(requireClaim(id));
     }
 
@@ -531,7 +831,14 @@ public class ClaimService {
         Long operatorId = SecurityUtils.currentUserId();
         MaterialClaim claim = requireClaimForUpdate(id);
         List<MaterialClaimAllocation> allocations = currentAllocations(claim);
-        requireLocationIntersection(operatorId, allocations);
+        if (groupService.isRoot(claim)) {
+            throw conflict("总申领单不能直接关闭，请按库位处理子申领单");
+        }
+        if (groupService.isChild(claim)) {
+            locationAccessService.requireLocationAdmin(operatorId, claim.getLocationId());
+        } else {
+            requireLocationIntersection(operatorId, allocations);
+        }
         if (claim.getStatus() != ClaimStatus.PARTIALLY_ISSUED) {
             throw conflict("仅部分实发的申领可以关闭");
         }
@@ -555,14 +862,20 @@ public class ClaimService {
         }
         appendEvent(claim, ClaimStatus.PARTIALLY_ISSUED, ClaimStatus.CLOSED, "CLOSE",
                 null, claim.getAbandonReason(), now);
+        groupService.syncParentStatus(claim, operatorId);
         return buildDetail(requireClaim(id));
     }
 
     private PageResult<ClaimSummaryVO> page(ClaimPageQuery query, Long applicantId) {
-        return page(query, applicantId, Set.of());
+        return page(query, applicantId, Set.of(), false);
     }
 
     private PageResult<ClaimSummaryVO> page(ClaimPageQuery query, Long applicantId, Set<Long> managedLocationIds) {
+        return page(query, applicantId, managedLocationIds, false);
+    }
+
+    private PageResult<ClaimSummaryVO> page(ClaimPageQuery query, Long applicantId, Set<Long> managedLocationIds,
+                                            boolean rootOnly) {
         if (query.bookingDateFrom() != null && query.bookingDateTo() != null
                 && query.bookingDateFrom().isAfter(query.bookingDateTo())) {
             throw badRequest("预约开始日期不能晚于结束日期");
@@ -572,7 +885,14 @@ public class ClaimService {
                 .eq(applicantId != null, MaterialClaim::getApplicantId, applicantId)
                 .eq(status != null, MaterialClaim::getStatus, status)
                 .ge(query.bookingDateFrom() != null, MaterialClaim::getBookingDate, query.bookingDateFrom())
-                .le(query.bookingDateTo() != null, MaterialClaim::getBookingDate, query.bookingDateTo());
+                .le(query.bookingDateTo() != null, MaterialClaim::getBookingDate, query.bookingDateTo())
+                .eq(query.parentId() != null, MaterialClaim::getParentClaimId,
+                        query.parentId() == null ? null : Ids.parse(query.parentId()))
+                .eq(query.locationId() != null, MaterialClaim::getLocationId,
+                        query.locationId() == null ? null : Ids.parse(query.locationId()))
+                .in(MaterialClaim::getClaimKind, rootOnly
+                        ? List.of(ClaimKind.ROOT, ClaimKind.STANDALONE)
+                        : List.of(ClaimKind.CHILD, ClaimKind.STANDALONE));
         if (!managedLocationIds.isEmpty()) {
             String locationIds = managedLocationIds.stream().map(String::valueOf).collect(Collectors.joining(","));
             wrapper.apply("EXISTS (SELECT 1 FROM material_claim_allocation managed_allocation "
@@ -598,10 +918,16 @@ public class ClaimService {
         Map<Long, SysUser> users = loadUsers(userIds);
         List<Long> claimIds = records.stream().map(MaterialClaim::getId).toList();
         Set<Long> issuedClaimIds = new HashSet<>(documentLineMapper.selectOutboundClaimIds(claimIds));
+        Set<Long> locationIds = records.stream().map(MaterialClaim::getLocationId)
+                .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, StockLocation> locations = locationIds.isEmpty() ? Map.of()
+                : locationMapper.selectBatchIds(locationIds).stream()
+                .collect(Collectors.toMap(StockLocation::getId, Function.identity()));
         Instant now = timeService.now();
         List<ClaimSummaryVO> result = records.stream()
                 .map(claim -> toSummaryVO(claim, documents.get(claim.getBizDocumentId()),
-                        users.get(claim.getApplicantId()), displayStatus(claim, issuedClaimIds.contains(claim.getId()), now)))
+                        users.get(claim.getApplicantId()), displayStatus(claim, issuedClaimIds.contains(claim.getId()), now),
+                        claim.getLocationId() == null ? null : locations.get(claim.getLocationId())))
                 .toList();
         return PageResult.of(result, page.getTotal(), (int) page.getCurrent(), (int) page.getSize());
     }
@@ -613,13 +939,26 @@ public class ClaimService {
         }
         List<MaterialClaimLine> lines = currentLines(claim);
         List<MaterialClaimAllocation> allocations = currentAllocations(claim);
-        List<MaterialReservation> reservations = reservationService.listCurrent(claim.getId(), claim.getRevisionNo());
-        List<DocumentEvent> events = flowService.listEvents(claim.getBizDocumentId());
+        groupService.applyIssuedProjection(claim, lines);
+        List<MaterialClaim> childClaims = groupService.currentChildren(claim);
+        List<MaterialReservation> reservations = new ArrayList<>();
+        List<DocumentEvent> events = new ArrayList<>(flowService.listEvents(claim.getBizDocumentId()));
+        if (groupService.isRoot(claim)) {
+            for (MaterialClaim child : childClaims) {
+                reservations.addAll(reservationService.listCurrent(child.getId(), child.getRevisionNo()));
+                events.addAll(flowService.listEvents(child.getBizDocumentId()));
+            }
+        } else {
+            reservations.addAll(reservationService.listCurrent(claim.getId(), claim.getRevisionNo()));
+        }
+        events.sort(java.util.Comparator.comparing(DocumentEvent::getOccurredAt)
+                .thenComparing(DocumentEvent::getId));
         Map<Long, Material> materials = loadMaterials(lines);
 
         Set<Long> locationIds = new HashSet<>();
         allocations.forEach(allocation -> locationIds.add(allocation.getLocationId()));
         reservations.forEach(reservation -> locationIds.add(reservation.getLocationId()));
+        childClaims.forEach(child -> locationIds.add(child.getLocationId()));
         Map<Long, StockLocation> locations = locationIds.isEmpty() ? Map.of()
                 : locationMapper.selectBatchIds(locationIds).stream()
                 .collect(Collectors.toMap(StockLocation::getId, Function.identity()));
@@ -631,6 +970,7 @@ public class ClaimService {
 
         Set<Long> userIds = new HashSet<>();
         addUserIds(claim, userIds);
+        childClaims.forEach(child -> addUserIds(child, userIds));
         events.stream().map(DocumentEvent::getActorId).filter(java.util.Objects::nonNull).forEach(userIds::add);
         Map<Long, SysUser> users = loadUsers(userIds);
         Map<Long, MaterialClaimLine> linesById = lines.stream()
@@ -639,6 +979,7 @@ public class ClaimService {
         List<ClaimLineVO> lineVOs = lines.stream()
                 .map(line -> toLineVO(line, materials.get(line.getMaterialId())))
                 .toList();
+        List<ClaimSegmentVO> segmentVOs = currentSegments(claim);
         List<ClaimAllocationVO> allocationVOs = allocations.stream()
                 .map(allocation -> {
                     MaterialClaimLine line = linesById.get(allocation.getClaimLineId());
@@ -663,14 +1004,15 @@ public class ClaimService {
                             reservation.getAssetTotalSnapshot(), reservation.getReservedQuantity(),
                             reservation.getConsumedQuantity(), reservation.getReleasedQuantity(),
                             reservationService.remaining(reservation), reservation.getReservationStartAt(),
-                            reservation.getReservationEndAt(), reservation.getStatus(), reservation.getClosedAt());
+                            reservation.getReservationEndAt(), reservation.getStatus(), reservation.getClosedAt(),
+                            str(reservation.getClaimSegmentId()));
                 })
                 .toList();
         List<ItemDocumentEventVO> eventVOs = events.stream()
                 .map(event -> toEventVO(event, users))
                 .toList();
 
-        boolean issued = hasOutbound(claim.getId());
+        boolean issued = groupService.hasOutbound(claim);
         Instant now = timeService.now();
         Long currentUserId = SecurityUtils.currentUserId();
         Set<Long> userLocationIds = new HashSet<>(locationAccessService.userLocationIds(currentUserId));
@@ -678,7 +1020,17 @@ public class ClaimService {
         ActionState actions = actions(claim, lines, allocations, issued, now, currentUserId, userLocationIds, pickup);
         SysUser applicant = users.get(claim.getApplicantId());
         SysUser delegateStudent = claim.getDelegateStudentId() == null ? null : users.get(claim.getDelegateStudentId());
-        return new ClaimDetailVO(str(claim.getId()), str(claim.getBizDocumentId()), str(claim.getId()),
+        Map<Long, BizDocument> childDocuments = flowService.listDocumentsByIds(childClaims.stream()
+                        .map(MaterialClaim::getBizDocumentId).collect(Collectors.toSet())).stream()
+                .collect(Collectors.toMap(BizDocument::getId, Function.identity()));
+        List<ClaimSummaryVO> children = childClaims.stream()
+                .map(child -> toSummaryVO(child, childDocuments.get(child.getBizDocumentId()),
+                        users.get(child.getApplicantId()),
+                        displayStatus(child, groupService.hasOutbound(child), now),
+                        locations.get(child.getLocationId())))
+                .toList();
+        StockLocation claimLocation = claim.getLocationId() == null ? null : locations.get(claim.getLocationId());
+        return new ClaimDetailVO(str(claim.getId()), str(claim.getBizDocumentId()), ItemDocumentNoService.displayBusinessChainId(claim),
                 document.getDocumentNo(), str(claim.getApplicantId()),
                 applicant == null ? null : applicant.getRealName(), claim.getPurpose(), claim.getBookingDate(),
                 str(claim.getStartPeriodId()), str(claim.getEndPeriodId()), claim.getBookingStartAt(),
@@ -692,7 +1044,9 @@ public class ClaimService {
                 claim.getDelegatedAt(), pickup.valid(), pickup.blockedReason(), lineVOs, allocationVOs, reservationVOs, eventVOs,
                 actions.canReview(), actions.canModify(), actions.canCancel(), actions.canAbandon(), actions.canClose(),
                 actions.canRebook(), actions.canIssue(), actions.canDelegate(), actions.actionReasons(),
-                claim.getCreateTime(), claim.getUpdateTime());
+                claim.getCreateTime(), claim.getUpdateTime(), claim.getClaimKind(), str(claim.getParentClaimId()),
+                str(claim.getLocationId()), claimLocation == null ? null : claimLocation.getLocationCode(),
+                claimLocation == null ? null : claimLocation.getLocationName(), segmentVOs, children);
     }
 
     private ReviewContext prepareReview(MaterialClaim claim, Long operatorId, Integer expectedRevision) {
@@ -711,10 +1065,20 @@ public class ClaimService {
         }
         List<MaterialClaimLine> lines = currentLines(claim);
         List<MaterialClaimAllocation> allocations = currentAllocations(claim);
+        if (groupService.isRoot(claim)) {
+            throw conflict("总申领单不能直接审核，请按库位处理子申领单");
+        }
         if (lines.isEmpty() || allocations.isEmpty()) {
             throw conflict("申领当前版本缺少物料行或计划库位");
         }
-        requireLocationIntersection(operatorId, allocations);
+        if (groupService.isChild(claim)) {
+            locationAccessService.requireLocationAdmin(operatorId, claim.getLocationId());
+            if (allocations.stream().anyMatch(allocation -> !claim.getLocationId().equals(allocation.getLocationId()))) {
+                throw conflict("子申领单只能包含本库位物料");
+            }
+        } else {
+            requireLocationIntersection(operatorId, allocations);
+        }
         return new ReviewContext(lines, allocations, toPreviewDTO(claim, lines, allocations));
     }
 
@@ -871,6 +1235,18 @@ public class ClaimService {
             allocation.setPlannedQuantity(planned.plannedQuantity());
             allocationMapper.insert(allocation);
         });
+        preview.bookingSnapshot().segments().forEach(segment -> {
+            MaterialClaimSegment claimSegment = new MaterialClaimSegment();
+            claimSegment.setId(IdWorker.getId());
+            claimSegment.setClaimId(claim.getId());
+            claimSegment.setRevisionNo(claim.getRevisionNo());
+            claimSegment.setSegmentSeq(segment.segmentSeq());
+            claimSegment.setStartPeriodId(Ids.parse(segment.startPeriodId()));
+            claimSegment.setEndPeriodId(Ids.parse(segment.endPeriodId()));
+            claimSegment.setBookingStartAt(segment.bookingStartAt());
+            claimSegment.setBookingEndAt(segment.bookingEndAt());
+            segmentMapper.insert(claimSegment);
+        });
     }
 
     private ClaimPreviewDTO toPreviewDTO(MaterialClaim claim,
@@ -885,8 +1261,12 @@ public class ClaimService {
                 .map(allocation -> new ClaimPreviewAllocationDTO(str(materialsByLine.get(allocation.getClaimLineId())),
                         str(allocation.getLocationId()), allocation.getPlannedQuantity()))
                 .toList();
+        List<String> periodIds = currentSegments(claim).stream()
+                .flatMap(segment -> timeService.expandPeriodIds(Ids.parse(segment.startPeriodId()),
+                        Ids.parse(segment.endPeriodId())).stream())
+                .toList();
         return new ClaimPreviewDTO(claim.getBookingDate(), str(claim.getStartPeriodId()), str(claim.getEndPeriodId()),
-                lineDTOs, allocationDTOs, claim.getPurpose());
+                lineDTOs, allocationDTOs, claim.getPurpose(), periodIds);
     }
 
     private ClaimPreviewDTO toPreviewDTO(String purpose,
@@ -894,8 +1274,26 @@ public class ClaimService {
                                          String startPeriodId,
                                          String endPeriodId,
                                          List<ClaimPreviewLineDTO> lines,
-                                         List<ClaimPreviewAllocationDTO> allocations) {
-        return new ClaimPreviewDTO(bookingDate, startPeriodId, endPeriodId, lines, allocations, purpose);
+                                         List<ClaimPreviewAllocationDTO> allocations,
+                                         List<String> periodIds) {
+        return new ClaimPreviewDTO(bookingDate, startPeriodId, endPeriodId, lines, allocations, purpose, periodIds);
+    }
+
+    private List<ClaimSegmentVO> currentSegments(MaterialClaim claim) {
+        List<MaterialClaimSegment> segments = segmentMapper.selectList(Wrappers.<MaterialClaimSegment>lambdaQuery()
+                .eq(MaterialClaimSegment::getClaimId, claim.getId())
+                .eq(MaterialClaimSegment::getRevisionNo, claim.getRevisionNo())
+                .orderByAsc(MaterialClaimSegment::getSegmentSeq));
+        if (segments.isEmpty()) {
+            return List.of(new ClaimSegmentVO(null, str(claim.getId()), claim.getRevisionNo(), 1,
+                    str(claim.getStartPeriodId()), str(claim.getEndPeriodId()),
+                    claim.getBookingStartAt(), claim.getBookingEndAt()));
+        }
+        return segments.stream()
+                .map(segment -> new ClaimSegmentVO(str(segment.getId()), str(segment.getClaimId()),
+                        segment.getRevisionNo(), segment.getSegmentSeq(), str(segment.getStartPeriodId()),
+                        str(segment.getEndPeriodId()), segment.getBookingStartAt(), segment.getBookingEndAt()))
+                .toList();
     }
 
     private List<MaterialClaimLine> currentLines(MaterialClaim claim) {
@@ -923,8 +1321,11 @@ public class ClaimService {
                                 Set<Long> userLocationIds,
                                 PickupResolution pickup) {
         boolean owner = claim.getApplicantId().equals(currentUserId);
-        boolean plannedLocationAccess = allocations.stream()
-                .anyMatch(allocation -> userLocationIds.contains(allocation.getLocationId()));
+        boolean root = groupService.isRoot(claim);
+        boolean child = groupService.isChild(claim);
+        boolean plannedLocationAccess = child
+                ? userLocationIds.contains(claim.getLocationId())
+                : allocations.stream().anyMatch(allocation -> userLocationIds.contains(allocation.getLocationId()));
         boolean expired = isExpired(claim, hasIssued, now);
         BigDecimal unclaimed = lines.stream()
                 .map(line -> line.getRequestedQuantity().subtract(line.getIssuedQuantity()))
@@ -937,20 +1338,21 @@ public class ClaimService {
         boolean issuePermission = SecurityUtils.hasPermission("item:claim:issue");
         boolean delegatePermission = SecurityUtils.hasPermission("item:claim:delegate");
 
-        boolean canReview = reviewPermission && plannedLocationAccess && !hasIssued && !expired
+        boolean canReview = !root && reviewPermission && plannedLocationAccess && !hasIssued && !expired
                 && claim.getStatus() == ClaimStatus.PENDING;
-        boolean canModify = owner && updatePermission && !hasIssued && !expired
+        boolean canModify = !child && owner && updatePermission && !hasIssued && !expired
                 && (claim.getStatus() == ClaimStatus.PENDING || claim.getStatus() == ClaimStatus.APPROVED);
-        boolean canCancel = owner && cancelPermission && !hasIssued && isCancellableStatus(claim.getStatus());
-        boolean canAbandon = owner && abandonPermission && claim.getStatus() == ClaimStatus.PARTIALLY_ISSUED
+        boolean canCancel = !child && owner && cancelPermission && !hasIssued && isCancellableStatus(claim.getStatus());
+        boolean canAbandon = !child && owner && abandonPermission && claim.getStatus() == ClaimStatus.PARTIALLY_ISSUED
                 && claim.getAbandonRequestedBy() == null;
-        boolean canClose = reviewPermission && abandonPermission && plannedLocationAccess
+        boolean canClose = !root && reviewPermission && abandonPermission && plannedLocationAccess
                 && claim.getStatus() == ClaimStatus.PARTIALLY_ISSUED && claim.getAbandonRequestedBy() != null;
-        boolean canRebook = owner && createPermission;
-        boolean canIssue = issuePermission && pickup.valid() && !userLocationIds.isEmpty() && unclaimed.signum() > 0
+        boolean canRebook = !child && owner && createPermission;
+        boolean canIssue = !root && issuePermission && pickup.valid() && !userLocationIds.isEmpty()
+                && (!child || plannedLocationAccess) && unclaimed.signum() > 0
                 && (claim.getStatus() == ClaimStatus.APPROVED || claim.getStatus() == ClaimStatus.PARTIALLY_ISSUED)
                 && timeService.isIssueWindow(now, claim.getBookingDate());
-        boolean canDelegate = owner && delegatePermission && !hasIssued && !expired
+        boolean canDelegate = !child && owner && delegatePermission && !hasIssued && !expired
                 && (claim.getStatus() == ClaimStatus.PENDING || claim.getStatus() == ClaimStatus.APPROVED);
 
         Map<String, String> reasons = new LinkedHashMap<>();
@@ -1009,11 +1411,19 @@ public class ClaimService {
 
     private ClaimSummaryVO toSummaryVO(MaterialClaim claim, BizDocument document, SysUser applicant,
                                        ClaimStatus displayStatus) {
-        return new ClaimSummaryVO(str(claim.getId()), str(claim.getBizDocumentId()), str(claim.getId()),
+        return toSummaryVO(claim, document, applicant, displayStatus, null);
+    }
+
+    private ClaimSummaryVO toSummaryVO(MaterialClaim claim, BizDocument document, SysUser applicant,
+                                       ClaimStatus displayStatus, StockLocation location) {
+        return new ClaimSummaryVO(str(claim.getId()), str(claim.getBizDocumentId()), ItemDocumentNoService.displayBusinessChainId(claim),
                 document == null ? null : document.getDocumentNo(), str(claim.getApplicantId()),
                 applicant == null ? null : applicant.getRealName(), claim.getPurpose(), claim.getBookingDate(),
                 claim.getBookingStartAt(), claim.getBookingEndAt(), claim.getReturnDeadline(), displayStatus,
-                claim.getRevisionNo(), claim.getDelegatedAt(), claim.getCreateTime());
+                claim.getRevisionNo(), claim.getDelegatedAt(), claim.getCreateTime(), claim.getClaimKind(),
+                str(claim.getParentClaimId()), str(claim.getLocationId()),
+                location == null ? null : location.getLocationCode(),
+                location == null ? null : location.getLocationName());
     }
 
     private ClaimLineVO toLineVO(MaterialClaimLine line, Material material) {
@@ -1096,7 +1506,7 @@ public class ClaimService {
     }
 
     private boolean hasOutbound(Long claimId) {
-        return !documentLineMapper.selectOutboundClaimIds(List.of(claimId)).isEmpty();
+        return groupService.hasOutbound(claimId);
     }
 
     private ClaimStatus displayStatus(MaterialClaim claim, boolean hasIssued, Instant now) {
@@ -1133,19 +1543,11 @@ public class ClaimService {
     }
 
     private MaterialClaim requireClaim(Long id) {
-        MaterialClaim claim = claimMapper.selectById(id);
-        if (claim == null) {
-            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "申领单不存在");
-        }
-        return claim;
+        return groupService.requireClaim(id);
     }
 
     private MaterialClaim requireClaimForUpdate(Long id) {
-        MaterialClaim claim = claimMapper.selectByIdForUpdate(id);
-        if (claim == null) {
-            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "申领单不存在");
-        }
-        return claim;
+        return groupService.requireClaimForUpdate(id);
     }
 
     private MaterialClaim requireOwnedClaim(Long id, Long ownerId) {

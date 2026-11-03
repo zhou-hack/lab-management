@@ -26,6 +26,7 @@ public record ClaimReservationVO(
         Instant reservationStartAt,
         Instant reservationEndAt,
         ReservationStatus status,
-        Instant closedAt
+        Instant closedAt,
+        String claimSegmentId
 ) {
 }

@@ -27,17 +27,8 @@
             border
             size="small"
           >
-            <el-descriptions-item label="库存单据ID">
-              {{ detail.document.id }}
-            </el-descriptions-item>
-            <el-descriptions-item label="共享单据ID">
-              {{ detail.document.bizDocumentId }}
-            </el-descriptions-item>
             <el-descriptions-item label="业务链ID">
               {{ detail.document.businessChainId || '—' }}
-            </el-descriptions-item>
-            <el-descriptions-item label="来源库存单ID">
-              {{ detail.document.sourceMaterialDocumentId || '—' }}
             </el-descriptions-item>
             <el-descriptions-item label="库位">
               {{ detail.document.locationName || detail.document.locationId || '—' }}
@@ -45,7 +36,7 @@
             <el-descriptions-item label="序号">
               {{ detail.document.documentSeq ?? '—' }}
             </el-descriptions-item>
-            <el-descriptions-item label="源 / 目标库位ID">
+            <el-descriptions-item label="源 / 目标库位">
               {{ detail.document.fromLocationId || '—' }} / {{ detail.document.toLocationId || '—' }}
             </el-descriptions-item>
             <el-descriptions-item label="经办人">
@@ -163,21 +154,6 @@
                   {{ row.positionText || '默认位置' }}
                 </template>
               </el-table-column>
-              <el-table-column
-                prop="id"
-                label="单据行ID"
-                min-width="180"
-              />
-              <el-table-column
-                prop="sourceMaterialDocumentLineId"
-                label="来源行ID"
-                min-width="180"
-              />
-              <el-table-column
-                prop="claimLineId"
-                label="申领行ID"
-                min-width="180"
-              />
             </el-table>
           </el-tab-pane>
           <el-tab-pane
@@ -235,11 +211,6 @@
                 min-width="220"
                 show-overflow-tooltip
               />
-              <el-table-column
-                prop="sourceMaterialDocumentLineId"
-                label="来源行ID"
-                min-width="180"
-              />
             </el-table>
           </el-tab-pane>
           <el-tab-pane
@@ -277,9 +248,6 @@
                     class="t-sub"
                   >
                     {{ event.reason }}
-                  </p>
-                  <p class="t-hint">
-                    事件单据ID {{ event.documentId }}
                   </p>
                 </div>
               </el-timeline-item>

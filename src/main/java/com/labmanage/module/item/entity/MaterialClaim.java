@@ -2,6 +2,7 @@ package com.labmanage.module.item.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.labmanage.common.core.BaseEntity;
+import com.labmanage.module.item.enums.ClaimKind;
 import com.labmanage.module.item.enums.ClaimStatus;
 import com.labmanage.module.item.enums.PickupMode;
 
@@ -12,6 +13,10 @@ import java.time.LocalDate;
 public class MaterialClaim extends BaseEntity {
 
     private Long bizDocumentId;
+    private String businessChainNo;
+    private ClaimKind claimKind;
+    private Long parentClaimId;
+    private Long locationId;
     private Long applicantId;
     private String purpose;
     private LocalDate bookingDate;
@@ -40,6 +45,14 @@ public class MaterialClaim extends BaseEntity {
 
     public Long getBizDocumentId() { return bizDocumentId; }
     public void setBizDocumentId(Long bizDocumentId) { this.bizDocumentId = bizDocumentId; }
+    public String getBusinessChainNo() { return businessChainNo; }
+    public void setBusinessChainNo(String businessChainNo) { this.businessChainNo = businessChainNo; }
+    public ClaimKind getClaimKind() { return claimKind; }
+    public void setClaimKind(ClaimKind claimKind) { this.claimKind = claimKind; }
+    public Long getParentClaimId() { return parentClaimId; }
+    public void setParentClaimId(Long parentClaimId) { this.parentClaimId = parentClaimId; }
+    public Long getLocationId() { return locationId; }
+    public void setLocationId(Long locationId) { this.locationId = locationId; }
     public Long getApplicantId() { return applicantId; }
     public void setApplicantId(Long applicantId) { this.applicantId = applicantId; }
     public String getPurpose() { return purpose; }

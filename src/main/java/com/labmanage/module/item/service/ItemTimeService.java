@@ -14,6 +14,11 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * 物料预约时间服务：上海本地日期与节次统一换算为 UTC 时间点。
@@ -67,6 +72,84 @@ public class ItemTimeService {
         Instant returnDeadline = toUtc(bookingDate, RETURN_DEADLINE_CLOCK);
         Instant issueEarliestAt = issueEarliestAt(bookingDate);
         return new BookingWindow(bookingDate, bookingStartAt, bookingEndAt, returnDeadline, issueEarliestAt);
+    }
+
+    /** 解析一组可跳选节次，按节次号排序去重并合并为极大连续段。 */
+    public BookingSelection resolveBookingSelection(LocalDate bookingDate, Long startPeriodId, Long endPeriodId,
+                                                    List<String> periodIds) {
+        BookingWindow requestedEnvelope = startPeriodId == null && endPeriodId == null ? null
+                : resolveBookingWindow(bookingDate, startPeriodId, endPeriodId);
+        if (periodIds == null || periodIds.isEmpty()) {
+            if (requestedEnvelope == null) {
+                throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "预约日期与节次均不能为空");
+            }
+            return new BookingSelection(List.of(new BookingSegment(1, startPeriodId, endPeriodId, requestedEnvelope)),
+                    requestedEnvelope);
+        }
+
+        Set<Long> uniqueIds = new LinkedHashSet<>();
+        for (String raw : periodIds) {
+            if (raw == null) {
+                continue;
+            }
+            for (String value : raw.split(",")) {
+                String trimmed = value.trim();
+                if (!trimmed.isEmpty()) {
+                    uniqueIds.add(parsePeriodId(trimmed));
+                }
+            }
+        }
+        if (uniqueIds.isEmpty()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "节次不能为空");
+        }
+        List<ClassPeriod> selected = uniqueIds.stream().map(this::requireEnabledPeriod)
+                .sorted(Comparator.comparing(ClassPeriod::getPeriodNo)).toList();
+        List<BookingSegment> segments = new ArrayList<>();
+        int groupStart = 0;
+        for (int i = 1; i <= selected.size(); i++) {
+            if (i < selected.size()
+                    && selected.get(i).getPeriodNo().equals(selected.get(i - 1).getPeriodNo() + 1)) {
+                continue;
+            }
+            ClassPeriod first = selected.get(groupStart);
+            ClassPeriod last = selected.get(i - 1);
+            BookingWindow window = resolveBookingWindow(bookingDate, first.getId(), last.getId());
+            segments.add(new BookingSegment(segments.size() + 1, first.getId(), last.getId(), window));
+            groupStart = i;
+        }
+        BookingWindow envelope = new BookingWindow(bookingDate,
+                segments.get(0).window().bookingStartAt(),
+                segments.get(segments.size() - 1).window().bookingEndAt(),
+                segments.get(0).window().returnDeadline(), segments.get(0).window().issueEarliestAt());
+        if (requestedEnvelope != null
+                && (!startPeriodId.equals(segments.get(0).startPeriodId())
+                || !endPeriodId.equals(segments.get(segments.size() - 1).endPeriodId()))) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "起止节次与所选节次不一致");
+        }
+        return new BookingSelection(segments, envelope);
+    }
+
+    /** 将连续段展开为实际节次ID，供审核和编辑时重建原始选择。 */
+    public List<String> expandPeriodIds(Long startPeriodId, Long endPeriodId) {
+        ClassPeriod start = requireEnabledPeriod(startPeriodId);
+        ClassPeriod end = requireEnabledPeriod(endPeriodId);
+        if (start.getPeriodNo() > end.getPeriodNo()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "起始节次不能晚于结束节次");
+        }
+        return periodMapper.selectList(null).stream()
+                .filter(period -> period.getPeriodNo() >= start.getPeriodNo()
+                        && period.getPeriodNo() <= end.getPeriodNo())
+                .sorted(Comparator.comparing(ClassPeriod::getPeriodNo))
+                .map(period -> String.valueOf(period.getId()))
+                .toList();
+    }
+
+    private Long parsePeriodId(String value) {
+        try {
+            return Long.valueOf(value);
+        } catch (NumberFormatException e) {
+            throw new BusinessException(ResultCode.BAD_REQUEST.getCode(), "节次ID不合法");
+        }
     }
 
     /** 当前 UTC 时间，统一截断为毫秒。 */
@@ -141,6 +224,20 @@ public class ItemTimeService {
             Instant bookingEndAt,
             Instant returnDeadline,
             Instant issueEarliestAt
+    ) {
+    }
+
+    public record BookingSegment(
+            Integer segmentSeq,
+            Long startPeriodId,
+            Long endPeriodId,
+            BookingWindow window
+    ) {
+    }
+
+    public record BookingSelection(
+            List<BookingSegment> segments,
+            BookingWindow envelope
     ) {
     }
 

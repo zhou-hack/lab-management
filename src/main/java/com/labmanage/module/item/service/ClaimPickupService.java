@@ -15,6 +15,7 @@ import com.labmanage.module.item.entity.MaterialClaim;
 import com.labmanage.module.item.entity.MaterialClaimAllocation;
 import com.labmanage.module.item.entity.MaterialClaimLine;
 import com.labmanage.module.item.entity.StockLocation;
+import com.labmanage.module.item.enums.ClaimKind;
 import com.labmanage.module.item.enums.ClaimStatus;
 import com.labmanage.module.item.enums.PickupMode;
 import com.labmanage.module.item.mapper.MaterialClaimAllocationMapper;
@@ -92,6 +93,7 @@ public class ClaimPickupService {
         LambdaQueryWrapper<MaterialClaim> wrapper = Wrappers.<MaterialClaim>lambdaQuery()
                 .eq(MaterialClaim::getDelegateStudentId, studentId)
                 .eq(MaterialClaim::getPickupMode, PickupMode.ASSISTANT)
+                .in(MaterialClaim::getClaimKind, ClaimKind.ROOT, ClaimKind.STANDALONE)
                 .eq(status != null, MaterialClaim::getStatus, status)
                 .ge(query.bookingDateFrom() != null, MaterialClaim::getBookingDate, query.bookingDateFrom())
                 .le(query.bookingDateTo() != null, MaterialClaim::getBookingDate, query.bookingDateTo());
@@ -123,7 +125,8 @@ public class ClaimPickupService {
     public PickupDetailVO detailMine(Long id) {
         Long studentId = SecurityUtils.currentUserId();
         MaterialClaim claim = claimMapper.selectById(id);
-        if (claim == null || claim.getPickupMode() != PickupMode.ASSISTANT
+        if (claim == null || claim.getClaimKind() == ClaimKind.CHILD
+                || claim.getPickupMode() != PickupMode.ASSISTANT
                 || !studentId.equals(claim.getDelegateStudentId())) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "代领申领单不存在");
         }
@@ -171,11 +174,12 @@ public class ClaimPickupService {
 
     private ClaimSummaryVO toSummaryVO(MaterialClaim claim, BizDocument document, SysUser applicant,
                                        ClaimStatus displayStatus) {
-        return new ClaimSummaryVO(str(claim.getId()), str(claim.getBizDocumentId()), str(claim.getId()),
+        return new ClaimSummaryVO(str(claim.getId()), str(claim.getBizDocumentId()), ItemDocumentNoService.displayBusinessChainId(claim),
                 document == null ? null : document.getDocumentNo(), str(claim.getApplicantId()),
                 applicant == null ? null : applicant.getRealName(), claim.getPurpose(), claim.getBookingDate(),
                 claim.getBookingStartAt(), claim.getBookingEndAt(), claim.getReturnDeadline(), displayStatus,
-                claim.getRevisionNo(), claim.getDelegatedAt(), claim.getCreateTime());
+                claim.getRevisionNo(), claim.getDelegatedAt(), claim.getCreateTime(), claim.getClaimKind(),
+                str(claim.getParentClaimId()), str(claim.getLocationId()), null, null);
     }
 
     private ClaimLineVO toLineVO(MaterialClaimLine line, Material material) {

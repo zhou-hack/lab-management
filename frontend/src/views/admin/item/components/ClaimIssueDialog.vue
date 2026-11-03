@@ -8,7 +8,9 @@
   >
     <div class="claim_issue">
       <el-alert
-        title="实发只扣减实际库位库存；已按未领取量与实物可用量预填，可手动调整，支持部分实发。"
+        :title="isChildClaim
+          ? '库位子单仅可从所属库位实发；已默认填入全部可实发数量及候选资产，可手动调整。'
+          : '实发只扣减实际库位库存；已按未领取量与实物可用量预填，可手动调整，支持部分实发。'"
         type="info"
         :closable="false"
         show-icon
@@ -21,7 +23,13 @@
           label="实际出库库位"
           required
         >
+          <el-input
+            v-if="isChildClaim"
+            :model-value="fixedLocationText"
+            disabled
+          />
           <ItemLocationSelect
+            v-else
             v-model="locationId"
             placeholder="选择本次实际实发的库位"
             :clearable="false"
@@ -314,7 +322,8 @@ import ItemQuantityText from '@/components/item/ItemQuantityText.vue'
 import { getClaimIssueContext, issueClaim } from '@/api/item/workflow'
 import { formatInstant, formatRange } from '@/utils/datetime'
 import { pickupModeLabel } from '@/views/item/components/claim.constants'
-import { getConsumableIssueDefaults } from '../inventory.rules'
+import { getClaimIssueLocationId } from '@/views/item/components/claim.rules'
+import { getConsumableIssueDefaults, getFixedAssetIssueDefaults } from '../inventory.rules'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -323,6 +332,11 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'success'])
 
 const visible = computed({ get: () => props.modelValue, set: (value) => emit('update:modelValue', value) })
+const isChildClaim = computed(() => props.claim?.claimKind === 'CHILD')
+const fixedLocationText = computed(() => [
+  props.claim?.locationName || props.claim?.locationId || '—',
+  props.claim?.locationCode
+].filter(Boolean).join(' · '))
 const locationId = ref('')
 const context = ref(null)
 const forms = ref([])
@@ -341,12 +355,15 @@ const reservedTotal = (line) => (line.reservations || [])
   .reduce((sum, item) => sum + Number(item.remainingQuantity || 0), 0)
 
 watch(visible, (value) => {
-  if (value) reset()
+  if (value) {
+    reset()
+    if (locationId.value) loadContext()
+  }
 })
 
 function reset() {
   requestSerial += 1
-  locationId.value = ''
+  locationId.value = getClaimIssueLocationId(props.claim)
   context.value = null
   forms.value = []
   remark.value = ''
@@ -355,6 +372,7 @@ function reset() {
 }
 
 async function loadContext() {
+  locationId.value = getClaimIssueLocationId(props.claim, locationId.value)
   if (!locationId.value || !props.claim?.id) {
     context.value = null
     forms.value = []
@@ -375,7 +393,7 @@ async function loadContext() {
         claimLineId: String(line.claimLineId),
         positionText: defaults.positionText,
         quantity: defaults.quantity,
-        fixedAssetIds: []
+        fixedAssetIds: line.materialType === 'FIXED_ASSET' ? getFixedAssetIssueDefaults(line) : []
       }
     })
   } catch {
@@ -449,7 +467,7 @@ async function submit() {
   submitting.value = true
   try {
     const result = await issueClaim(props.claim.id, {
-      locationId: String(locationId.value),
+      locationId: getClaimIssueLocationId(props.claim, locationId.value),
       idempotencyKey: `claim-issue-${props.claim.id}-${crypto.randomUUID()}`,
       remark: remark.value || undefined,
       lines

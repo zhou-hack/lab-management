@@ -8,6 +8,7 @@ DROP TABLE IF EXISTS material_document;
 DROP TABLE IF EXISTS material_reservation;
 DROP TABLE IF EXISTS material_claim_allocation;
 DROP TABLE IF EXISTS material_claim_line;
+DROP TABLE IF EXISTS material_claim_segment;
 DROP TABLE IF EXISTS material_claim;
 DROP TABLE IF EXISTS material_booking_plan_line;
 DROP TABLE IF EXISTS material_booking_plan;
@@ -223,6 +224,10 @@ CREATE INDEX idx_item_assistant_grant_student ON material_assistant_grant (stude
 CREATE TABLE material_claim (
     id BIGINT NOT NULL PRIMARY KEY,
     biz_document_id BIGINT NOT NULL,
+    business_chain_no VARCHAR(64),
+    claim_kind VARCHAR(32) NOT NULL DEFAULT 'STANDALONE',
+    parent_claim_id BIGINT,
+    location_id BIGINT,
     applicant_id BIGINT NOT NULL,
     purpose VARCHAR(512) NOT NULL,
     booking_date DATE NOT NULL,
@@ -252,12 +257,45 @@ CREATE TABLE material_claim (
     update_time TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted TINYINT NOT NULL DEFAULT 0,
     create_user_id BIGINT,
-    update_user_id BIGINT
+    update_user_id BIGINT,
+    CONSTRAINT chk_material_claim_kind CHECK (claim_kind IN ('STANDALONE', 'ROOT', 'CHILD')),
+    CONSTRAINT chk_material_claim_split CHECK (
+        (claim_kind = 'CHILD' AND parent_claim_id IS NOT NULL
+         AND location_id IS NOT NULL AND parent_claim_id <> id)
+        OR (claim_kind IN ('STANDALONE', 'ROOT')
+            AND parent_claim_id IS NULL AND location_id IS NULL)
+    )
 );
 CREATE UNIQUE INDEX uk_item_claim_document ON material_claim (biz_document_id);
+CREATE INDEX idx_item_claim_business_chain_no ON material_claim (business_chain_no);
+CREATE UNIQUE INDEX uk_material_claim_parent_location ON material_claim (parent_claim_id, location_id);
+CREATE INDEX idx_material_claim_location ON material_claim (location_id);
 CREATE INDEX idx_item_claim_applicant ON material_claim (applicant_id, create_time);
 CREATE INDEX idx_item_claim_status ON material_claim (status, booking_start_at, booking_end_at);
 CREATE INDEX idx_item_claim_delegate ON material_claim (delegate_student_id, status, booking_start_at);
+
+CREATE TABLE material_claim_segment (
+    id BIGINT NOT NULL PRIMARY KEY,
+    claim_id BIGINT NOT NULL,
+    revision_no INT NOT NULL,
+    segment_seq INT NOT NULL,
+    start_period_id BIGINT NOT NULL,
+    end_period_id BIGINT NOT NULL,
+    booking_start_at TIMESTAMP(3) NOT NULL,
+    booking_end_at TIMESTAMP(3) NOT NULL,
+    create_time TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    create_user_id BIGINT,
+    update_user_id BIGINT,
+    CONSTRAINT chk_material_claim_segment_seq CHECK (segment_seq > 0),
+    CONSTRAINT chk_material_claim_segment_window CHECK (booking_start_at < booking_end_at),
+    CONSTRAINT chk_material_claim_segment_deleted CHECK (deleted IN (0, 1))
+);
+CREATE UNIQUE INDEX uk_item_claim_segment_revision
+    ON material_claim_segment (claim_id, revision_no, segment_seq);
+CREATE INDEX idx_item_claim_segment_start_period ON material_claim_segment (start_period_id);
+CREATE INDEX idx_item_claim_segment_end_period ON material_claim_segment (end_period_id);
 
 CREATE TABLE material_claim_line (
     id BIGINT NOT NULL PRIMARY KEY,
@@ -296,6 +334,7 @@ CREATE TABLE material_reservation (
     claim_id BIGINT NOT NULL,
     claim_line_id BIGINT NOT NULL,
     allocation_id BIGINT NOT NULL,
+    claim_segment_id BIGINT,
     revision_no INT NOT NULL,
     material_id BIGINT NOT NULL,
     location_id BIGINT NOT NULL,
@@ -316,7 +355,8 @@ CREATE TABLE material_reservation (
     create_user_id BIGINT,
     update_user_id BIGINT
 );
-CREATE UNIQUE INDEX uk_item_reservation_subject ON material_reservation (allocation_id, reservation_subject_id);
+CREATE UNIQUE INDEX uk_item_reservation_subject ON material_reservation (allocation_id, claim_segment_id, reservation_subject_id);
+CREATE INDEX idx_item_reservation_segment ON material_reservation (claim_segment_id);
 CREATE INDEX idx_item_reservation_claim ON material_reservation (claim_id, revision_no);
 CREATE INDEX idx_item_reservation_overlap ON material_reservation (material_id, location_id, status, reservation_start_at, reservation_end_at);
 CREATE INDEX idx_item_reservation_asset ON material_reservation (fixed_asset_id, status, reservation_start_at, reservation_end_at);

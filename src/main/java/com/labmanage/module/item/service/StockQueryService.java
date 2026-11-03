@@ -12,9 +12,11 @@ import com.labmanage.module.item.dto.AssetPageQuery;
 import com.labmanage.module.item.dto.ItemPageQuery;
 import com.labmanage.module.item.dto.StockBalancePageQuery;
 import com.labmanage.module.item.dto.StockMovementPageQuery;
+import com.labmanage.module.item.dto.StockSettlementPageQuery;
 import com.labmanage.module.item.entity.FixedAsset;
 import com.labmanage.module.item.entity.Material;
 import com.labmanage.module.item.entity.MaterialDocument;
+import com.labmanage.module.item.entity.MaterialSettlement;
 import com.labmanage.module.item.entity.StockBalance;
 import com.labmanage.module.item.entity.StockLocation;
 import com.labmanage.module.item.entity.StockLocationAdmin;
@@ -23,6 +25,7 @@ import com.labmanage.module.item.enums.MaterialType;
 import com.labmanage.module.item.mapper.FixedAssetMapper;
 import com.labmanage.module.item.mapper.MaterialDocumentMapper;
 import com.labmanage.module.item.mapper.MaterialMapper;
+import com.labmanage.module.item.mapper.MaterialSettlementMapper;
 import com.labmanage.module.item.mapper.StockBalanceMapper;
 import com.labmanage.module.item.mapper.StockLocationAdminMapper;
 import com.labmanage.module.item.mapper.StockLocationMapper;
@@ -32,6 +35,7 @@ import com.labmanage.module.item.vo.FixedAssetVO;
 import com.labmanage.module.item.vo.StockBalanceVO;
 import com.labmanage.module.item.vo.StockLocationAdminVO;
 import com.labmanage.module.item.vo.StockMovementVO;
+import com.labmanage.module.item.vo.StockSettlementPageItemVO;
 import com.labmanage.roles.entity.SysUser;
 import com.labmanage.roles.mapper.SysUserMapper;
 import org.springframework.stereotype.Service;
@@ -65,6 +69,11 @@ public class StockQueryService {
             "quantity", "quantity",
             "movementType", "movement_type"
     );
+    private static final Map<String, String> SETTLEMENT_SORT_COLUMNS = Map.of(
+            "occurredAt", "d.occurred_at",
+            "quantity", "s.quantity",
+            "settlementType", "s.settlement_type"
+    );
 
     private final StockBalanceMapper balanceMapper;
     private final StockMovementMapper movementMapper;
@@ -73,6 +82,7 @@ public class StockQueryService {
     private final StockLocationMapper locationMapper;
     private final StockLocationAdminMapper locationAdminMapper;
     private final MaterialDocumentMapper documentMapper;
+    private final MaterialSettlementMapper settlementMapper;
     private final SysUserMapper userMapper;
 
     public StockQueryService(StockBalanceMapper balanceMapper,
@@ -82,6 +92,7 @@ public class StockQueryService {
                              StockLocationMapper locationMapper,
                              StockLocationAdminMapper locationAdminMapper,
                              MaterialDocumentMapper documentMapper,
+                             MaterialSettlementMapper settlementMapper,
                              SysUserMapper userMapper) {
         this.balanceMapper = balanceMapper;
         this.movementMapper = movementMapper;
@@ -90,6 +101,7 @@ public class StockQueryService {
         this.locationMapper = locationMapper;
         this.locationAdminMapper = locationAdminMapper;
         this.documentMapper = documentMapper;
+        this.settlementMapper = settlementMapper;
         this.userMapper = userMapper;
     }
 
@@ -185,6 +197,22 @@ public class StockQueryService {
         applySort(wrapper, query, MOVEMENT_SORT_COLUMNS, StockMovement::getOccurredAt, "occurred_at");
         Page<StockMovement> page = movementMapper.selectPage(PageUtils.toPage(query), wrapper);
         List<StockMovementVO> records = toMovementVOs(page.getRecords());
+        return PageResult.of(records, page.getTotal(), (int) page.getCurrent(), (int) page.getSize());
+    }
+
+    public PageResult<StockSettlementPageItemVO> pageSettlements(StockSettlementPageQuery query) {
+        validateDateRange(query.getStartDate(), query.getEndDate());
+        query.setDocumentNo(trim(query.getDocumentNo()));
+        query.setSettlementType(trim(query.getSettlementType()));
+        query.setReviewStatus(trim(query.getReviewStatus()));
+        Instant startAt = query.getStartDate() == null ? null : dayStart(query.getStartDate());
+        Instant endAt = query.getEndDate() == null ? null : dayStart(query.getEndDate().plusDays(1));
+        String sortColumn = query.getSortBy() == null ? "d.occurred_at"
+                : SETTLEMENT_SORT_COLUMNS.getOrDefault(query.getSortBy(), "d.occurred_at");
+        String sortDirection = "asc".equalsIgnoreCase(query.getSortOrder()) ? "ASC" : "DESC";
+        Page<MaterialSettlement> page = settlementMapper.selectSettlementPage(
+                PageUtils.toPage(query), query, startAt, endAt, sortColumn, sortDirection);
+        List<StockSettlementPageItemVO> records = toSettlementPageItemVOs(page.getRecords());
         return PageResult.of(records, page.getTotal(), (int) page.getCurrent(), (int) page.getSize());
     }
 
@@ -288,6 +316,68 @@ public class StockQueryService {
                     operator == null ? null : operator.getRealName(), movement.getOccurredAt(),
                     movement.getBeforeOwnedQuantity(), movement.getAfterOwnedQuantity(),
                     movement.getBeforeAvailableQuantity(), movement.getAfterAvailableQuantity());
+        }).toList();
+    }
+
+    private List<StockSettlementPageItemVO> toSettlementPageItemVOs(List<MaterialSettlement> settlements) {
+        if (settlements.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> documentIds = settlements.stream()
+                .map(MaterialSettlement::getMaterialDocumentId).collect(Collectors.toSet());
+        Map<Long, MaterialDocument> documents = documentMapper.selectBatchIds(documentIds).stream()
+                .collect(Collectors.toMap(MaterialDocument::getId, Function.identity()));
+        Map<Long, Material> materials = loadMaterials(settlements.stream()
+                .map(MaterialSettlement::getMaterialId).collect(Collectors.toSet()));
+        Set<Long> assetIds = settlements.stream().map(MaterialSettlement::getFixedAssetId)
+                .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, FixedAsset> assets = assetIds.isEmpty() ? Map.of() : assetMapper.selectBatchIds(assetIds).stream()
+                .collect(Collectors.toMap(FixedAsset::getId, Function.identity()));
+        Set<Long> locationIds = documents.values().stream().map(MaterialDocument::getLocationId)
+                .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, StockLocation> locations = loadLocations(locationIds);
+        Set<Long> userIds = documents.values().stream().map(MaterialDocument::getOperatorId)
+                .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
+        userIds.addAll(documents.values().stream().map(MaterialDocument::getReviewedBy)
+                .filter(java.util.Objects::nonNull).collect(Collectors.toSet()));
+        Map<Long, SysUser> users = loadUsers(userIds);
+        return settlements.stream().map(settlement -> {
+            MaterialDocument document = documents.get(settlement.getMaterialDocumentId());
+            Material material = materials.get(settlement.getMaterialId());
+            FixedAsset asset = settlement.getFixedAssetId() == null ? null : assets.get(settlement.getFixedAssetId());
+            StockLocation location = document == null || document.getLocationId() == null ? null
+                    : locations.get(document.getLocationId());
+            SysUser operator = document == null || document.getOperatorId() == null ? null
+                    : users.get(document.getOperatorId());
+            SysUser reviewer = document == null || document.getReviewedBy() == null ? null
+                    : users.get(document.getReviewedBy());
+            return new StockSettlementPageItemVO(
+                    str(settlement.getId()),
+                    str(settlement.getMaterialDocumentId()),
+                    document == null ? null : document.getDocumentNo(),
+                    document == null ? null : document.getBusinessScene(),
+                    str(settlement.getSourceMaterialDocumentLineId()),
+                    str(settlement.getMaterialId()),
+                    material == null ? null : material.getMaterialName(),
+                    material == null ? null : material.getSpecification(),
+                    material == null ? null : material.getBaseUnit(),
+                    str(settlement.getFixedAssetId()),
+                    asset == null ? null : asset.getAssetCode(),
+                    settlement.getSettlementType(),
+                    settlement.getQuantity(),
+                    settlement.getTargetAssetStatus(),
+                    settlement.getReason(),
+                    document == null ? null : str(document.getLocationId()),
+                    location == null ? null : location.getLocationCode(),
+                    location == null ? null : location.getLocationName(),
+                    document == null ? null : str(document.getOperatorId()),
+                    operator == null ? null : operator.getRealName(),
+                    document == null ? null : document.getReviewStatus(),
+                    document == null ? null : str(document.getReviewedBy()),
+                    reviewer == null ? null : reviewer.getRealName(),
+                    document == null ? null : document.getReviewedAt(),
+                    document == null ? null : document.getOccurredAt(),
+                    document == null ? null : document.getPostedAt());
         }).toList();
     }
 

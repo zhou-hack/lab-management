@@ -13,6 +13,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,7 +36,9 @@ class ItemTimeServiceTest {
         periods.put(1L, period(1, 1, "08:00", "08:45", 1));
         periods.put(2L, period(2, 2, "08:55", "09:40", 1));
         periods.put(3L, period(3, 3, "10:00", "10:45", 0));
+        periods.put(4L, period(4, 4, "11:00", "11:45", 1));
         when(periodMapper.selectById(anyLong())).thenAnswer(invocation -> periods.get(invocation.getArgument(0)));
+        when(periodMapper.selectList(null)).thenReturn(List.copyOf(periods.values()));
         timeService = new ItemTimeService(periodMapper, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -121,6 +124,42 @@ class ItemTimeServiceTest {
                 .isEqualTo(TODAY);
         assertThat(window.endAt().atZone(ItemTimeService.SHANGHAI).toLocalDate())
                 .isEqualTo(TODAY.plusDays(1));
+    }
+
+    @Test
+    @DisplayName("跳选节次排序去重并合并为独立连续段")
+    void noncontiguousSelectionBuildsSegments() {
+        ItemTimeService.BookingSelection selection = timeService.resolveBookingSelection(
+                TODAY, 1L, 4L, java.util.List.of("4", "1", "2", "2"));
+
+        assertThat(selection.segments()).hasSize(2);
+        assertThat(selection.segments().get(0).segmentSeq()).isEqualTo(1);
+        assertThat(selection.segments().get(0).startPeriodId()).isEqualTo(1L);
+        assertThat(selection.segments().get(0).endPeriodId()).isEqualTo(2L);
+        assertThat(selection.segments().get(1).segmentSeq()).isEqualTo(2);
+        assertThat(selection.segments().get(1).startPeriodId()).isEqualTo(4L);
+        assertThat(selection.segments().get(1).endPeriodId()).isEqualTo(4L);
+        assertThat(selection.envelope().bookingStartAt())
+                .isEqualTo(selection.segments().get(0).window().bookingStartAt());
+        assertThat(selection.envelope().bookingEndAt())
+                .isEqualTo(selection.segments().get(1).window().bookingEndAt());
+        assertThat(timeService.expandPeriodIds(1L, 2L)).containsExactly("1", "2");
+    }
+
+    @Test
+    @DisplayName("旧起止保持单段，跳选包络不一致及停用节次被拒绝")
+    void selectionCompatibilityAndValidation() {
+        ItemTimeService.BookingSelection legacy = timeService.resolveBookingSelection(TODAY, 1L, 2L, null);
+        assertThat(legacy.segments()).hasSize(1);
+        assertThat(legacy.segments().get(0).startPeriodId()).isEqualTo(1L);
+        assertThat(legacy.segments().get(0).endPeriodId()).isEqualTo(2L);
+
+        assertThatThrownBy(() -> timeService.resolveBookingSelection(TODAY, 1L, 2L, List.of("1", "4")))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("起止节次与所选节次不一致");
+        assertThatThrownBy(() -> timeService.resolveBookingSelection(TODAY, null, null, List.of("3")))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("不存在或已停用");
+        assertThatThrownBy(() -> timeService.resolveBookingSelection(TODAY, null, null, List.of()))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("不能为空");
     }
 
     private static ClassPeriod period(int id, int number, String start, String end, int enabled) {

@@ -5,6 +5,7 @@ import ItemLocationSelect from '@/components/item/ItemLocationSelect.vue'
 import DocumentCenterPanel from '@/views/admin/item/panels/DocumentCenterPanel.vue'
 import request from '@/api/request'
 import MaterialCatalogCart from './MaterialCatalogCart.vue'
+import { normalizeClaimDraftLines, setMaterialQuantity } from './materialCart.rules'
 import {
   assetStatusLabel,
   businessSceneLabel,
@@ -18,9 +19,16 @@ import {
   addClaimLine,
   buildClaimPayload,
   buildClaimSubmissionPayload,
+  canIssueClaim,
+  canReviewClaim,
   getClaimAllocationsError,
+  getClaimIssueLocationId,
   getClaimLinesError,
-  shouldRefreshClaimPreview
+  groupClaimAllocationsByLocation,
+  groupContiguousPeriods,
+  resolveClaimPeriodIds,
+  shouldRefreshClaimPreview,
+  toggleClaimPeriod
 } from './claim.rules'
 
 vi.mock('@/api/request', () => ({ default: { get: vi.fn() } }))
@@ -30,7 +38,8 @@ function claimSource() {
     purpose: '  课程实验  ',
     bookingDate: '2026-10-28',
     startPeriodId: 1,
-    endPeriodId: 2,
+    endPeriodId: 4,
+    periodIds: [1, 2, 4],
     revisionNo: 7,
     reviewStatus: 'REJECTED',
     reviewerId: 99,
@@ -55,7 +64,8 @@ function claimSource() {
     purpose: '课程实验',
     bookingDate: '2026-10-28',
     startPeriodId: '1',
-    endPeriodId: '2',
+    endPeriodId: '4',
+    periodIds: ['1', '2', '4'],
     lines: [{ materialId: '10', requestedQuantity: 2 }],
     allocations: [{ materialId: '10', locationId: '20', plannedQuantity: 2 }]
   }
@@ -99,6 +109,99 @@ describe('申领 payload', () => {
     expect(result).not.toHaveProperty('reservations')
     expect(result.lines[0]).not.toHaveProperty('reservations')
     expect(result.allocations[0]).not.toHaveProperty('reservationId')
+  })
+})
+
+describe('按库位拆分子申领单的前端规则', () => {
+  it('按库位分组成子单预览并保留各分配行与库位信息', () => {
+    const allocations = [
+      { materialId: 1, locationId: 20, locationCode: 'A01', locationName: '甲库', plannedQuantity: 2 },
+      { materialId: 2, locationId: '20', locationCode: 'A01', locationName: '甲库', plannedQuantity: 1 },
+      { materialId: 1, locationId: 21, locationCode: 'B01', locationName: '乙库', plannedQuantity: 3 }
+    ]
+
+    const groups = groupClaimAllocationsByLocation(allocations)
+
+    expect(groups).toHaveLength(2)
+    expect(groups[0]).toMatchObject({ locationId: '20', locationCode: 'A01', locationName: '甲库' })
+    expect(groups[0].allocations).toEqual([allocations[0], allocations[1]])
+    expect(groups[1]).toMatchObject({ locationId: '21', locationCode: 'B01', locationName: '乙库' })
+    expect(groups[1].allocations).toEqual([allocations[2]])
+    expect(allocations).toHaveLength(3)
+  })
+
+  it('ROOT 即使误返回可操作标记也不显示审核和实发入口', () => {
+    const root = { claimKind: 'ROOT', canReview: true, canIssue: true }
+
+    expect(canReviewClaim(root)).toBe(false)
+    expect(canIssueClaim(root)).toBe(false)
+  })
+
+  it('CHILD、STANDALONE 与历史无类型申领沿用后端操作标记', () => {
+    for (const claimKind of ['CHILD', 'STANDALONE', undefined]) {
+      expect(canReviewClaim({ claimKind, canReview: true })).toBe(true)
+      expect(canIssueClaim({ claimKind, canIssue: true })).toBe(true)
+      expect(canReviewClaim({ claimKind, canReview: false })).toBe(false)
+      expect(canIssueClaim({ claimKind, canIssue: false })).toBe(false)
+    }
+  })
+
+  it('CHILD 实发库位固定为详情所属库位，独立申领仍使用已选库位', () => {
+    const child = { claimKind: 'CHILD', locationId: 20 }
+
+    expect(getClaimIssueLocationId(child, 99)).toBe('20')
+    expect(getClaimIssueLocationId({ claimKind: 'STANDALONE' }, 99)).toBe('99')
+    expect(getClaimIssueLocationId({ claimKind: 'STANDALONE' })).toBe('')
+  })
+})
+
+describe('申领节次卡片选择与分段', () => {
+  it('可自由跳选并按节次号排序去重', () => {
+    const selected = toggleClaimPeriod([4, 2, 2], 1)
+
+    expect(selected).toEqual([1, 2, 4])
+    expect(toggleClaimPeriod(selected, 6)).toEqual([1, 2, 4, 6])
+  })
+
+  it('可取消中间节次并保留前后两个非连续段', () => {
+    expect(toggleClaimPeriod([1, 2, 3], 2)).toEqual([1, 3])
+    expect(toggleClaimPeriod([1, 3], 3)).toEqual([1])
+  })
+
+  it('按极大连续段分组，补选间断节次后合并段', () => {
+    expect(groupContiguousPeriods([4, 1, 2, 2])).toEqual([[1, 2], [4]])
+    expect(groupContiguousPeriods(toggleClaimPeriod([1, 2, 4], 3))).toEqual([[1, 2, 3, 4]])
+  })
+
+  it('编辑按详情段展开实际节次ID，不填补跳选段之间的空缺', () => {
+    const periods = [
+      { id: 104, periodNo: 4 },
+      { id: 101, periodNo: 1 },
+      { id: 103, periodNo: 3 },
+      { id: 102, periodNo: 2 }
+    ]
+    const detail = {
+      startPeriodId: 101,
+      endPeriodId: 104,
+      segments: [
+        { segmentSeq: 2, startPeriodId: 104, endPeriodId: 104 },
+        { segmentSeq: 1, startPeriodId: 101, endPeriodId: 102 }
+      ]
+    }
+
+    expect(resolveClaimPeriodIds(detail, periods)).toEqual(['101', '102', '104'])
+  })
+
+  it('历史无段详情才按旧起止节次补满', () => {
+    const periods = [
+      { id: 101, periodNo: 1 },
+      { id: 102, periodNo: 2 },
+      { id: 103, periodNo: 3 },
+      { id: 104, periodNo: 4 }
+    ]
+
+    expect(resolveClaimPeriodIds({ startPeriodId: 101, endPeriodId: 103, segments: [] }, periods))
+      .toEqual(['101', '102', '103'])
   })
 })
 
@@ -257,6 +360,45 @@ describe('申领预占展示与冲突恢复', () => {
   })
 })
 
+describe('申领数量直填与本地草稿', () => {
+  const material = {
+    materialId: 1,
+    materialName: '信息面板',
+    materialType: 'CONSUMABLE',
+    baseUnit: '个',
+    availableQuantity: 10
+  }
+
+  it('填写数量直接加入或更新物料，不重复累加', () => {
+    const added = setMaterialQuantity([], material, 2)
+    const updated = setMaterialQuantity(added.lines, material, 4)
+
+    expect(added.error).toBe('')
+    expect(updated.lines).toHaveLength(1)
+    expect(updated.lines[0]).toMatchObject({ materialId: '1', requestedQuantity: 4 })
+  })
+
+  it('清空数量移除物料，超量输入保留原购物车', () => {
+    const added = setMaterialQuantity([], material, 2)
+    const rejected = setMaterialQuantity(added.lines, material, 99)
+
+    expect(rejected).toEqual({ lines: added.lines, error: '库存不足' })
+    expect(setMaterialQuantity(added.lines, material, null)).toEqual({ lines: [], error: '' })
+  })
+
+  it('本地草稿仅保留有效的唯一物料数量', () => {
+    const lines = normalizeClaimDraftLines([
+      { materialId: 1, materialName: '信息面板', requestedQuantity: 2 },
+      { materialId: '1', materialName: '重复项', requestedQuantity: 3 },
+      { materialId: 2, requestedQuantity: 0 },
+      { materialName: '缺少ID', requestedQuantity: 1 }
+    ])
+
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toMatchObject({ materialId: '1', requestedQuantity: 2 })
+  })
+})
+
 describe('库存目录数量输入边界', () => {
   it('零预计可约物料禁用输入且不会出现最大值小于最小值', async () => {
     const wrapper = mount(MaterialCatalogCart, {
@@ -287,7 +429,7 @@ describe('库存目录数量输入边界', () => {
     expect(input.props('max')).toBe(Number.MAX_SAFE_INTEGER)
   })
 
-  it('超量输入不会被自动截断，点击添加提示库存不足且不更新购物车', async () => {
+  it('超量输入提示库存不足且不更新购物车', async () => {
     const warning = vi.spyOn(ElMessage, 'warning').mockImplementation(() => {})
     const wrapper = mount(MaterialCatalogCart, {
       props: {
@@ -315,13 +457,83 @@ describe('库存目录数量输入边界', () => {
     expect(input.props('max')).toBe(Number.MAX_SAFE_INTEGER)
     input.vm.$emit('update:modelValue', 99)
     await flushPromises()
-    const addButton = wrapper.findAll('button').find((button) => button.text() === '添加')
-    await addButton.trigger('click')
 
     expect(warning).toHaveBeenCalledWith('库存不足')
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     expect(wrapper.emitted('change')).toBeUndefined()
     warning.mockRestore()
+  })
+
+  it('有效数量直填即加入购物车且不再显示操作列和添加按钮', async () => {
+    const wrapper = mount(MaterialCatalogCart, {
+      props: {
+        mode: 'claim',
+        active: true,
+        loadCatalog: async () => ({
+          records: [{
+            materialId: 1,
+            materialName: '信息面板',
+            materialType: 'CONSUMABLE',
+            ownedQuantity: 61,
+            availableQuantity: 61,
+            baseUnit: '个'
+          }],
+          total: 1
+        })
+      },
+      global: {
+        plugins: [ElementPlus],
+        stubs: { MaterialLinesEditor: true, ItemQuantityText: true }
+      }
+    })
+
+    await flushPromises()
+    wrapper.findComponent({ name: 'ElInputNumber' }).vm.$emit('update:modelValue', 2)
+    await flushPromises()
+
+    expect(wrapper.emitted('update:modelValue')[0][0]).toMatchObject([{
+      materialId: '1',
+      requestedQuantity: 2
+    }])
+    expect(wrapper.findAll('th').map((th) => th.text())).not.toContain('操作')
+    expect(wrapper.findAll('button').map((button) => button.text())).not.toContain('添加')
+  })
+
+  it('申请数量保存到浏览器并能在重新打开时恢复', async () => {
+    const draftKey = 'test-claim-material-draft'
+    globalThis.localStorage.removeItem(draftKey)
+    const loadCatalog = async () => ({
+      records: [{
+        materialId: 1,
+        materialName: '信息面板',
+        materialType: 'CONSUMABLE',
+        ownedQuantity: 61,
+        availableQuantity: 61,
+        baseUnit: '个'
+      }],
+      total: 1
+    })
+    const options = {
+      props: { mode: 'claim', active: true, loadCatalog, draftKey },
+      global: {
+        plugins: [ElementPlus],
+        stubs: { MaterialLinesEditor: true, ItemQuantityText: true }
+      }
+    }
+    const first = mount(MaterialCatalogCart, options)
+    await flushPromises()
+    first.findComponent({ name: 'ElInputNumber' }).vm.$emit('update:modelValue', 2)
+    await flushPromises()
+    expect(JSON.parse(globalThis.localStorage.getItem(draftKey))[0].requestedQuantity).toBe(2)
+    first.unmount()
+
+    const reopened = mount(MaterialCatalogCart, options)
+    await flushPromises()
+    expect(reopened.emitted('update:modelValue')[0][0]).toMatchObject([{
+      materialId: '1',
+      requestedQuantity: 2
+    }])
+    globalThis.localStorage.removeItem(draftKey)
   })
 })
 
@@ -368,7 +580,15 @@ describe('库存单据业务链筛选', () => {
     })
     await flushPromises()
 
-    const chainInput = wrapper.find('input[placeholder="输入完整业务链ID"]')
+    const chainInput = wrapper.find('input[placeholder="ALL业务链号或历史数值ID"]')
+    await chainInput.setValue('ALL2026111000001')
+    request.get.mockClear()
+    await wrapper.findAll('button').find((button) => button.text() === '查询').trigger('click')
+    await flushPromises()
+    expect(request.get).toHaveBeenCalledWith('/item/documents', expect.objectContaining({
+      params: expect.objectContaining({ businessChainId: 'ALL2026111000001' })
+    }))
+
     await chainInput.setValue('2115364261393514497')
     request.get.mockClear()
     await wrapper.findAll('button').find((button) => button.text() === '查询').trigger('click')

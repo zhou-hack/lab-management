@@ -1,5 +1,59 @@
 <template>
   <div class="fixed_asset_stock">
+    <div class="card fixed_asset_stock__toolbar_card">
+      <div class="fixed_asset_stock__toolbar">
+        <el-autocomplete
+          v-model="query.materialName"
+          :fetch-suggestions="fetchMaterialNameSuggestions"
+          :debounce="300"
+          placeholder="物料名称"
+          clearable
+          class="fixed_asset_stock__input"
+          @keyup.enter="search"
+          @clear="search"
+        />
+        <el-autocomplete
+          v-model="query.assetCode"
+          :fetch-suggestions="fetchAssetCodeSuggestions"
+          :debounce="300"
+          placeholder="资产编码"
+          clearable
+          class="fixed_asset_stock__input"
+          @keyup.enter="search"
+          @clear="search"
+        />
+        <item-location-select
+          v-model="query.locationId"
+          class="fixed_asset_stock__location"
+          placeholder="全部库位"
+          @change="search"
+        />
+        <el-select
+          v-model="query.status"
+          placeholder="全部状态"
+          clearable
+          class="fixed_asset_stock__status"
+          @change="search"
+        >
+          <el-option
+            v-for="(label, status) in ASSET_STATUS_LABELS"
+            :key="status"
+            :label="label"
+            :value="status"
+          />
+        </el-select>
+        <el-button
+          type="primary"
+          @click="search"
+        >
+          查询
+        </el-button>
+        <el-button @click="reset">
+          重置
+        </el-button>
+      </div>
+    </div>
+
     <div class="card fixed_asset_stock__summary_card">
       <div class="sechead">
         物料汇总（保有 / 可用）
@@ -69,54 +123,6 @@
       <div class="sechead">
         单台资产
       </div>
-      <div class="fixed_asset_stock__toolbar">
-        <el-input
-          v-model="query.materialName"
-          placeholder="物料名称"
-          clearable
-          class="fixed_asset_stock__input"
-          @keyup.enter="search"
-          @clear="search"
-        />
-        <el-input
-          v-model="query.assetCode"
-          placeholder="资产编码"
-          clearable
-          class="fixed_asset_stock__input"
-          @keyup.enter="search"
-          @clear="search"
-        />
-        <item-location-select
-          v-model="query.locationId"
-          class="fixed_asset_stock__location"
-          placeholder="全部库位"
-          @change="search"
-        />
-        <el-select
-          v-model="query.status"
-          placeholder="全部状态"
-          clearable
-          class="fixed_asset_stock__status"
-          @change="search"
-        >
-          <el-option
-            v-for="(label, status) in ASSET_STATUS_LABELS"
-            :key="status"
-            :label="label"
-            :value="status"
-          />
-        </el-select>
-        <el-button
-          type="primary"
-          @click="search"
-        >
-          查询
-        </el-button>
-        <el-button @click="reset">
-          重置
-        </el-button>
-      </div>
-
       <el-table
         v-loading="loading"
         :data="records"
@@ -448,7 +454,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import ItemLocationSelect from '@/components/item/ItemLocationSelect.vue'
 import ItemQuantityText from '@/components/item/ItemQuantityText.vue'
@@ -482,6 +488,50 @@ function canToggleMaintenance(asset) {
 }
 
 const query = reactive({ materialName: '', assetCode: '', locationId: '', status: '', pageNum: 1, pageSize: 10 })
+const suggestionSerials = { materialName: 0, assetCode: 0 }
+
+async function fetchAssetSuggestions(field, keyword, callback) {
+  const serial = ++suggestionSerials[field]
+  const snapshot = { ...query }
+  const trimmedKeyword = keyword.trim()
+  if (!trimmedKeyword) {
+    callback([])
+    return
+  }
+  try {
+    const result = await getAssets({
+      pageNum: 1,
+      pageSize: 100,
+      materialName: field === 'materialName' ? trimmedKeyword : snapshot.materialName.trim() || undefined,
+      assetCode: field === 'assetCode' ? trimmedKeyword : snapshot.assetCode.trim() || undefined,
+      locationId: snapshot.locationId || undefined,
+      status: snapshot.status || undefined
+    })
+    const queryUnchanged = ['materialName', 'assetCode', 'locationId', 'status']
+      .every((key) => snapshot[key] === query[key])
+    if (serial !== suggestionSerials[field] || !queryUnchanged) return
+    const suggestions = [...new Set(
+      (result?.records || []).map((record) => record[field]?.trim()).filter(Boolean)
+    )].slice(0, 10).map((value) => ({ value }))
+    callback(suggestions)
+  } catch {
+    if (serial === suggestionSerials[field]) callback([])
+  }
+}
+
+function fetchMaterialNameSuggestions(keyword, callback) {
+  return fetchAssetSuggestions('materialName', keyword, callback)
+}
+
+function fetchAssetCodeSuggestions(keyword, callback) {
+  return fetchAssetSuggestions('assetCode', keyword, callback)
+}
+
+function invalidateAssetSuggestions() {
+  suggestionSerials.materialName += 1
+  suggestionSerials.assetCode += 1
+}
+
 const summaryPage = ref(1)
 const records = ref([])
 const total = ref(0)
@@ -540,11 +590,13 @@ async function loadAssets() {
 }
 
 function search() {
+  invalidateAssetSuggestions()
   query.pageNum = 1
   loadAssets()
 }
 
 function reset() {
+  invalidateAssetSuggestions()
   Object.assign(query, { materialName: '', assetCode: '', locationId: '', status: '', pageNum: 1, pageSize: 10 })
   loadAssets()
 }
@@ -678,15 +730,19 @@ onMounted(() => {
   loadSummary()
   loadAssets()
 })
+
+onBeforeUnmount(invalidateAssetSuggestions)
 </script>
 
 <style scoped>
 .fixed_asset_stock__summary_card,
-.fixed_asset_stock__card {
+.fixed_asset_stock__card,
+.fixed_asset_stock__toolbar_card {
   padding: 18px;
 }
 
-.fixed_asset_stock__summary_card {
+.fixed_asset_stock__summary_card,
+.fixed_asset_stock__toolbar_card {
   margin-bottom: 14px;
 }
 
@@ -694,7 +750,6 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 14px;
   overflow-x: auto;
 }
 
@@ -702,7 +757,12 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.fixed_asset_stock__input,
+.fixed_asset_stock__toolbar :deep(.fixed_asset_stock__input) {
+  flex: 0 0 140px;
+  width: 140px;
+  min-width: 0;
+}
+
 .fixed_asset_stock__location {
   width: 180px;
 }

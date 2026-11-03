@@ -16,6 +16,9 @@ public interface BizDocumentMapper extends BaseMapper<BizDocument> {
     @Select("SELECT * FROM biz_document WHERE document_no = #{documentNo} AND deleted = 0")
     BizDocument selectByDocumentNo(@Param("documentNo") String documentNo);
 
+    @Select("SELECT COUNT(*) FROM biz_document WHERE document_no = #{documentNo}")
+    long countByDocumentNo(@Param("documentNo") String documentNo);
+
     @Select("""
             SELECT * FROM biz_document
             WHERE owner_user_id = #{ownerUserId} AND document_type = #{documentType}

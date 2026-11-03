@@ -45,3 +45,11 @@ export function getConsumableIssueDefaults(line) {
     quantity: Math.min(Number(line.remainingQuantity || 0), Number(position.availableQuantity))
   }
 }
+
+export function getFixedAssetIssueDefaults(line) {
+  const remainingQuantity = Math.max(Number(line.remainingQuantity || 0), 0)
+  return [...(line.candidateAssets || [])]
+    .sort((a, b) => Number(Boolean(b.reservedByThisClaim)) - Number(Boolean(a.reservedByThisClaim)))
+    .slice(0, remainingQuantity)
+    .map((asset) => String(asset.fixedAssetId))
+}

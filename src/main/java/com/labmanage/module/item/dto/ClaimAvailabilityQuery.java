@@ -1,7 +1,6 @@
 package com.labmanage.module.item.dto;
 
 import com.labmanage.module.item.enums.MaterialType;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -14,13 +13,13 @@ public class ClaimAvailabilityQuery extends ItemPageQuery {
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     private LocalDate bookingDate;
 
-    @NotBlank(message = "起始节次不能为空")
     @Pattern(regexp = "^[1-9]\\d*$", message = "起始节次ID不合法")
     private String startPeriodId;
 
-    @NotBlank(message = "结束节次不能为空")
     @Pattern(regexp = "^[1-9]\\d*$", message = "结束节次ID不合法")
     private String endPeriodId;
+
+    private String periodIds;
 
     private MaterialType materialType;
     private String materialName;
@@ -38,6 +37,8 @@ public class ClaimAvailabilityQuery extends ItemPageQuery {
     public void setStartPeriodId(String startPeriodId) { this.startPeriodId = startPeriodId; }
     public String getEndPeriodId() { return endPeriodId; }
     public void setEndPeriodId(String endPeriodId) { this.endPeriodId = endPeriodId; }
+    public String getPeriodIds() { return periodIds; }
+    public void setPeriodIds(String periodIds) { this.periodIds = periodIds; }
     public MaterialType getMaterialType() { return materialType; }
     public void setMaterialType(MaterialType materialType) { this.materialType = materialType; }
     public String getMaterialName() { return materialName; }

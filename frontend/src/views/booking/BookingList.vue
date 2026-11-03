@@ -1,21 +1,11 @@
 <template>
   <div class="tl">
-    <!-- 页头 -->
-    <div class="tl__head">
-      <div>
-        <h2 class="t-title tl__title">
-          场地预约时间轴
-        </h2>
-        <p class="t-sub">
-          {{ isReadonly
-            ? '只读查看：选日期看全部场地状态，点场地卡片看各节次占用 · 时段按上海本地时间展示'
-            : '选日期看全部场地三色状态 · 点场地卡片进入节次视图，点按空闲节次（可跳选多节）后发起预约或批量周期预约' }}
-        </p>
-      </div>
-      <div
-        v-if="!isReadonly"
-        class="tl__actions"
-      >
+    <!-- 预约操作 -->
+    <div
+      v-if="!isReadonly"
+      class="tl__head"
+    >
+      <div class="tl__actions">
         <el-button
           v-permission="'booking:lab:create'"
           @click="openSeries"
@@ -845,13 +835,8 @@ onMounted(async () => {
 .tl__head {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
-}
-
-.tl__title {
-  margin: 0 0 4px;
-  font-size: 21px;
 }
 
 .tl__actions {

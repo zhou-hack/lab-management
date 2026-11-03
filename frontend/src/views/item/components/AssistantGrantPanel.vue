@@ -1,14 +1,6 @@
 <template>
   <section class="card assistant_grant">
     <div class="assistant_grant__head">
-      <div>
-        <h3 class="assistant_grant__title">
-          助理授权
-        </h3>
-        <p class="t-sub">
-          授权学生在指定时间内代领本人申领物料；撤销后未实发的代领将不可出库。
-        </p>
-      </div>
       <div class="assistant_grant__actions">
         <el-button
           :loading="loading"
@@ -387,19 +379,15 @@ onMounted(load)
 .assistant_grant__actions {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 12px;
 }
 
-.assistant_grant__title {
-  margin: 0 0 5px;
-  font-size: 16px;
-  font-weight: var(--fw-semibold);
-  color: var(--g1);
+.assistant_grant__head {
+  justify-content: flex-end;
 }
 
-.assistant_grant__head p {
-  margin: 0;
+.assistant_grant__actions {
+  justify-content: space-between;
 }
 
 .assistant_grant__filters {

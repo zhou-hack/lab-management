@@ -59,14 +59,6 @@
     <div class="card">
       <div class="settlement_panel__head">
         <div>
-          <h2 class="t-title">
-            在库核销与复核
-          </h2>
-          <p class="t-sub">
-            耗材按存放位置调减，固定资产逐台变更目标状态；批准复核后才过账
-          </p>
-        </div>
-        <div>
           <el-button
             :loading="loading"
             @click="loadData"
@@ -122,7 +114,7 @@
               >
                 {{ row.documentNo }}
               </el-button>
-              <span class="t-hint">ID {{ row.id }} · v{{ row.version }}</span>
+              <span class="t-hint">v{{ row.version }}</span>
             </div>
           </template>
         </el-table-column>
@@ -709,9 +701,7 @@ defineExpose({ reload: loadData })
 .settlement_panel__filters :deep(.el-form-item) { margin-bottom: 0; }
 .settlement_panel__type { width: 185px; }
 .settlement_panel__location { width: 200px; }
-.settlement_panel__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.settlement_panel__head h2 { margin: 0 0 5px; }
-.settlement_panel__head p { margin: 0; }
+.settlement_panel__head { display: flex; align-items: flex-start; justify-content: flex-end; gap: 16px; }
 .settlement_panel__tabs { margin-top: 8px; }
 .settlement_panel__document { display: flex; flex-direction: column; align-items: flex-start; }
 .settlement_panel__block { display: block; }

@@ -196,7 +196,25 @@ JSON 接口统一返回 `code`、`msg`、`data`，成功时 `code = 0`，失败�
 
 当前仓库仅有开发约定，以上配置、序列化器、TypeHandler 与前端时间工具需在项目初始化时落实并验证。
 
-## 6. Git 协作与 PR
+## 6. 公共业务编号矩阵
+
+| 业务场景 | 编号规则 |
+| --- | --- |
+| 申领 | 新数据使用 `SL+yyyyMMdd+5位随机数字` |
+| 库位子申领 | 在父申领单号末尾按子单创建顺序追加 `1、2、3…`，历史子单号不回填 |
+| 申领实发 | 新数据使用 `CK+yyyyMMdd+5位随机数字` |
+| 申领归还 | 新数据使用 `RK+yyyyMMdd+5位随机数字` |
+| 在库报废 | 新数据使用 `BF+yyyyMMdd+5位随机数字` |
+| 期初 | 新数据使用 `FSRK+yyyyMMdd+5位随机数字` |
+| 补货 | 新数据使用 `BH+yyyyMMdd+5位随机数字` |
+| 新申领外部业务链 | ROOT 使用 `ALL+yyyyMMdd+5位随机数字`，CHILD 继承 ROOT，同一父子组共享，存于 `material_claim.business_chain_no` |
+| 在库调整（ADJUST） | 保持 `IM+雪花ID` |
+| 库位移动及子单（TRANSFER*） | 新数据使用 `YD+yyyyMMdd+5位随机数字`，历史 `IM+雪花ID` 不回填 |
+
+- 新号只用于新数据；历史 ITC/IM 编号及数值业务链 ID 不回填、不改写，历史 `material_claim.business_chain_no` 保持 `NULL`。
+- 主键、共享 `biz_document.id/biz_document_id`、内部 `material_document.business_chain_id` 外键仍为 `BIGINT` 雪花数值，共享 `bizDocumentId` 保留。`ALL` 外部业务链编号不替代内部数值业务链外键或共享单据 ID，两类标识不能混用。
+
+## 7. Git 协作与 PR
 
 严禁直接推送 `main` 或他人分支。个人工作分支使用 `dev/{desc}`，`{desc}` 表示负责模块，仅使用小写英文字母、数字和下划线，并以字母开头，例如 `dev/booking`、`dev/permission`、`dev/user_management`；如有同模块协作冲突，可使用英文姓名或账号后缀，如 `dev/booking_jinbin`。分支名不使用中文或横杠。
 

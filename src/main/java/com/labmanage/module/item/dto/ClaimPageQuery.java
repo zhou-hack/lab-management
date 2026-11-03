@@ -15,6 +15,8 @@ public record ClaimPageQuery(
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate bookingDateFrom,
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate bookingDateTo,
         @Pattern(regexp = "^[1-9]\\d*$", message = "申请人ID不合法") String applicantId,
+        @Pattern(regexp = "^[1-9]\\d*$", message = "父申领单ID不合法") String parentId,
+        @Pattern(regexp = "^[1-9]\\d*$", message = "库位ID不合法") String locationId,
         Boolean managedOnly,
         @Size(max = 32, message = "排序字段过长") String sortBy,
         @Pattern(regexp = "(?i)asc|desc", message = "排序方向仅支持asc/desc") String sortOrder

@@ -15,6 +15,7 @@ public class MaterialReservation extends BaseEntity {
     private Long claimId;
     private Long claimLineId;
     private Long allocationId;
+    private Long claimSegmentId;
     private Integer revisionNo;
     private Long materialId;
     private Long locationId;
@@ -39,6 +40,8 @@ public class MaterialReservation extends BaseEntity {
     public void setClaimLineId(Long claimLineId) { this.claimLineId = claimLineId; }
     public Long getAllocationId() { return allocationId; }
     public void setAllocationId(Long allocationId) { this.allocationId = allocationId; }
+    public Long getClaimSegmentId() { return claimSegmentId; }
+    public void setClaimSegmentId(Long claimSegmentId) { this.claimSegmentId = claimSegmentId; }
     public Integer getRevisionNo() { return revisionNo; }
     public void setRevisionNo(Integer revisionNo) { this.revisionNo = revisionNo; }
     public Long getMaterialId() { return materialId; }

@@ -81,6 +81,8 @@ public class StockDocumentService {
     private final SysUserMapper userMapper;
     private final ItemFlowService flowService;
     private final ItemTimeService timeService;
+    private final ItemDocumentNoService documentNoService;
+    private final ClaimGroupService groupService;
     private final StockPostingService postingService;
     private final ItemLocationAccessService locationAccessService;
     private final MaterialQuantityValidator quantityValidator;
@@ -94,6 +96,8 @@ public class StockDocumentService {
                                 SysUserMapper userMapper,
                                 ItemFlowService flowService,
                                 ItemTimeService timeService,
+                                ItemDocumentNoService documentNoService,
+                                ClaimGroupService groupService,
                                 StockPostingService postingService,
                                 ItemLocationAccessService locationAccessService,
                                 MaterialQuantityValidator quantityValidator) {
@@ -106,6 +110,8 @@ public class StockDocumentService {
         this.userMapper = userMapper;
         this.flowService = flowService;
         this.timeService = timeService;
+        this.documentNoService = documentNoService;
+        this.groupService = groupService;
         this.postingService = postingService;
         this.locationAccessService = locationAccessService;
         this.quantityValidator = quantityValidator;
@@ -246,11 +252,15 @@ public class StockDocumentService {
         validateDateRange(query.getStartDate(), query.getEndDate());
         Instant startAt = query.getStartDate() == null ? null : dayStart(query.getStartDate());
         Instant endAt = query.getEndDate() == null ? null : dayStart(query.getEndDate().plusDays(1));
+        Long businessChainId = documentNoService.resolveBusinessChainId(query.getBusinessChainId());
+        List<Long> resolvedBusinessChainIds = businessChainId == null ? null
+                : businessChainId < 0 ? List.of(businessChainId)
+                : groupService.documentClaimIds(groupService.requireClaim(businessChainId));
         LambdaQueryWrapper<MaterialDocument> wrapper = Wrappers.<MaterialDocument>lambdaQuery()
                 .like(hasText(query.getDocumentNo()), MaterialDocument::getDocumentNo, trim(query.getDocumentNo()))
                 .eq(hasText(query.getDocumentType()), MaterialDocument::getDocumentType, trim(query.getDocumentType()))
                 .eq(hasText(query.getBusinessScene()), MaterialDocument::getBusinessScene, trim(query.getBusinessScene()))
-                .eq(query.getBusinessChainId() != null, MaterialDocument::getBusinessChainId, query.getBusinessChainId())
+                .in(resolvedBusinessChainIds != null, MaterialDocument::getBusinessChainId, resolvedBusinessChainIds)
                 .eq(query.getOperatorId() != null, MaterialDocument::getOperatorId, query.getOperatorId())
                 .ge(startAt != null, MaterialDocument::getOccurredAt, startAt)
                 .lt(endAt != null, MaterialDocument::getOccurredAt, endAt);
@@ -267,7 +277,8 @@ public class StockDocumentService {
         List<MaterialDocument> records = page.getRecords();
         Map<Long, StockLocation> locations = loadDocumentLocations(records);
         Map<Long, SysUser> users = loadDocumentUsers(records);
-        List<StockDocumentVO> vos = records.stream().map(d -> toVO(d, locations, users)).toList();
+        Map<Long, String> businessChainIds = loadBusinessChainIds(records);
+        List<StockDocumentVO> vos = records.stream().map(d -> toVO(d, locations, users, businessChainIds)).toList();
         return PageResult.of(vos, page.getTotal(), (int) page.getCurrent(), (int) page.getSize());
     }
 
@@ -310,12 +321,20 @@ public class StockDocumentService {
         List<StockSettlementVO> settlementVOs = settlements.stream()
                 .map(settlement -> toSettlementVO(settlement, materials, assets)).toList();
         List<ItemDocumentEventVO> eventVOs = events.stream().map(event -> toEventVO(event, users)).toList();
-        return new StockDocumentDetailVO(toVO(document, locations, users), lineVOs, settlementVOs, eventVOs);
+        return new StockDocumentDetailVO(toVO(document, locations, users, loadBusinessChainIds(List.of(document))),
+                lineVOs, settlementVOs, eventVOs);
     }
 
     public List<StockDocumentDetailVO> listClaimDocuments(Long businessChainId) {
+        return listClaimDocuments(List.of(businessChainId));
+    }
+
+    public List<StockDocumentDetailVO> listClaimDocuments(List<Long> businessChainIds) {
+        if (businessChainIds == null || businessChainIds.isEmpty()) {
+            return List.of();
+        }
         List<MaterialDocument> documents = documentMapper.selectList(Wrappers.<MaterialDocument>lambdaQuery()
-                .eq(MaterialDocument::getBusinessChainId, businessChainId)
+                .in(MaterialDocument::getBusinessChainId, businessChainIds)
                 .and(wrapper -> wrapper
                         .eq(MaterialDocument::getDocumentType, "OUTBOUND")
                         .eq(MaterialDocument::getBusinessScene, "CLAIM_ISSUE")
@@ -380,7 +399,7 @@ public class StockDocumentService {
     private MaterialDocument createDocumentShell(String scene, String documentType, Long locationId,
                                                   Long operatorId, String idem, String remark, Instant now) {
         Long documentId = IdWorker.getId();
-        String documentNo = "IM" + documentId;
+        String documentNo = documentNoService.nextDocumentNo(SCENE_OPENING.equals(scene) ? "FSRK" : "BH", now);
         SysUser operator = userMapper.selectById(operatorId);
         try {
             BizDocument shared = new BizDocument();
@@ -510,13 +529,21 @@ public class StockDocumentService {
                 .collect(Collectors.toMap(FixedAsset::getId, Function.identity()));
     }
 
+    private Map<Long, String> loadBusinessChainIds(List<MaterialDocument> documents) {
+        Set<Long> ids = documents.stream().map(MaterialDocument::getBusinessChainId)
+                .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
+        return documentNoService.businessChainDisplayValues(ids);
+    }
+
     private StockDocumentVO toVO(MaterialDocument d, Map<Long, StockLocation> locations,
-                                 Map<Long, SysUser> users) {
+                                 Map<Long, SysUser> users, Map<Long, String> businessChainIds) {
         StockLocation location = d.getLocationId() == null ? null : locations.get(d.getLocationId());
         SysUser operator = users.get(d.getOperatorId());
         SysUser pickupUser = users.get(d.getPickupUserId());
+        String businessChainId = d.getBusinessChainId() == null ? null
+                : businessChainIds.getOrDefault(d.getBusinessChainId(), str(d.getBusinessChainId()));
         return new StockDocumentVO(str(d.getId()), str(d.getBizDocumentId()), d.getDocumentNo(),
-                str(d.getBusinessChainId()), d.getDocumentType(), d.getBusinessScene(), d.getDocumentSeq(),
+                businessChainId, d.getDocumentType(), d.getBusinessScene(), d.getDocumentSeq(),
                 str(d.getSourceMaterialDocumentId()), str(d.getLocationId()),
                 location == null ? null : location.getLocationName(), str(d.getFromLocationId()),
                 str(d.getToLocationId()), d.getTransferStatus(), str(d.getReceivedBy()), d.getReceivedAt(),

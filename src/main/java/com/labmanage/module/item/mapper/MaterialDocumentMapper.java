@@ -14,6 +14,9 @@ import java.util.List;
 @Mapper
 public interface MaterialDocumentMapper extends BaseMapper<MaterialDocument> {
 
+    @Select("SELECT COUNT(*) FROM material_document WHERE document_no = #{documentNo}")
+    long countByDocumentNo(@Param("documentNo") String documentNo);
+
     String UNRETURNED_FROM = """
             FROM material_document issue_doc
             JOIN material_claim claim ON claim.id = issue_doc.business_chain_id AND claim.deleted = 0

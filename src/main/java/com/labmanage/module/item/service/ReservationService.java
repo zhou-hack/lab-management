@@ -8,12 +8,15 @@ import com.labmanage.common.utils.Ids;
 import com.labmanage.module.item.entity.MaterialClaim;
 import com.labmanage.module.item.entity.MaterialClaimAllocation;
 import com.labmanage.module.item.entity.MaterialClaimLine;
+import com.labmanage.module.item.entity.MaterialClaimSegment;
 import com.labmanage.module.item.entity.MaterialReservation;
 import com.labmanage.module.item.enums.MaterialType;
 import com.labmanage.module.item.enums.ReservationStatus;
+import com.labmanage.module.item.mapper.MaterialClaimSegmentMapper;
 import com.labmanage.module.item.mapper.MaterialReservationMapper;
 import com.labmanage.module.item.service.ClaimPlanService.ApprovalPreview;
 import com.labmanage.module.item.vo.ClaimPlannedAllocationVO;
+import com.labmanage.module.item.vo.BookingTimeSegmentVO;
 import com.labmanage.module.item.vo.ClaimPreviewLineVO;
 import com.labmanage.module.item.validation.MaterialQuantityValidator;
 import org.springframework.stereotype.Service;
@@ -32,12 +35,16 @@ import java.util.Set;
 public class ReservationService {
 
     private final MaterialReservationMapper reservationMapper;
+    private final MaterialClaimSegmentMapper segmentMapper;
     private final ItemTimeService timeService;
     private final MaterialQuantityValidator quantityValidator;
 
-    public ReservationService(MaterialReservationMapper reservationMapper, ItemTimeService timeService,
+    public ReservationService(MaterialReservationMapper reservationMapper,
+                              MaterialClaimSegmentMapper segmentMapper,
+                              ItemTimeService timeService,
                               MaterialQuantityValidator quantityValidator) {
         this.reservationMapper = reservationMapper;
+        this.segmentMapper = segmentMapper;
         this.timeService = timeService;
         this.quantityValidator = quantityValidator;
     }
@@ -63,9 +70,10 @@ public class ReservationService {
         for (ClaimPreviewLineVO line : approvalPreview.preview().lines()) {
             previewLines.put(Ids.parse(line.materialId()), line);
         }
+        Map<Integer, MaterialClaimSegment> segmentsBySeq = currentSegmentsBySeq(claim);
 
         List<MaterialReservation> result = new ArrayList<>();
-        Set<Long> usedAssetIds = new HashSet<>();
+        Set<String> usedAssetSegments = new HashSet<>();
         for (ClaimPlannedAllocationVO planned : approvalPreview.preview().allocations()) {
             Long materialId = Ids.parse(planned.materialId());
             Long locationId = Ids.parse(planned.locationId());
@@ -77,26 +85,70 @@ public class ReservationService {
                     || allocation.getPlannedQuantity().compareTo(planned.plannedQuantity()) != 0) {
                 throw conflict("审核计划与当前申领分配不一致");
             }
-            if (previewLine.materialType() == MaterialType.FIXED_ASSET) {
-                int quantity = exactAssetQuantity(planned.plannedQuantity());
-                List<Long> candidates = approvalPreview.candidateAssets(materialId, locationId);
-                if (candidates.size() < quantity) {
-                    throw conflict("固定资产候选数量已变化，请重新审核");
+            List<Long> sharedAssetIds = null;
+            for (BookingTimeSegmentVO segment : approvalPreview.preview().bookingSnapshot().segments()) {
+                MaterialClaimSegment claimSegment = segmentsBySeq.get(segment.segmentSeq());
+                if (claimSegment == null) {
+                    throw conflict("申领节次段与当前版本不一致");
                 }
-                for (int i = 0; i < quantity; i++) {
-                    Long assetId = candidates.get(i);
-                    if (!usedAssetIds.add(assetId)) {
-                        throw conflict("同一台固定资产不能重复预占");
+                ItemTimeService.ReservationWindow window = reservationWindow(claim, segment, previewLine);
+                if (previewLine.materialType() == MaterialType.FIXED_ASSET) {
+                    int quantity = exactAssetQuantity(planned.plannedQuantity());
+                    List<Long> candidates = approvalPreview.candidateAssets(materialId, locationId, segment.segmentSeq());
+                    if (sharedAssetIds == null) {
+                        if (candidates.size() < quantity) {
+                            throw conflict("固定资产候选数量已变化，请重新审核");
+                        }
+                        sharedAssetIds = List.copyOf(candidates.subList(0, quantity));
+                    } else if (!candidates.containsAll(sharedAssetIds)) {
+                        throw conflict("固定资产须在各预约段均可使用，请重新审核");
                     }
-                    result.add(insertReservation(claim, line, allocation, previewLine,
-                            assetId, BigDecimal.ONE));
+                    for (Long assetId : sharedAssetIds) {
+                        if (!usedAssetSegments.add(segment.segmentSeq() + ":" + assetId)) {
+                            throw conflict("同一台固定资产不能在同一预约段重复预占");
+                        }
+                        result.add(insertReservation(claim, line, allocation, claimSegment, previewLine,
+                                assetId, BigDecimal.ONE, window));
+                    }
+                } else {
+                    result.add(insertReservation(claim, line, allocation, claimSegment, previewLine,
+                            null, planned.plannedQuantity(), window));
                 }
-            } else {
-                result.add(insertReservation(claim, line, allocation, previewLine,
-                        null, planned.plannedQuantity()));
             }
         }
         return result;
+    }
+
+    private Map<Integer, MaterialClaimSegment> currentSegmentsBySeq(MaterialClaim claim) {
+        List<MaterialClaimSegment> segments = segmentMapper.selectList(Wrappers.<MaterialClaimSegment>lambdaQuery()
+                .eq(MaterialClaimSegment::getClaimId, claim.getId())
+                .eq(MaterialClaimSegment::getRevisionNo, claim.getRevisionNo())
+                .orderByAsc(MaterialClaimSegment::getSegmentSeq));
+        if (segments.isEmpty()) {
+            MaterialClaimSegment legacy = new MaterialClaimSegment();
+            legacy.setClaimId(claim.getId());
+            legacy.setRevisionNo(claim.getRevisionNo());
+            legacy.setSegmentSeq(1);
+            legacy.setStartPeriodId(claim.getStartPeriodId());
+            legacy.setEndPeriodId(claim.getEndPeriodId());
+            legacy.setBookingStartAt(claim.getBookingStartAt());
+            legacy.setBookingEndAt(claim.getBookingEndAt());
+            return Map.of(1, legacy);
+        }
+        return segments.stream().collect(java.util.stream.Collectors.toMap(
+                MaterialClaimSegment::getSegmentSeq, java.util.function.Function.identity()));
+    }
+
+    private ItemTimeService.ReservationWindow reservationWindow(MaterialClaim claim,
+                                                                BookingTimeSegmentVO segment,
+                                                                ClaimPreviewLineVO previewLine) {
+        if (previewLine.materialType() == MaterialType.CONSUMABLE) {
+            return timeService.normalReservationWindow(segment.bookingStartAt(), segment.bookingEndAt());
+        }
+        ItemTimeService.BookingWindow bookingWindow = new ItemTimeService.BookingWindow(
+                claim.getBookingDate(), segment.bookingStartAt(), segment.bookingEndAt(),
+                claim.getReturnDeadline(), timeService.issueEarliestAt(claim.getBookingDate()));
+        return timeService.reservationWindow(bookingWindow, previewLine.ownedAssetTotal());
     }
 
     /** 释放本申领所有版本的未消耗预占，供修改、取消使用。调用方须先锁申领主行。 */
@@ -170,6 +222,7 @@ public class ReservationService {
                                          Long operatorId) {
         BigDecimal remainingToConsume = demand.quantity();
         BigDecimal reduced = BigDecimal.ZERO;
+        List<MaterialReservation> used = new ArrayList<>();
         for (MaterialReservation reservation : lineReservations) {
             if (!actualLocationId.equals(reservation.getLocationId())
                     || reservation.getFixedAssetId() != null || remainingToConsume.signum() <= 0) {
@@ -177,6 +230,7 @@ public class ReservationService {
             }
             BigDecimal quantity = remaining(reservation).min(remainingToConsume);
             consume(reservation, quantity, now, operatorId);
+            used.add(reservation);
             remainingToConsume = remainingToConsume.subtract(quantity);
             reduced = reduced.add(quantity);
         }
@@ -190,12 +244,14 @@ public class ReservationService {
                 continue;
             }
             release(reservation, quantity, now, operatorId);
+            used.add(reservation);
             remainingToRelease = remainingToRelease.subtract(quantity);
             reduced = reduced.add(quantity);
         }
         if (remainingToRelease.signum() > 0) {
             throw conflict("实际库位预占消耗及其他计划预占释放不足");
         }
+        releaseOtherSegments(lineReservations, used, now, operatorId);
         return reduced;
     }
 
@@ -220,6 +276,7 @@ public class ReservationService {
                     .findFirst().orElse(null);
             if (matched != null) {
                 consume(matched, BigDecimal.ONE, now, operatorId);
+                releaseOtherSegments(lineReservations, List.of(matched), now, operatorId);
                 directlyConsumed.add(assetId);
                 reduced = reduced.add(BigDecimal.ONE);
             }
@@ -228,10 +285,11 @@ public class ReservationService {
             if (directlyConsumed.contains(assetId)) {
                 continue;
             }
-            MaterialReservation window = lineReservations.get(0);
-            if (!reservationMapper.selectEffectiveOverlappingByAsset(assetId,
-                    window.getReservationStartAt(), window.getReservationEndAt(), claim.getId()).isEmpty()) {
-                throw conflict("替代固定资产存在他人重叠有效预占：" + assetId);
+            for (MaterialReservation window : lineReservations) {
+                if (!reservationMapper.selectEffectiveOverlappingByAsset(assetId,
+                        window.getReservationStartAt(), window.getReservationEndAt(), claim.getId()).isEmpty()) {
+                    throw conflict("替代固定资产存在他人重叠有效预占：" + assetId);
+                }
             }
             MaterialReservation released = null;
             for (MaterialReservation candidate : lineReservations) {
@@ -244,9 +302,26 @@ public class ReservationService {
                 throw conflict("替代固定资产缺少可释放的原计划预占");
             }
             release(released, BigDecimal.ONE, now, operatorId);
+            releaseOtherSegments(lineReservations, List.of(released), now, operatorId);
             reduced = reduced.add(BigDecimal.ONE);
         }
         return reduced;
+    }
+
+    private void releaseOtherSegments(List<MaterialReservation> lineReservations,
+                                      List<MaterialReservation> used,
+                                      Instant now, Long operatorId) {
+        for (MaterialReservation usedReservation : used) {
+            for (MaterialReservation candidate : lineReservations) {
+                if (candidate.getId().equals(usedReservation.getId())
+                        || !candidate.getAllocationId().equals(usedReservation.getAllocationId())
+                        || !java.util.Objects.equals(candidate.getFixedAssetId(), usedReservation.getFixedAssetId())
+                        || remaining(candidate).signum() <= 0) {
+                    continue;
+                }
+                release(candidate, remaining(candidate), now, operatorId);
+            }
+        }
     }
 
     private void consume(MaterialReservation reservation, BigDecimal quantity,
@@ -305,15 +380,18 @@ public class ReservationService {
     private MaterialReservation insertReservation(MaterialClaim claim,
                                                    MaterialClaimLine line,
                                                    MaterialClaimAllocation allocation,
+                                                   MaterialClaimSegment claimSegment,
                                                    ClaimPreviewLineVO previewLine,
                                                    Long fixedAssetId,
-                                                   BigDecimal quantity) {
+                                                   BigDecimal quantity,
+                                                   ItemTimeService.ReservationWindow window) {
         quantityValidator.requirePositiveInteger(quantity, "预占创建数量");
         MaterialReservation reservation = new MaterialReservation();
         reservation.setId(IdWorker.getId());
         reservation.setClaimId(claim.getId());
         reservation.setClaimLineId(line.getId());
         reservation.setAllocationId(allocation.getId());
+        reservation.setClaimSegmentId(claimSegment.getId());
         reservation.setRevisionNo(claim.getRevisionNo());
         reservation.setMaterialId(line.getMaterialId());
         reservation.setLocationId(allocation.getLocationId());
@@ -323,8 +401,8 @@ public class ReservationService {
         reservation.setReservedQuantity(quantity);
         reservation.setConsumedQuantity(BigDecimal.ZERO);
         reservation.setReleasedQuantity(BigDecimal.ZERO);
-        reservation.setReservationStartAt(previewLine.reservationStartAt());
-        reservation.setReservationEndAt(previewLine.reservationEndAt());
+        reservation.setReservationStartAt(window.startAt());
+        reservation.setReservationEndAt(window.endAt());
         reservation.setStatus(ReservationStatus.ACTIVE);
         reservationMapper.insert(reservation);
         return reservation;

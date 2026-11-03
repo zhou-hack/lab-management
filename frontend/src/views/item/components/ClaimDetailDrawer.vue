@@ -16,7 +16,7 @@
             v-if="detail"
             class="t-sub"
           >
-            申领 ID：{{ detail.id }} · 版本 {{ detail.revisionNo }}
+            申领单 ID：{{ detail.documentNo || detail.id }} · 版本 {{ detail.revisionNo }}
           </p>
         </div>
         <ItemStatusPill
@@ -124,16 +124,7 @@
               {{ formatInstant(detail.createTime) || '—' }}
             </el-descriptions-item>
             <el-descriptions-item label="申领单 ID">
-              {{ detail.id }}
-            </el-descriptions-item>
-            <el-descriptions-item label="共享单据 ID">
-              {{ detail.bizDocumentId || '—' }}
-            </el-descriptions-item>
-            <el-descriptions-item
-              label="业务链 ID"
-              :span="2"
-            >
-              {{ detail.businessChainId || '—' }}
+              {{ detail.documentNo || detail.id }}
             </el-descriptions-item>
             <el-descriptions-item
               v-if="detail.approvedAt"
@@ -148,6 +139,82 @@
               {{ formatInstant(detail.cancelledAt) }}
             </el-descriptions-item>
           </el-descriptions>
+        </section>
+
+        <section
+          v-if="detail.claimKind === 'ROOT'"
+          class="card claim_detail__section"
+        >
+          <div class="claim_detail__section_head">
+            <div>
+              <h4 class="claim_detail__section_title">
+                库位子申领单（{{ detail.children?.length || 0 }}）
+              </h4>
+              <p class="t-hint">
+                每个子单由对应库位管理员独立审核、实发和归还；下方仍保留总单完整原始物料行。
+              </p>
+            </div>
+          </div>
+          <el-table
+            :data="detail.children || []"
+            class="table-scroll-x"
+            empty-text="暂无库位子申领单"
+            row-key="id"
+          >
+            <el-table-column
+              label="子申领单"
+              min-width="190"
+            >
+              <template #default="{ row }">
+                <div class="claim_detail__strong">
+                  {{ row.documentNo || row.id }}
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column
+              label="所属库位"
+              min-width="190"
+            >
+              <template #default="{ row }">
+                <div>{{ row.locationName || row.locationId || '—' }}</div>
+                <div class="t-hint">
+                  {{ row.locationCode || '' }}
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column
+              label="状态"
+              width="120"
+            >
+              <template #default="{ row }">
+                <ItemStatusPill :status="row.status" />
+              </template>
+            </el-table-column>
+            <el-table-column
+              label="当前版本"
+              width="100"
+              align="center"
+            >
+              <template #default="{ row }">
+                v{{ row.revisionNo ?? '—' }}
+              </template>
+            </el-table-column>
+            <el-table-column
+              label="操作"
+              width="110"
+              align="center"
+            >
+              <template #default="{ row }">
+                <el-button
+                  link
+                  type="primary"
+                  @click="emit('view-child', row.id, detail.id)"
+                >
+                  查看详情
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
         </section>
 
         <section class="card claim_detail__section">
@@ -467,7 +534,7 @@
                 三单业务链与库存单据
               </h4>
               <p class="t-hint">
-                申领单、实发单、归还单通过业务链 ID 关联；以下展示后端返回的全部库存单据。
+                以下展示当前申领单关联的实发、归还等库存单据。
               </p>
             </div>
             <el-button
@@ -479,14 +546,6 @@
               刷新业务链
             </el-button>
           </div>
-          <el-alert
-            title="业务链 ID"
-            type="info"
-            :closable="false"
-            class="claim_detail__chain_alert"
-          >
-            {{ documentChain?.businessChainId || detail.businessChainId || '—' }}
-          </el-alert>
           <el-collapse
             v-if="documentChain?.documents?.length"
             class="claim_detail__documents"
@@ -508,15 +567,6 @@
                 border
                 class="claim_detail__document_meta"
               >
-                <el-descriptions-item label="单据 ID">
-                  {{ stockDocument.document.id }}
-                </el-descriptions-item>
-                <el-descriptions-item label="共享单据 ID">
-                  {{ stockDocument.document.bizDocumentId || '—' }}
-                </el-descriptions-item>
-                <el-descriptions-item label="来源单据 ID">
-                  {{ stockDocument.document.sourceMaterialDocumentId || '—' }}
-                </el-descriptions-item>
                 <el-descriptions-item label="业务场景">
                   {{ stockDocument.document.businessScene || '—' }}
                 </el-descriptions-item>
@@ -794,7 +844,7 @@ const props = defineProps({
   modelValue: { type: Boolean, default: false },
   claimId: { type: [String, Number], default: '' }
 })
-const emit = defineEmits(['close', 'edit', 'rebook', 'changed'])
+const emit = defineEmits(['close', 'edit', 'rebook', 'changed', 'view-child'])
 
 const detail = ref(null)
 const documentChain = ref(null)
@@ -961,8 +1011,8 @@ function beforeClose(done) {
 }
 
 watch(
-  () => props.modelValue,
-  (visible) => {
+  () => [props.modelValue, props.claimId],
+  ([visible]) => {
     if (visible) loadDetail()
     else {
       loadSerial += 1

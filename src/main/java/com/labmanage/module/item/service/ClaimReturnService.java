@@ -73,6 +73,7 @@ public class ClaimReturnService {
     private final StockDocumentService documentService;
     private final ItemFlowService flowService;
     private final ItemTimeService timeService;
+    private final ItemDocumentNoService documentNoService;
     private final ItemLocationAccessService locationAccessService;
     private final MaterialQuantityValidator quantityValidator;
 
@@ -89,6 +90,7 @@ public class ClaimReturnService {
                               StockDocumentService documentService,
                               ItemFlowService flowService,
                               ItemTimeService timeService,
+                              ItemDocumentNoService documentNoService,
                               ItemLocationAccessService locationAccessService,
                               MaterialQuantityValidator quantityValidator) {
         this.claimMapper = claimMapper;
@@ -104,6 +106,7 @@ public class ClaimReturnService {
         this.documentService = documentService;
         this.flowService = flowService;
         this.timeService = timeService;
+        this.documentNoService = documentNoService;
         this.locationAccessService = locationAccessService;
         this.quantityValidator = quantityValidator;
     }
@@ -213,7 +216,7 @@ public class ClaimReturnService {
         }
         boolean overdue = now.isAfter(claim.getReturnDeadline());
         return new ClaimReturnContextVO(str(source.getId()), source.getDocumentNo(), str(claim.getId()),
-                str(source.getBusinessChainId()), str(source.getLocationId()), location.getLocationCode(),
+                ItemDocumentNoService.displayBusinessChainId(claim), str(source.getLocationId()), location.getLocationCode(),
                 location.getLocationName(), claim.getReturnDeadline(), overdue, blockedReason == null,
                 blockedReason, lines);
     }
@@ -269,7 +272,10 @@ public class ClaimReturnService {
             } else if (sourceLine.getFixedAssetId() != null) {
                 throw conflict("耗材来源出库行不能引用固定资产");
             }
-            String consumedReason = requiredReason(consumedQuantity, input.consumedReason(), "教学消耗原因");
+            String consumedReason = consumedQuantity.signum() > 0 ? trimToNull(input.consumedReason()) : null;
+            if (consumedQuantity.signum() > 0 && consumedReason == null) {
+                consumedReason = "教学消耗";
+            }
             String lostReason = requiredReason(lostQuantity, input.lostReason(), "丢失原因");
             String damagedReason = requiredReason(damagedQuantity, input.damagedReason(), "损坏原因");
             String positionText = input.positionText() == null || input.positionText().isBlank()
@@ -413,7 +419,7 @@ public class ClaimReturnService {
                                             String idem, String remark, String returnStatus, String overdueReason,
                                             Instant now) {
         Long documentId = IdWorker.getId();
-        String documentNo = "IM" + documentId;
+        String documentNo = documentNoService.nextDocumentNo("RK", now);
         SysUser operator = userMapper.selectById(operatorId);
         BizDocument shared = new BizDocument();
         shared.setId(IdWorker.getId());

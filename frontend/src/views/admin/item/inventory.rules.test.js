@@ -5,10 +5,12 @@ import ReturnRegistrationDialog from './components/ReturnRegistrationDialog.vue'
 import ClaimIssueDialog from './components/ClaimIssueDialog.vue'
 import InboundPanel from './panels/InboundPanel.vue'
 import ConsumableStockPanel from './panels/ConsumableStockPanel.vue'
+import MaterialArchivePanel from './panels/MaterialArchivePanel.vue'
 import SettlementPanel from './panels/SettlementPanel.vue'
 import {
   CURRENT_STOCK_AVAILABILITY_NOTICE,
   getConsumableIssueDefaults,
+  getFixedAssetIssueDefaults,
   getTransferReceiptError,
   isReturnWithinRemaining,
   materialPayload
@@ -27,14 +29,21 @@ const workflowApi = vi.hoisted(() => ({
 vi.mock('@/api/item/workflow', () => workflowApi)
 
 const stockApi = vi.hoisted(() => ({
+  createMaterial: vi.fn(),
   createOpening: vi.fn(),
   createReplenishment: vi.fn(),
+  deleteMaterial: vi.fn(),
   getBalances: vi.fn(),
   getAssets: vi.fn(),
-  updateBalancePosition: vi.fn()
+  getMaterials: vi.fn(),
+  updateBalancePosition: vi.fn(),
+  updateMaterial: vi.fn()
 }))
 
 vi.mock('@/api/item/stock', () => stockApi)
+vi.mock('@/store/user', () => ({
+  useUserStore: () => ({ permissions: ['item:material:manage'] })
+}))
 
 describe('移动实收规则', () => {
   it('整数实收数量等于或小于剩余在途量时通过，0 值行不处理', () => {
@@ -170,6 +179,77 @@ describe('归还默认数量', () => {
     wrapper.unmount()
     document.body.innerHTML = ''
   })
+
+  it('核销数量变化自动重算回库量且消耗无需填写原因', async () => {
+    workflowApi.getReturnContext.mockResolvedValue({
+      sourceDocumentNo: 'OUT-CONSUMED',
+      locationName: '甲库',
+      locationCode: 'A001',
+      businessChainId: 'claim-consumed',
+      overdue: false,
+      canReturn: true,
+      lines: [{
+        sourceMaterialDocumentLineId: 'line-consumed',
+        materialId: 'material-consumed',
+        materialName: '数据线',
+        materialType: 'CONSUMABLE',
+        baseUnit: '根',
+        issuedQuantity: 10,
+        returnedQuantity: 0,
+        settledQuantity: 0,
+        remainingQuantity: 10,
+        sourcePositionText: 'A-1'
+      }]
+    })
+    workflowApi.createClaimReturn.mockReset()
+    workflowApi.createClaimReturn.mockResolvedValue({ id: 'return-consumed' })
+    const wrapper = mount(ReturnRegistrationDialog, {
+      attachTo: document.body,
+      props: { modelValue: false, sourceDocument: { id: 'source-consumed' } },
+      global: { plugins: [ElementPlus], stubs: { ItemQuantityText: true } }
+    })
+
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+    const inputs = wrapper.findAllComponents({ name: 'ElInputNumber' })
+    expect(inputs.map((input) => input.props('modelValue'))).toEqual([10, 0, 0, 0])
+
+    inputs[1].vm.$emit('update:modelValue', 2)
+    inputs[1].vm.$emit('change', 2, 0)
+    await wrapper.vm.$nextTick()
+    expect(inputs[0].props('modelValue')).toBe(8)
+    inputs[2].vm.$emit('update:modelValue', 1)
+    inputs[2].vm.$emit('change', 1, 0)
+    await wrapper.vm.$nextTick()
+    expect(inputs[0].props('modelValue')).toBe(7)
+    inputs[3].vm.$emit('update:modelValue', 1)
+    inputs[3].vm.$emit('change', 1, 0)
+    await wrapper.vm.$nextTick()
+    expect(inputs[0].props('modelValue')).toBe(6)
+    inputs[3].vm.$emit('update:modelValue', 0)
+    inputs[3].vm.$emit('change', 0, 1)
+    await wrapper.vm.$nextTick()
+    expect(inputs[0].props('modelValue')).toBe(7)
+    inputs[2].vm.$emit('update:modelValue', 0)
+    inputs[2].vm.$emit('change', 0, 1)
+    await wrapper.vm.$nextTick()
+    expect(inputs[0].props('modelValue')).toBe(8)
+
+    const submitButton = wrapper.findAll('button')
+      .find((button) => button.text() === '提交本次归还')
+    await submitButton.trigger('click')
+    await flushPromises()
+
+    expect(workflowApi.createClaimReturn).toHaveBeenCalledOnce()
+    const payload = workflowApi.createClaimReturn.mock.calls[0][1]
+    expect(payload.lines).toHaveLength(1)
+    expect(payload.lines[0].returnQuantity).toBe(8)
+    expect(payload.lines[0].consumedQuantity).toBe(2)
+    expect(payload.lines[0]).not.toHaveProperty('consumedReason')
+
+    wrapper.unmount()
+    document.body.innerHTML = ''
+  })
 })
 
 describe('物料档案 SKU 规则', () => {
@@ -236,6 +316,21 @@ describe('实发默认数量', () => {
     })).toEqual({ positionText: null, quantity: 0 })
   })
 
+  it('固定资产默认按未领取量选满并优先本申领预占资产', () => {
+    const line = {
+      remainingQuantity: 2,
+      candidateAssets: [
+        { fixedAssetId: 'asset-1', reservedByThisClaim: false },
+        { fixedAssetId: 'asset-2', reservedByThisClaim: true },
+        { fixedAssetId: 'asset-3', reservedByThisClaim: false }
+      ]
+    }
+
+    expect(getFixedAssetIssueDefaults(line)).toEqual(['asset-2', 'asset-1'])
+    expect(getFixedAssetIssueDefaults({ ...line, remainingQuantity: 5 }))
+      .toEqual(['asset-2', 'asset-1', 'asset-3'])
+  })
+
   it('加载实发弹窗后自动填入默认位置和数量', async () => {
     workflowApi.getClaimIssueContext.mockReset()
     workflowApi.getClaimIssueContext.mockResolvedValue({
@@ -287,6 +382,107 @@ describe('实发默认数量', () => {
     wrapper.unmount()
     document.body.innerHTML = ''
   })
+
+  it('固定资产打开实发弹窗即默认全选并可一键提交', async () => {
+    workflowApi.getClaimIssueContext.mockReset()
+    workflowApi.getClaimIssueContext.mockResolvedValue({
+      locationName: 'A703电工电子实训室',
+      locationCode: 'A703',
+      canIssue: true,
+      pickupMode: 'SELF',
+      riskWarnings: [],
+      lines: [{
+        claimLineId: 'asset-line-1',
+        materialId: 'asset-material-1',
+        materialName: '笔记本电脑',
+        materialType: 'FIXED_ASSET',
+        baseUnit: '台',
+        remainingQuantity: 2,
+        positions: [],
+        candidateAssets: [
+          { fixedAssetId: 'asset-1', assetCode: 'PC-1', reservedByThisClaim: false },
+          { fixedAssetId: 'asset-2', assetCode: 'PC-2', reservedByThisClaim: true },
+          { fixedAssetId: 'asset-3', assetCode: 'PC-3', reservedByThisClaim: false }
+        ],
+        reservations: []
+      }]
+    })
+    workflowApi.issueClaim.mockReset()
+    workflowApi.issueClaim.mockResolvedValue({ id: 'issue-1' })
+    const wrapper = mount(ClaimIssueDialog, {
+      attachTo: document.body,
+      props: {
+        modelValue: false,
+        claim: { id: 'asset-claim-1', claimKind: 'CHILD', locationId: '101' }
+      },
+      global: { plugins: [ElementPlus], stubs: { ItemQuantityText: true } }
+    })
+
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    expect(wrapper.findComponent({ name: 'ElSelect' }).props('modelValue'))
+      .toEqual(['asset-2', 'asset-1'])
+    const submitButton = wrapper.findAll('button')
+      .find((button) => button.text() === '确认实发')
+    await submitButton.trigger('click')
+    await flushPromises()
+
+    expect(workflowApi.issueClaim).toHaveBeenCalledOnce()
+    const payload = workflowApi.issueClaim.mock.calls[0][1]
+    expect(payload.locationId).toBe('101')
+    expect(payload.lines.map((line) => line.fixedAssetId)).toEqual(['asset-2', 'asset-1'])
+    expect(payload.lines.every((line) => line.quantity === 1)).toBe(true)
+
+    wrapper.unmount()
+    document.body.innerHTML = ''
+  })
+
+  it('CHILD子单自动使用所属库位且不提供库位选择器', async () => {
+    workflowApi.getClaimIssueContext.mockReset()
+    workflowApi.getClaimIssueContext.mockResolvedValue({
+      locationName: 'A703电工电子实训室',
+      locationCode: 'A703',
+      canIssue: false,
+      issueBlockedReason: '测试固定库位',
+      riskWarnings: [],
+      lines: []
+    })
+    const locationStub = {
+      name: 'ItemLocationSelect',
+      props: { modelValue: { type: String, default: '' } },
+      template: '<div />'
+    }
+    const wrapper = mount(ClaimIssueDialog, {
+      attachTo: document.body,
+      props: {
+        modelValue: false,
+        claim: {
+          id: 'child-1',
+          claimKind: 'CHILD',
+          locationId: '101',
+          locationName: 'A703电工电子实训室',
+          locationCode: 'A703'
+        }
+      },
+      global: {
+        plugins: [ElementPlus],
+        stubs: { ItemLocationSelect: locationStub, ItemQuantityText: true }
+      }
+    })
+
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    expect(workflowApi.getClaimIssueContext).toHaveBeenCalledWith('child-1', '101')
+    expect(wrapper.findComponent({ name: 'ItemLocationSelect' }).exists()).toBe(false)
+    const fixedInput = wrapper.find('.claim_issue__location input')
+    expect(fixedInput.attributes('disabled')).toBeDefined()
+    expect(fixedInput.element.value).toBe('A703电工电子实训室 · A703')
+
+    wrapper.unmount()
+    document.body.innerHTML = ''
+  })
 })
 
 describe('入库幂等键展示', () => {
@@ -334,6 +530,93 @@ describe('入库幂等键展示', () => {
     const payload = stockApi.createOpening.mock.calls[0][0]
     expect(payload.idempotencyKey).toEqual(expect.any(String))
     expect(payload.idempotencyKey.length).toBeGreaterThan(0)
+
+    wrapper.unmount()
+    document.body.innerHTML = ''
+  })
+})
+
+describe('物料与耗材名称筛选联想', () => {
+  it('物料档案按名称片段及当前类型远程查询并去重', async () => {
+    stockApi.getMaterials.mockReset()
+    stockApi.getMaterials.mockResolvedValue({
+      records: [
+        { materialName: '电脑' },
+        { materialName: '电脑' },
+        { materialName: '电脑桌椅' },
+        { materialName: ' ' }
+      ],
+      total: 4
+    })
+    const wrapper = mount(MaterialArchivePanel, {
+      attachTo: document.body,
+      global: { plugins: [ElementPlus] }
+    })
+    await flushPromises()
+    const autocomplete = wrapper.findComponent({ name: 'ElAutocomplete' })
+    expect(autocomplete.props('debounce')).toBe(300)
+    wrapper.findAllComponents({ name: 'ElSelect' })[0].vm.$emit('update:modelValue', 'CONSUMABLE')
+    await wrapper.vm.$nextTick()
+    stockApi.getMaterials.mockClear()
+
+    const callback = vi.fn()
+    await autocomplete.props('fetchSuggestions')(' 电 ', callback)
+    expect(stockApi.getMaterials).toHaveBeenLastCalledWith({
+      pageNum: 1,
+      pageSize: 100,
+      materialName: '电',
+      materialType: 'CONSUMABLE'
+    })
+    expect(callback).toHaveBeenCalledWith([{ value: '电脑' }, { value: '电脑桌椅' }])
+
+    stockApi.getMaterials.mockClear()
+    const emptyCallback = vi.fn()
+    await autocomplete.props('fetchSuggestions')('  ', emptyCallback)
+    expect(emptyCallback).toHaveBeenCalledWith([])
+    expect(stockApi.getMaterials).not.toHaveBeenCalled()
+
+    wrapper.unmount()
+    document.body.innerHTML = ''
+  })
+
+  it('耗材库存按名称片段远程查询并去重', async () => {
+    stockApi.getBalances.mockReset()
+    stockApi.getBalances.mockResolvedValue({
+      records: [
+        { materialName: '数据线' },
+        { materialName: '数据线' },
+        { materialName: '数据线收纳盒' },
+        { materialName: null }
+      ],
+      total: 4
+    })
+    const wrapper = mount(ConsumableStockPanel, {
+      attachTo: document.body,
+      global: {
+        plugins: [ElementPlus],
+        stubs: { ItemLocationSelect: true, ItemQuantityText: true }
+      }
+    })
+    await flushPromises()
+    const autocomplete = wrapper.findComponent({ name: 'ElAutocomplete' })
+    expect(autocomplete.props('debounce')).toBe(300)
+    stockApi.getBalances.mockClear()
+
+    const callback = vi.fn()
+    await autocomplete.props('fetchSuggestions')(' 数据 ', callback)
+    expect(stockApi.getBalances).toHaveBeenLastCalledWith({
+      pageNum: 1,
+      pageSize: 100,
+      materialName: '数据',
+      locationId: undefined
+    })
+    expect(callback).toHaveBeenCalledWith([{ value: '数据线' }, { value: '数据线收纳盒' }])
+
+    stockApi.getBalances.mockClear()
+    const emptyCallback = vi.fn()
+    await autocomplete.props('fetchSuggestions')('', emptyCallback)
+    expect(emptyCallback).toHaveBeenCalledWith([])
+    expect(stockApi.getBalances).not.toHaveBeenCalled()
 
     wrapper.unmount()
     document.body.innerHTML = ''

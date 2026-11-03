@@ -1,5 +1,6 @@
 package com.labmanage.module.item.vo;
 
+import com.labmanage.module.item.enums.ClaimKind;
 import com.labmanage.module.item.enums.ClaimStatus;
 
 import java.time.Instant;
@@ -20,6 +21,11 @@ public record ClaimSummaryVO(
         ClaimStatus status,
         Integer revisionNo,
         Instant delegatedAt,
-        Instant createTime
+        Instant createTime,
+        ClaimKind claimKind,
+        String parentClaimId,
+        String locationId,
+        String locationCode,
+        String locationName
 ) {
 }

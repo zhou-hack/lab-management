@@ -59,14 +59,6 @@
     <div class="card">
       <div class="transfer_panel__head">
         <div>
-          <h2 class="t-title">
-            我相关的库位移动
-          </h2>
-          <p class="t-sub">
-            源/目标库位管理员协同处理；目标实收前不增加目标库存
-          </p>
-        </div>
-        <div>
           <el-button
             :loading="loading"
             @click="loadData"
@@ -101,7 +93,7 @@
               >
                 {{ row.documentNo }}
               </el-button>
-              <span class="t-hint">ID {{ row.id }} · v{{ row.version }}</span>
+              <span class="t-hint">v{{ row.version }}</span>
             </div>
           </template>
         </el-table-column>
@@ -532,9 +524,7 @@ defineExpose({ reload: loadData })
 .transfer_panel__filters :deep(.el-form-item) { margin-bottom: 0; }
 .transfer_panel__status { width: 150px; }
 .transfer_panel__location { width: 200px; }
-.transfer_panel__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
-.transfer_panel__head h2 { margin: 0 0 5px; }
-.transfer_panel__head p { margin: 0; }
+.transfer_panel__head { display: flex; align-items: flex-start; justify-content: flex-end; gap: 16px; margin-bottom: 16px; }
 .transfer_panel__document { display: flex; flex-direction: column; align-items: flex-start; }
 .transfer_panel__block { display: block; }
 .transfer_panel__pager { display: flex; justify-content: flex-end; margin-top: 16px; overflow-x: auto; }

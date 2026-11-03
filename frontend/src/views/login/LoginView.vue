@@ -6,13 +6,6 @@
           <el-icon><Tools /></el-icon>
         </span>
       </div>
-      <h1 class="login_card__title">
-        实验室设备管理系统
-      </h1>
-      <p class="login_card__sub t-sub">
-        学生 / 老师 / 管理员 统一入口
-      </p>
-
       <el-form
         ref="formRef"
         :model="form"
@@ -189,19 +182,6 @@ async function quickLogin(acc) {
   color: #fff;
   font-size: 24px;
   box-shadow: var(--brand-shadow-lg);
-}
-
-.login_card__title {
-  margin: 0;
-  font-size: 22px;
-  font-weight: var(--fw-semibold);
-  color: var(--g1);
-  text-align: center;
-}
-
-.login_card__sub {
-  margin: 6px 0 22px;
-  text-align: center;
 }
 
 /* 输入框高 46px（规范 7.6） */

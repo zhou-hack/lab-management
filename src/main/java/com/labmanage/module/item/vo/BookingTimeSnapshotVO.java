@@ -2,6 +2,7 @@ package com.labmanage.module.item.vo;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 public record BookingTimeSnapshotVO(
         LocalDate bookingDate,
@@ -10,6 +11,7 @@ public record BookingTimeSnapshotVO(
         Instant bookingStartAt,
         Instant bookingEndAt,
         Instant returnDeadline,
-        Instant issueEarliestAt
+        Instant issueEarliestAt,
+        List<BookingTimeSegmentVO> segments
 ) {
 }

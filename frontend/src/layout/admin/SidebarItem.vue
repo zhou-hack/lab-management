@@ -1,7 +1,19 @@
 <template>
+  <!-- 物料工作台页签直接并入上级目录，不再显示中间菜单层 -->
+  <template v-if="isItemWorkspace">
+    <el-menu-item
+      v-for="tab in workbenchTabs"
+      :key="tab.key"
+      :index="`${item.routePath}?tab=${tab.key}`"
+    >
+      <template #title>
+        {{ tab.label }}
+      </template>
+    </el-menu-item>
+  </template>
   <!-- 菜单树节点：目录(DIRECTORY)/页面(PAGE) 递归渲染；动作(ACTION)不渲染 -->
   <el-sub-menu
-    v-if="hasChildren"
+    v-else-if="hasChildren"
     :index="item.routePath || String(item.id)"
   >
     <template #title>
@@ -27,6 +39,8 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useUserStore } from '@/store/user'
+import { getVisibleWorkbenchTabs } from '@/views/admin/item/workbench.rules'
 import {
   Avatar,
   Bell,
@@ -48,8 +62,13 @@ const props = defineProps({
   }
 })
 
+const store = useUserStore()
+const isItemWorkspace = computed(() => props.item.componentKey === 'ItemWorkspace')
 const visibleChildren = computed(() =>
   (props.item.children || []).filter((c) => c.menuType !== 'ACTION')
+)
+const workbenchTabs = computed(() =>
+  isItemWorkspace.value ? getVisibleWorkbenchTabs(store.permissions) : []
 )
 
 const hasChildren = computed(() => visibleChildren.value.length > 0)

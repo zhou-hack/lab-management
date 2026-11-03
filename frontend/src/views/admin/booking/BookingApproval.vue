@@ -10,14 +10,6 @@
         name="single"
       >
         <div class="card bk_approval__summary">
-          <div class="bk_approval__summary_main">
-            <h2 class="t-title bk_approval__title">
-              预约审批
-            </h2>
-            <p class="t-sub">
-              逐单审批待处理申请 · 批准后时段立即占用，与其他申请互斥；驳回须填写原因
-            </p>
-          </div>
           <div class="bk_approval__pending">
             <p class="bk_approval__pending_num">
               {{ pendingCount }}
@@ -553,15 +545,10 @@ onMounted(() => {
 .bk_approval__summary {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
   padding: 20px 24px;
   margin-bottom: 14px;
-}
-
-.bk_approval__title {
-  margin: 0 0 4px;
-  font-size: 18px;
 }
 
 .bk_approval__pending {

@@ -12,7 +12,7 @@
       </div>
       <el-menu
         class="admin_layout__menu"
-        :default-active="route.path"
+        :default-active="activeMenu"
         :collapse="collapsed"
         router
       >
@@ -126,6 +126,11 @@ const store = useUserStore()
 const notification = useNotificationStore()
 const canViewNotifications = computed(() =>
   hasPermission('item:notification:list', store.permissions)
+)
+const activeMenu = computed(() =>
+  route.path === '/admin/item/workspace' && route.query.tab
+    ? `${route.path}?tab=${route.query.tab}`
+    : route.path
 )
 
 let notificationTimer = null

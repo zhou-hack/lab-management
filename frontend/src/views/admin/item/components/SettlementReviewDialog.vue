@@ -34,9 +34,6 @@
           <el-descriptions-item label="发生时间">
             {{ formatTime(detail.document.occurredAt) }}
           </el-descriptions-item>
-          <el-descriptions-item label="来源移动单ID">
-            {{ detail.document.sourceMaterialDocumentId || '—' }}
-          </el-descriptions-item>
           <el-descriptions-item
             label="业务链ID"
             :span="3"

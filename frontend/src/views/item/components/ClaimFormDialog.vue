@@ -144,46 +144,65 @@
                 placeholder="选择日期"
                 :disabled-date="disableBookingDate"
                 class="claim_form__full"
-                @change="handleBookingChange"
+                @update:model-value="handleBookingDateChange"
               />
             </el-form-item>
-            <el-form-item
-              label="起始节次"
-              prop="startPeriodId"
-            >
-              <el-select
-                v-model="form.startPeriodId"
-                placeholder="选择起始节次"
-                class="claim_form__full"
-                @change="handleBookingChange"
-              >
-                <el-option
-                  v-for="period in periods"
-                  :key="period.id"
-                  :label="periodLabel(period)"
-                  :value="String(period.id)"
-                />
-              </el-select>
-            </el-form-item>
-            <el-form-item
-              label="结束节次"
-              prop="endPeriodId"
-            >
-              <el-select
-                v-model="form.endPeriodId"
-                placeholder="选择结束节次"
-                class="claim_form__full"
-                @change="handleBookingChange"
-              >
-                <el-option
-                  v-for="period in periods"
-                  :key="period.id"
-                  :label="periodLabel(period)"
-                  :value="String(period.id)"
-                />
-              </el-select>
-            </el-form-item>
           </div>
+          <el-form-item
+            label="预约节次"
+            prop="startPeriodId"
+            class="claim_form__period_item"
+          >
+            <div class="card tl__periods claim_form__periods">
+              <div class="tl__periods_head">
+                <h3 class="tl__block_title">
+                  {{ form.bookingDate }} 节次安排
+                </h3>
+                <div class="tl__legend">
+                  <span class="tl__legend_item"><i class="tl__dot tl__dot--free" />空闲可点选</span>
+                  <span class="tl__legend_item"><i class="tl__dot tl__dot--past" />已过去</span>
+                </div>
+              </div>
+              <div class="tl__period_grid">
+                <button
+                  v-for="period in periodCards"
+                  :key="period.id"
+                  type="button"
+                  class="period_card"
+                  :class="[PERIOD_CARD_MAP[period.state].cls, { 'period_card--selected': isSelected(period.periodNo) }]"
+                  :disabled="period.state !== 'free'"
+                  :title="PERIOD_CARD_MAP[period.state].tip"
+                  @click="onPeriodClick(period)"
+                >
+                  <b class="period_card__no">{{ period.periodName }}</b>
+                  <span class="period_card__clock">{{ period.startClock }}-{{ period.endClock }}</span>
+                  <span class="period_card__state">{{ PERIOD_CARD_MAP[period.state].tip }}</span>
+                </button>
+                <p
+                  v-if="!periodCards.length"
+                  class="t-hint tl__periods_empty"
+                >
+                  暂无可选节次
+                </p>
+              </div>
+              <div
+                v-if="selectionTip"
+                class="tl__selection"
+              >
+                <span class="pill pill--brand">已选 {{ selectionTip }}</span>
+                <el-button
+                  link
+                  type="primary"
+                  @click="clearPeriodSelection"
+                >
+                  取消选择
+                </el-button>
+              </div>
+              <p class="t-hint claim_form__period_hint">
+                点击卡片选择或取消节次，可自由跳选多个节次段
+              </p>
+            </div>
+          </el-form-item>
         </section>
 
         <section
@@ -196,6 +215,7 @@
             :load-catalog="loadClaimCatalog"
             :active="modelValue && step === 2"
             :refresh-key="catalogRefreshKey"
+            :draft-key="claimDraftKey"
             quantity-field="requestedQuantity"
             @change="invalidatePreview"
           />
@@ -219,7 +239,21 @@
                 label="预约时间"
                 :span="2"
               >
-                {{ formatRange(preview.bookingSnapshot.bookingStartAt, preview.bookingSnapshot.bookingEndAt) }}
+                <div
+                  v-if="bookingSegments.length"
+                  class="claim_form__booking_segments"
+                >
+                  <div
+                    v-for="segment in bookingSegments"
+                    :key="segment.segmentSeq"
+                  >
+                    <span>{{ formatSegmentPeriods(segment) }}</span>
+                    <span>{{ formatRange(segment.bookingStartAt, segment.bookingEndAt) }}</span>
+                  </div>
+                </div>
+                <template v-else>
+                  {{ formatRange(preview.bookingSnapshot.bookingStartAt, preview.bookingSnapshot.bookingEndAt) }}
+                </template>
               </el-descriptions-item>
               <el-descriptions-item label="最早实发时间">
                 {{ formatInstant(preview.bookingSnapshot.issueEarliestAt) || '—' }}
@@ -304,7 +338,7 @@
             <div class="claim_form__allocation_head">
               <div>
                 <h4 class="claim_form__section_title">
-                  计划分配
+                  按库位确认计划分配
                 </h4>
                 <p class="t-hint">
                   可调整物料、库位和数量；每项物料的分配合计必须等于申请数量。
@@ -314,90 +348,118 @@
                 添加分配
               </el-button>
             </div>
-            <el-table
-              :data="editableAllocations"
-              class="table-scroll-x claim_form__table"
-              empty-text="请添加计划分配"
+            <el-alert
+              :title="`本次提交将生成 ${childClaimCount} 个库位子申领单`"
+              type="info"
+              :closable="false"
+              show-icon
+              class="claim_form__alert"
             >
-              <el-table-column
-                label="物料"
-                min-width="170"
+              保留一张申领总单；每个子单由对应库位管理员独立审核、实发和归还。
+            </el-alert>
+            <div
+              v-for="group in allocationGroups"
+              :key="group.locationId || '__UNASSIGNED__'"
+              class="claim_form__location_group"
+            >
+              <h5 class="claim_form__location_title">
+                {{ group.locationName || group.locationId || '待选择库位' }}
+                <span
+                  v-if="group.locationCode"
+                  class="t-hint"
+                >
+                  {{ group.locationCode }}
+                </span>
+              </h5>
+              <el-table
+                :data="group.allocations"
+                class="table-scroll-x claim_form__table"
               >
-                <template #default="{ row }">
-                  <el-select
-                    v-model="row.materialId"
-                    placeholder="选择物料"
-                    @change="onAllocationMaterialChange(row)"
-                  >
-                    <el-option
-                      v-for="line in preview.lines || []"
-                      :key="line.materialId"
-                      :label="line.materialName"
-                      :value="String(line.materialId)"
+                <el-table-column
+                  label="物料"
+                  min-width="170"
+                >
+                  <template #default="{ row }">
+                    <el-select
+                      v-model="row.materialId"
+                      placeholder="选择物料"
+                      @change="onAllocationMaterialChange(row)"
+                    >
+                      <el-option
+                        v-for="line in preview.lines || []"
+                        :key="line.materialId"
+                        :label="line.materialName"
+                        :value="String(line.materialId)"
+                      />
+                    </el-select>
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="库位"
+                  min-width="190"
+                >
+                  <template #default="{ row }">
+                    <ItemLocationSelect
+                      v-model="row.locationId"
+                      for-claim
+                      :current-option="{
+                        id: row.locationId,
+                        locationName: row.locationName,
+                        locationCode: row.locationCode,
+                        enabled: 1
+                      }"
+                      :clearable="false"
+                      @change="(id, option) => onAllocationLocationChange(row, option)"
                     />
-                  </el-select>
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="库位"
-                min-width="190"
-              >
-                <template #default="{ row }">
-                  <ItemLocationSelect
-                    v-model="row.locationId"
-                    for-claim
-                    :current-option="{
-                      id: row.locationId,
-                      locationName: row.locationName,
-                      locationCode: row.locationCode,
-                      enabled: 1
-                    }"
-                    :clearable="false"
-                    @change="(id, option) => onAllocationLocationChange(row, option)"
-                  />
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="计划数量"
-                min-width="150"
-              >
-                <template #default="{ row }">
-                  <el-input-number
-                    v-model="row.plannedQuantity"
-                    :min="1"
-                    :precision="0"
-                    :step="1"
-                    :controls="false"
-                    class="claim_form__allocation_number"
-                    @change="markPreviewDirty"
-                  />
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="该库位可约"
-                min-width="120"
-                align="right"
-              >
-                <template #default="{ row }">
-                  <ItemQuantityText :value="row.availableQuantity" />
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="操作"
-                width="70"
-                fixed="right"
-              >
-                <template #default="{ $index }">
-                  <el-button
-                    link
-                    type="danger"
-                    @click="removeAllocation($index)"
-                  >
-                    删除
-                  </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="计划数量"
+                  min-width="150"
+                >
+                  <template #default="{ row }">
+                    <el-input-number
+                      v-model="row.plannedQuantity"
+                      :min="1"
+                      :precision="0"
+                      :step="1"
+                      :controls="false"
+                      class="claim_form__allocation_number"
+                      @change="markPreviewDirty"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="该库位可约"
+                  min-width="120"
+                  align="right"
+                >
+                  <template #default="{ row }">
+                    <ItemQuantityText :value="row.availableQuantity" />
+                  </template>
+                </el-table-column>
+                <el-table-column
+                  label="操作"
+                  width="70"
+                  fixed="right"
+                >
+                  <template #default="{ row }">
+                    <el-button
+                      link
+                      type="danger"
+                      @click="removeAllocation(row)"
+                    >
+                      删除
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+            <el-empty
+              v-if="!allocationGroups.length"
+              description="请添加计划分配"
+              :image-size="60"
+            />
             <div class="claim_form__allocation_actions">
               <el-alert
                 v-if="previewDirty"
@@ -513,13 +575,18 @@ import MaterialCatalogCart from './MaterialCatalogCart.vue'
 import ItemLocationSelect from '@/components/item/ItemLocationSelect.vue'
 import ItemQuantityText from '@/components/item/ItemQuantityText.vue'
 import StockShortageTable from '@/components/item/StockShortageTable.vue'
+import { useUserStore } from '@/store/user'
+import { PERIOD_CARD_MAP } from '@/views/booking/booking.constants'
 import { reservationRuleLabel } from './claim.constants'
 import {
   buildClaimPayload,
   buildClaimSubmissionPayload,
   getClaimAllocationsError,
   getClaimLinesError,
-  shouldRefreshClaimPreview
+  groupClaimAllocationsByLocation,
+  resolveClaimPeriodIds,
+  shouldRefreshClaimPreview,
+  toggleClaimPeriod
 } from './claim.rules'
 import { listItemPeriods } from '@/api/item/period'
 import { getMaterialPlan, listMaterialPlans } from '@/api/item/plan'
@@ -531,7 +598,14 @@ import {
   previewClaim,
   updateClaim
 } from '@/api/item/claim'
-import { addDaysShanghai, formatInstant, formatRange, todayShanghai } from '@/utils/datetime'
+import {
+  addDaysShanghai,
+  formatInstant,
+  formatRange,
+  nowShanghaiClock,
+  shanghaiMinutesOf,
+  todayShanghai
+} from '@/utils/datetime'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -545,12 +619,14 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'saved'])
+const store = useUserStore()
 
 const today = todayShanghai()
 const maxBookingDate = addDaysShanghai(today, 3)
 const formRef = ref()
 const step = ref(1)
 const periods = ref([])
+const selectedPeriodNos = ref([])
 const plans = ref([])
 const selectedPlanId = ref('')
 const selectedPlanDetail = ref(null)
@@ -574,7 +650,8 @@ const form = reactive({
   purpose: '',
   bookingDate: today,
   startPeriodId: '',
-  endPeriodId: ''
+  endPeriodId: '',
+  periodIds: []
 })
 
 const rules = {
@@ -583,8 +660,7 @@ const rules = {
     { max: 512, message: '用途不能超过 512 字', trigger: 'blur' }
   ],
   bookingDate: [{ required: true, message: '请选择预约日期', trigger: 'change' }],
-  startPeriodId: [{ required: true, message: '请选择起始节次', trigger: 'change' }],
-  endPeriodId: [{ required: true, message: '请选择结束节次', trigger: 'change' }]
+  startPeriodId: [{ required: true, message: '请选择预约节次', trigger: 'change' }]
 }
 
 const dialogTitle = computed(() => ({
@@ -602,12 +678,37 @@ const selectedPlan = computed(() => {
 const canSubmit = computed(() => !initializing.value && !previewLoading.value && !submitting.value
   && !!preview.value?.valid && !previewDirty.value && !preview.value?.shortages?.length
   && editableAllocations.value.length > 0)
+const allocationGroups = computed(() => groupClaimAllocationsByLocation(editableAllocations.value))
+const childClaimCount = computed(() => allocationGroups.value.filter((group) => group.locationId).length)
+const bookingSegments = computed(() => [...(preview.value?.bookingSnapshot?.segments || [])]
+  .sort((a, b) => Number(a.segmentSeq) - Number(b.segmentSeq)))
 const catalogRefreshKey = computed(() => [
   form.bookingDate,
   form.startPeriodId,
   form.endPeriodId,
+  form.periodIds.join(','),
   props.mode === 'edit' ? props.claimId : ''
 ].join('|'))
+const claimDraftKey = computed(() =>
+  `lab_manage_claim_material_draft_v2:${store.user?.userId || 'anonymous'}`
+)
+const periodCards = computed(() => {
+  const nowMin = shanghaiMinutesOf(today, nowShanghaiClock())
+  return periods.value.map((period) => ({
+    ...period,
+    state: form.bookingDate < today
+      || (form.bookingDate === today && shanghaiMinutesOf(form.bookingDate, period.endClock) <= nowMin)
+      ? 'past'
+      : 'free'
+  }))
+})
+const selectionTip = computed(() => {
+  if (!selectedPeriodNos.value.length) return ''
+  const names = selectedPeriodNos.value.map((periodNo) =>
+    periods.value.find((period) => period.periodNo === periodNo)?.periodName || `第${periodNo}节`
+  )
+  return `${names.join('、')}（共 ${names.length} 节）`
+})
 
 function emptyLine() {
   return {
@@ -621,8 +722,47 @@ function emptyLine() {
   }
 }
 
-function periodLabel(period) {
-  return `${period.periodName}（${period.startClock}-${period.endClock}）`
+function isSelected(periodNo) {
+  return selectedPeriodNos.value.includes(periodNo)
+}
+
+function syncFormPeriods(invalidate = true) {
+  const selectedPeriods = periods.value
+    .filter((period) => selectedPeriodNos.value.includes(period.periodNo))
+    .sort((a, b) => a.periodNo - b.periodNo)
+  selectedPeriodNos.value = selectedPeriods.map((period) => period.periodNo)
+  form.periodIds = selectedPeriods.map((period) => String(period.id))
+  form.startPeriodId = form.periodIds[0] || ''
+  form.endPeriodId = form.periodIds[form.periodIds.length - 1] || ''
+  formRef.value?.clearValidate('startPeriodId')
+  if (invalidate) handleBookingChange()
+}
+
+function onPeriodClick(period) {
+  if (period.state !== 'free') return
+  selectedPeriodNos.value = toggleClaimPeriod(selectedPeriodNos.value, period.periodNo)
+  syncFormPeriods()
+}
+
+function clearPeriodSelection() {
+  selectedPeriodNos.value = []
+  syncFormPeriods()
+}
+
+function syncSelectedPeriodsFromDetail(detail) {
+  const periodIds = resolveClaimPeriodIds(detail, periods.value)
+  selectedPeriodNos.value = periodIds
+    .map((id) => periods.value.find((period) => String(period.id) === id)?.periodNo)
+    .filter((periodNo) => periodNo !== undefined)
+}
+
+function formatSegmentPeriods(segment) {
+  const start = periods.value.find((period) => String(period.id) === String(segment.startPeriodId))
+  const end = periods.value.find((period) => String(period.id) === String(segment.endPeriodId))
+  if (!start || !end) return `第${segment.segmentSeq}段`
+  return start.periodNo === end.periodNo
+    ? `第${start.periodNo}节`
+    : `第${start.periodNo}–${end.periodNo}节`
 }
 
 function materialTypeText(type) {
@@ -659,6 +799,8 @@ function resetForm() {
   form.bookingDate = today
   form.startPeriodId = ''
   form.endPeriodId = ''
+  form.periodIds = []
+  selectedPeriodNos.value = []
   lines.value = []
   selectedPlanId.value = props.planId ? String(props.planId) : ''
   selectedPlanDetail.value = null
@@ -693,7 +835,11 @@ async function initialize() {
       sourceRequest
     ])
     if (serial !== initializeSerial) return
-    periods.value = (periodResult || []).map((period) => ({ ...period, id: String(period.id) }))
+    periods.value = (periodResult || []).map((period) => ({
+      ...period,
+      id: String(period.id),
+      periodNo: Number(period.periodNo)
+    }))
     plans.value = (planResult || []).map((plan) => ({ ...plan, id: String(plan.id) }))
 
     if (props.mode === 'edit') {
@@ -716,6 +862,8 @@ async function initialize() {
       selectedPlanDetail.value = source
       applyPlan(source)
     }
+    if (props.mode === 'edit') syncSelectedPeriodsFromDetail(source)
+    syncFormPeriods(false)
   } catch (error) {
     if (serial !== initializeSerial) return
     loadError.value = error?.response?.data?.msg || error?.message || '表单初始化失败，请关闭后重试'
@@ -751,12 +899,18 @@ function loadClaimCatalog(params) {
     bookingDate: form.bookingDate,
     startPeriodId: String(form.startPeriodId),
     endPeriodId: String(form.endPeriodId),
+    periodIds: form.periodIds.join(','),
     claimId: props.mode === 'edit' && props.claimId ? String(props.claimId) : undefined
   })
 }
 
 function handleBookingChange() {
   invalidatePreview()
+}
+
+function handleBookingDateChange() {
+  selectedPeriodNos.value = []
+  syncFormPeriods()
 }
 
 async function validateBasic() {
@@ -777,6 +931,10 @@ async function validateBasic() {
   }
   if (Number(start.periodNo) > Number(end.periodNo)) {
     ElMessage.warning('起始节次不能晚于结束节次')
+    return false
+  }
+  if (!form.periodIds.length) {
+    ElMessage.warning('请选择预约节次')
     return false
   }
   return true
@@ -885,8 +1043,9 @@ function addAllocation() {
   markPreviewDirty()
 }
 
-function removeAllocation(index) {
-  editableAllocations.value.splice(index, 1)
+function removeAllocation(allocation) {
+  const index = editableAllocations.value.indexOf(allocation)
+  if (index >= 0) editableAllocations.value.splice(index, 1)
   markPreviewDirty()
 }
 
@@ -910,6 +1069,7 @@ async function submit() {
     const saved = props.mode === 'edit'
       ? await updateClaim(String(props.claimId), payload)
       : await createClaim(payload)
+    globalThis.localStorage.removeItem(claimDraftKey.value)
     ElMessage.success(props.mode === 'edit' ? '申领已修改并重新提交审核' : '申领已提交，等待审核')
     emit('saved', saved)
     emit('close')
@@ -999,9 +1159,142 @@ watch(
 }
 
 .claim_form__basic_grid {
+  max-width: 360px;
+}
+
+.claim_form__period_item :deep(.el-form-item__content),
+.claim_form__periods {
+  width: 100%;
+}
+
+.claim_form__periods {
+  padding: 16px 20px;
+}
+
+.tl__periods_head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.tl__block_title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: var(--fw-semibold);
+  color: var(--g1);
+}
+
+.tl__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.tl__legend_item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--g3);
+}
+
+.tl__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.tl__dot--free {
+  border: 1.5px solid var(--ok);
+  background: rgba(23, 178, 106, .08);
+}
+
+.tl__dot--past {
+  border: 1.5px solid var(--g4);
+  background: transparent;
+}
+
+.tl__period_grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 10px;
+}
+
+.period_card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1.5px solid var(--hair-strong);
+  cursor: pointer;
+  text-align: left;
+  transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+
+.period_card:disabled {
+  cursor: not-allowed;
+  opacity: .75;
+}
+
+.period_card--free {
+  border-color: var(--ok);
+}
+
+.period_card--free:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px -4px rgba(23, 178, 106, .35);
+}
+
+.period_card--past {
+  border-color: var(--g4);
+  opacity: .6;
+}
+
+.period_card__no {
+  font-size: 13px;
+  color: var(--g1);
+}
+
+.period_card__clock {
+  font-size: 12px;
+  color: var(--g2);
+  font-variant-numeric: tabular-nums;
+}
+
+.period_card__state {
+  font-size: 11px;
+  color: var(--g3);
+}
+
+.period_card--selected {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+  background: var(--brand-a08);
+}
+
+.tl__periods_empty {
+  grid-column: 1 / -1;
+  margin: 24px 0;
+  text-align: center;
+}
+
+.tl__selection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.claim_form__period_hint {
+  margin: 10px 0 0;
 }
 
 .claim_form__full {
@@ -1010,6 +1303,18 @@ watch(
 
 .claim_form__snapshot {
   margin-bottom: 20px;
+}
+
+.claim_form__booking_segments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.claim_form__booking_segments > div {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .claim_form__table {
@@ -1026,6 +1331,20 @@ watch(
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.claim_form__location_group {
+  margin-bottom: 18px;
+}
+
+.claim_form__location_title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: var(--fw-semibold);
+  color: var(--g2);
 }
 
 .claim_form__allocation_number {
@@ -1080,8 +1399,7 @@ watch(
   }
 
   .claim_form__basic_grid {
-    grid-template-columns: 1fr;
-    gap: 0;
+    max-width: 100%;
   }
 }
 </style>

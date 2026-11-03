@@ -3,7 +3,7 @@ import { ITEM_WORKBENCH_TABS } from './workbench.config'
 import { getVisibleWorkbenchTabs, resolveWorkbenchTab } from './workbench.rules'
 
 describe('物料工作台页签权限', () => {
-  it('配置 12 个页签且每个页签仅由配置的权限开放', () => {
+  it('配置 13 个页签且每个页签仅由配置的权限开放', () => {
     expect(ITEM_WORKBENCH_TABS.map((tab) => tab.key)).toEqual([
       'materials',
       'consumables',
@@ -16,6 +16,7 @@ describe('物料工作台页签权限', () => {
       'movements',
       'claims',
       'settlements',
+      'settlement_details',
       'overdues'
     ])
 
@@ -23,7 +24,9 @@ describe('物料工作台页签权限', () => {
       const visible = getVisibleWorkbenchTabs([tab.permissions[0]])
       const expected = tab.permissions[0] === 'item:location:list'
         ? ['locations', 'responsible_history']
-        : [tab.key]
+        : tab.permissions[0] === 'item:document:list'
+          ? ['documents', 'settlement_details']
+          : [tab.key]
       expect(visible.map((item) => item.key), tab.key).toEqual(expected)
     }
   })
@@ -65,6 +68,13 @@ describe('物料工作台页签回退', () => {
     const visible = getVisibleWorkbenchTabs(['item:stock:list', 'item:overdue:list'])
 
     expect(resolveWorkbenchTab('overdues', visible)).toBe('overdues')
+  })
+
+  it('tab=settlement_details 复用库存单据权限并保持有效', () => {
+    const visible = getVisibleWorkbenchTabs(['item:document:list'])
+
+    expect(visible.map((tab) => tab.key)).toEqual(['documents', 'settlement_details'])
+    expect(resolveWorkbenchTab('settlement_details', visible)).toBe('settlement_details')
   })
 
   it('完全无权限时不产生活动页签', () => {

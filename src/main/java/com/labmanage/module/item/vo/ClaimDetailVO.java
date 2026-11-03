@@ -1,5 +1,6 @@
 package com.labmanage.module.item.vo;
 
+import com.labmanage.module.item.enums.ClaimKind;
 import com.labmanage.module.item.enums.ClaimStatus;
 import com.labmanage.module.item.enums.PickupMode;
 
@@ -58,6 +59,13 @@ public record ClaimDetailVO(
         boolean canDelegate,
         Map<String, String> actionReasons,
         Instant createTime,
-        Instant updateTime
+        Instant updateTime,
+        ClaimKind claimKind,
+        String parentClaimId,
+        String locationId,
+        String locationCode,
+        String locationName,
+        List<ClaimSegmentVO> segments,
+        java.util.List<ClaimSummaryVO> children
 ) {
 }

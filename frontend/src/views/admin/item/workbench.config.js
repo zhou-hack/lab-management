@@ -77,6 +77,13 @@ export const ITEM_WORKBENCH_TABS = [
     loader: () => import('./panels/SettlementPanel.vue')
   },
   {
+    key: 'settlement_details',
+    label: '核销明细',
+    permissions: ['item:document:list'],
+    componentPath: './panels/SettlementDetailPanel.vue',
+    loader: () => import('./panels/SettlementDetailPanel.vue')
+  },
+  {
     key: 'overdues',
     label: '逾期记录',
     permissions: ['item:overdue:list'],

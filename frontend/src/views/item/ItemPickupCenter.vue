@@ -1,14 +1,6 @@
 <template>
   <div class="pickup_center">
     <div class="pickup_center__head">
-      <div>
-        <h2 class="t-title pickup_center__title">
-          我的代领任务
-        </h2>
-        <p class="t-sub">
-          查看老师推送给我的代领安排、预约时间、物料和计划领取库位；实际出库由管理员办理。
-        </p>
-      </div>
       <el-button
         :loading="listLoading"
         @click="loadPickups"
@@ -82,9 +74,6 @@
             >
               {{ row.documentNo || row.id }}
             </el-button>
-            <div class="t-hint">
-              ID：{{ row.id }}
-            </div>
           </template>
         </el-table-column>
         <el-table-column
@@ -201,7 +190,7 @@
               border
             >
               <el-descriptions-item label="申领单 ID">
-                {{ detail.id }}
+                {{ detail.documentNo || detail.id }}
               </el-descriptions-item>
               <el-descriptions-item label="老师">
                 {{ detail.applicantName || detail.applicantId || '—' }}
@@ -463,9 +452,8 @@ onMounted(loadPickups)
   gap: 12px;
 }
 
-.pickup_center__title {
-  margin: 0 0 5px;
-  font-size: 21px;
+.pickup_center__head {
+  justify-content: flex-end;
 }
 
 .pickup_center__card,

@@ -27,12 +27,6 @@
             border
             size="small"
           >
-            <el-descriptions-item label="移动单ID">
-              {{ detail.document.id }}
-            </el-descriptions-item>
-            <el-descriptions-item label="共享单据ID">
-              {{ detail.document.bizDocumentId }}
-            </el-descriptions-item>
             <el-descriptions-item label="版本">
               {{ detail.document.version }}
             </el-descriptions-item>

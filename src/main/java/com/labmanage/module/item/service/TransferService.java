@@ -96,6 +96,7 @@ public class TransferService {
     private final ItemTimeService timeService;
     private final ItemLocationAccessService locationAccessService;
     private final StockDocumentService documentService;
+    private final ItemDocumentNoService documentNoService;
     private final MaterialQuantityValidator quantityValidator;
 
     public TransferService(MaterialDocumentMapper documentMapper,
@@ -111,6 +112,7 @@ public class TransferService {
                            ItemTimeService timeService,
                            ItemLocationAccessService locationAccessService,
                            StockDocumentService documentService,
+                           ItemDocumentNoService documentNoService,
                            MaterialQuantityValidator quantityValidator) {
         this.documentMapper = documentMapper;
         this.lineMapper = lineMapper;
@@ -125,6 +127,7 @@ public class TransferService {
         this.timeService = timeService;
         this.locationAccessService = locationAccessService;
         this.documentService = documentService;
+        this.documentNoService = documentNoService;
         this.quantityValidator = quantityValidator;
     }
 
@@ -653,7 +656,7 @@ public class TransferService {
                                             Long locationId, Instant now, Instant postedAt, String reviewStatus,
                                             boolean received, String remark) {
         Long documentId = IdWorker.getId();
-        String documentNo = "IM" + documentId;
+        String documentNo = documentNoService.nextDocumentNo("YD", now);
         SysUser operator = userMapper.selectById(operatorId);
         BizDocument shared = new BizDocument();
         shared.setId(IdWorker.getId());

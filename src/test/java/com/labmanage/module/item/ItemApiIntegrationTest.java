@@ -1,11 +1,15 @@
 package com.labmanage.module.item;
 
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.labmanage.common.result.Result;
 import com.labmanage.common.security.AuthContext;
 import com.labmanage.common.security.JwtService;
+import com.labmanage.module.document.entity.BizDocument;
+import com.labmanage.module.document.mapper.BizDocumentMapper;
 import com.labmanage.module.item.entity.FixedAsset;
 import com.labmanage.module.item.entity.MaterialClaim;
 import com.labmanage.module.item.enums.AssetStatus;
+import com.labmanage.module.item.enums.ClaimKind;
 import com.labmanage.module.item.enums.ClaimStatus;
 import com.labmanage.module.item.mapper.FixedAssetMapper;
 import com.labmanage.module.item.mapper.MaterialClaimMapper;
@@ -45,6 +49,11 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -105,6 +114,9 @@ class ItemApiIntegrationTest {
     private MaterialClaimMapper claimMapper;
 
     @Autowired
+    private BizDocumentMapper bizDocumentMapper;
+
+    @Autowired
     private ItemMaintenanceService maintenanceService;
 
     @Autowired
@@ -153,6 +165,8 @@ class ItemApiIntegrationTest {
         assertThat(inbound.path("code").asInt()).isZero();
         assertThat(inbound.path("data").path("document").path("documentType").asText())
                 .isEqualTo("OPENING");
+        assertThat(inbound.path("data").path("document").path("documentNo").asText())
+                .matches("FSRK20261110\\d{5}");
         assertThat(inbound.path("data").path("document").path("postedAt").asText()).isNotBlank();
         assertBalance(materialId, locationId, "MASTER-1", "12", "12");
     }
@@ -210,18 +224,21 @@ class ItemApiIntegrationTest {
     void managedClaimPageOnlyReturnsCurrentAdminLocations() throws Exception {
         String materialId = createMaterial("ITEM_HOME_MANAGED", "首页待办测试耗材");
         inbound(materialId, String.valueOf(LOCATION_A), "HOME-1", 2, "home-managed-stock");
-        String claimId = createClaim(materialId, 1, LOCATION_A, "home-managed-claim");
+        JsonNode root = createClaimDetail(materialId, 1, LOCATION_A, "home-managed-claim");
+        String rootId = root.path("id").asText();
+        String childId = childForLocation(root, LOCATION_A).path("id").asText();
+        String query = "/api/v1/item/admin/claims?status=PENDING&parentId=" + rootId;
 
-        JsonNode adminA = get("/api/v1/item/admin/claims?managedOnly=true&status=PENDING", this.adminA);
+        JsonNode adminA = get(query + "&managedOnly=true", this.adminA);
         assertThat(adminA.path("code").asInt()).isZero();
         assertThat(adminA.path("data").path("total").asInt()).isEqualTo(1);
-        assertThat(adminA.path("data").path("records").get(0).path("id").asText()).isEqualTo(claimId);
-        assertThat(get("/api/v1/item/admin/claims?managedOnly=true&status=PENDING", reviewerA)
+        assertThat(adminA.path("data").path("records").get(0).path("id").asText()).isEqualTo(childId);
+        assertThat(adminA.path("data").path("records").get(0).path("claimKind").asText()).isEqualTo("CHILD");
+        assertThat(get(query + "&managedOnly=true", reviewerA)
                 .path("data").path("total").asInt()).isEqualTo(1);
-        assertThat(get("/api/v1/item/admin/claims?managedOnly=true&status=PENDING", adminB)
+        assertThat(get(query + "&managedOnly=true", adminB)
                 .path("data").path("total").asInt()).isZero();
-        assertThat(get("/api/v1/item/admin/claims?status=PENDING", adminB)
-                .path("data").path("total").asInt()).isEqualTo(1);
+        assertThat(get(query, adminB).path("data").path("total").asInt()).isEqualTo(1);
     }
 
     @Test
@@ -229,16 +246,22 @@ class ItemApiIntegrationTest {
     void documentsFilterByBusinessChainId() throws Exception {
         String materialId = createMaterial("ITEM_DOCUMENT_CHAIN", "业务链筛选测试耗材");
         inbound(materialId, String.valueOf(LOCATION_A), "CHAIN-1", 2, "document-chain-stock");
-        String claimId = createClaim(materialId, 1, LOCATION_A, "document-chain-claim");
-        approve(claimId, 1, adminA);
+        JsonNode root = createClaimDetail(materialId, 1, LOCATION_A, "document-chain-claim");
+        String claimId = root.path("id").asText();
+        String childId = childForLocation(root, LOCATION_A).path("id").asText();
+        assertThat(approve(childId, 1, adminA).path("code").asInt()).isZero();
         setNow("2026-11-10T05:45:00Z");
-        String claimLineId = get("/api/v1/item/admin/claims/" + claimId, adminA)
+        String claimLineId = get("/api/v1/item/admin/claims/" + childId, adminA)
                 .path("data").path("lines").get(0).path("id").asText();
-        JsonNode issued = post("/api/v1/item/admin/claims/" + claimId + "/issues", """
+        JsonNode issued = post("/api/v1/item/admin/claims/" + childId + "/issues", """
                 {"locationId":"101","idempotencyKey":"document-chain-issue",
                  "lines":[{"claimLineId":"%s","quantity":1,"positionText":"CHAIN-1"}]}
                 """.formatted(claimLineId), adminA);
         assertThat(issued.path("code").asInt()).isZero();
+        JsonNode rootAfterIssue = get("/api/v1/item/admin/claims/" + claimId, adminA).path("data");
+        assertThat(rootAfterIssue.path("status").asText()).isEqualTo("CLOSED");
+        assertThat(rootAfterIssue.path("lines").get(0).path("issuedQuantity").decimalValue())
+                .isEqualByComparingTo("1");
         String sourceId = issued.path("data").path("document").path("id").asText();
         String sourceLineId = issued.path("data").path("lines").get(0).path("id").asText();
         JsonNode returned = post("/api/v1/item/documents/" + sourceId + "/returns", """
@@ -248,15 +271,31 @@ class ItemApiIntegrationTest {
                 """.formatted(sourceLineId), adminA);
         assertThat(returned.path("code").asInt()).isZero();
 
-        JsonNode filtered = get("/api/v1/item/documents?businessChainId=" + claimId, adminA);
-        assertThat(filtered.path("code").asInt()).isZero();
-        assertThat(filtered.path("data").path("total").asInt()).isEqualTo(2);
-        assertThat(filtered.path("data").path("records").get(0).path("businessChainId").asText()).isEqualTo(claimId);
+        String businessChainId = get("/api/v1/item/admin/claims/" + claimId, adminA)
+                .path("data").path("businessChainId").asText();
+        String childBusinessChainId = get("/api/v1/item/admin/claims/" + childId, adminA)
+                .path("data").path("businessChainId").asText();
+        assertThat(businessChainId).matches("ALL\\d{8}\\d{5}");
+        assertThat(childBusinessChainId).matches("ALL\\d{8}\\d{5}").isEqualTo(businessChainId);
+        assertThat(issued.path("data").path("document").path("documentNo").asText()).matches("CK\\d{8}\\d{5}");
+        assertThat(returned.path("data").path("document").path("documentNo").asText()).matches("RK\\d{8}\\d{5}");
+
+        JsonNode filteredByExternal = get("/api/v1/item/documents?businessChainId=" + businessChainId, adminA);
+        assertThat(filteredByExternal.path("code").asInt()).isZero();
+        assertThat(filteredByExternal.path("data").path("total").asInt()).isEqualTo(2);
+        for (JsonNode record : filteredByExternal.path("data").path("records")) {
+            assertThat(record.path("businessChainId").asText()).isEqualTo(childBusinessChainId);
+        }
+        JsonNode filteredByInternal = get("/api/v1/item/documents?businessChainId=" + claimId, adminA);
+        assertThat(filteredByInternal.path("data").path("total").asInt()).isEqualTo(2);
+        assertThat(filteredByInternal.path("data").path("records").get(0).path("businessChainId").asText())
+                .isEqualTo(childBusinessChainId);
         assertThat(get("/api/v1/item/documents?businessChainId=1", adminA)
                 .path("data").path("total").asInt()).isZero();
 
         JsonNode chain = get("/api/v1/item/claims/" + claimId + "/documents", adminA);
         assertThat(chain.path("code").asInt()).isZero();
+        assertThat(chain.path("data").path("businessChainId").asText()).isEqualTo(businessChainId);
         assertThat(chain.path("data").path("documents").size()).isEqualTo(2);
         assertThat(chain.path("data").path("documents").get(0).path("document").path("id").asText())
                 .isEqualTo(sourceId);
@@ -266,6 +305,310 @@ class ItemApiIntegrationTest {
                 .isEqualTo(returned.path("data").path("document").path("id").asText());
         assertThat(chain.path("data").path("documents").get(1).path("document").path("businessScene").asText())
                 .isEqualTo("CLAIM_RETURN");
+    }
+
+    @Test
+    @DisplayName("历史申领保留ITC单号和数值业务链ID")
+    void legacyClaimKeepsOriginalDocumentAndBusinessChainIds() throws Exception {
+        String materialId = createMaterial("ITEM_LEGACY_IDS", "历史编号兼容耗材");
+        inbound(materialId, String.valueOf(LOCATION_A), "LEGACY-1", 1, "legacy-id-stock");
+        String claimId = createClaim(materialId, 1, LOCATION_A, "legacy-id-claim");
+        MaterialClaim claim = claimMapper.selectById(Long.valueOf(claimId));
+        claimMapper.update(null, Wrappers.<MaterialClaim>lambdaUpdate()
+                .eq(MaterialClaim::getId, claim.getId())
+                .set(MaterialClaim::getClaimKind, ClaimKind.STANDALONE)
+                .set(MaterialClaim::getBusinessChainNo, null));
+        BizDocument shared = bizDocumentMapper.selectById(claim.getBizDocumentId());
+        shared.setDocumentNo("ITC" + claimId);
+        bizDocumentMapper.updateById(shared);
+
+        JsonNode detail = get("/api/v1/item/admin/claims/" + claimId, adminA).path("data");
+        assertThat(detail.path("claimKind").asText()).isEqualTo("STANDALONE");
+        assertThat(detail.path("documentNo").asText()).isEqualTo("ITC" + claimId);
+        assertThat(detail.path("businessChainId").asText()).isEqualTo(claimId);
+        assertThat(detail.path("bizDocumentId").asText()).isEqualTo(shared.getId().toString());
+    }
+
+    @Test
+    @DisplayName("申领幂等重放保留原SL单号和ALL业务链号")
+    void claimCreateReplayKeepsOriginalNumbers() throws Exception {
+        String materialId = createMaterial("ITEM_CLAIM_REPLAY", "申领编号重放耗材");
+        inbound(materialId, String.valueOf(LOCATION_A), "REPLAY-1", 1, "claim-replay-stock");
+        String requestBody = claimBody(materialId, 1, LOCATION_A, null, "编号重放申领", "claim-number-replay");
+        JsonNode first = post("/api/v1/item/claims", requestBody, teacher).path("data");
+        long claimCountAfterFirst = claimMapper.selectCount(null);
+        JsonNode replay = post("/api/v1/item/claims", requestBody, teacher).path("data");
+
+        assertThat(replay.path("id").asText()).isEqualTo(first.path("id").asText());
+        assertThat(replay.path("documentNo").asText()).isEqualTo(first.path("documentNo").asText());
+        assertThat(replay.path("businessChainId").asText()).isEqualTo(first.path("businessChainId").asText());
+        assertThat(replay.path("bizDocumentId").asText()).isEqualTo(first.path("bizDocumentId").asText());
+        assertThat(replay.path("children")).isEqualTo(first.path("children"));
+        assertThat(claimMapper.selectCount(null)).isEqualTo(claimCountAfterFirst);
+    }
+
+    @Test
+    @DisplayName("单库位申领仍生成ROOT与一个CHILD且申请人和管理端分页各归其类")
+    void singleLocationClaimCreatesRootAndOneChild() throws Exception {
+        String materialId = createMaterial("ITEM_SINGLE_LOCATION", "单库位父子申领耗材");
+        inbound(materialId, String.valueOf(LOCATION_A), "SINGLE-1", 3, "single-location-stock");
+
+        JsonNode root = createClaimDetail(materialId, 2, LOCATION_A, "single-location-claim");
+        String rootId = root.path("id").asText();
+        assertThat(root.path("children")).hasSize(1);
+        JsonNode child = childForLocation(root, LOCATION_A);
+        String childId = child.path("id").asText();
+        assertThat(child.path("documentNo").asText()).isEqualTo(root.path("documentNo").asText() + "1");
+        assertThat(child.path("businessChainId").asText()).isEqualTo(root.path("businessChainId").asText());
+        assertThat(child.path("status").asText()).isEqualTo("PENDING");
+        assertThat(child.path("revisionNo").asInt()).isEqualTo(1);
+
+        JsonNode adminRoot = get("/api/v1/item/admin/claims/" + rootId, adminA).path("data");
+        assertThat(adminRoot.path("canReview").asBoolean()).isFalse();
+        assertThat(adminRoot.path("canIssue").asBoolean()).isFalse();
+        JsonNode mine = get("/api/v1/item/claims?status=PENDING&pageSize=100", teacher);
+        assertThat(mine.path("code").asInt()).as(mine.toString()).isZero();
+        assertThat(recordWithId(mine.path("data").path("records"), rootId)).isNotNull();
+        assertThat(recordWithId(mine.path("data").path("records"), childId)).isNull();
+        JsonNode adminPage = get("/api/v1/item/admin/claims?status=PENDING&parentId=" + rootId, adminA);
+        assertThat(adminPage.path("data").path("total").asInt()).isEqualTo(1);
+        assertThat(recordWithId(adminPage.path("data").path("records"), childId)).isNotNull();
+        assertThat(recordWithId(adminPage.path("data").path("records"), rootId)).isNull();
+    }
+
+    @Test
+    @DisplayName("多库位每库生成一个CHILD且数量守恒，单库批准不影响兄弟子单")
+    void multiLocationChildrenConserveQuantitiesAndReserveIndependently() throws Exception {
+        String materialId = createMaterial("ITEM_MULTI_LOCATION", "多库位数量守恒耗材");
+        inbound(materialId, String.valueOf(LOCATION_A), "MULTI-A", 10, "multi-location-stock-a");
+        JsonNode inboundB = post("/api/v1/item/documents/opening", """
+                {"idempotencyKey":"multi-location-stock-b","lines":[{"materialId":"%s","locationId":"102",
+                 "positionText":"MULTI-B","quantity":10}]}
+                """.formatted(materialId), adminB);
+        assertThat(inboundB.path("code").asInt()).isZero();
+
+        JsonNode created = post("/api/v1/item/claims", """
+                {"purpose":"多库位数量守恒","bookingDate":"2026-11-10","startPeriodId":"5","endPeriodId":"5",
+                 "idempotencyKey":"multi-location-conservation",
+                 "lines":[{"materialId":"%s","requestedQuantity":6}],
+                 "allocations":[{"materialId":"%s","locationId":"101","plannedQuantity":2},
+                                {"materialId":"%s","locationId":"102","plannedQuantity":4}]}
+                """.formatted(materialId, materialId, materialId), teacher);
+        assertThat(created.path("code").asInt()).isZero();
+        JsonNode root = created.path("data");
+        assertThat(root.path("claimKind").asText()).isEqualTo("ROOT");
+        assertThat(root.path("children")).hasSize(2);
+        assertThat(root.path("lines").get(0).path("requestedQuantity").decimalValue())
+                .isEqualByComparingTo("6");
+        JsonNode childA = childForLocation(root, LOCATION_A);
+        JsonNode childB = childForLocation(root, LOCATION_B);
+        assertThat(childA.path("documentNo").asText()).isEqualTo(root.path("documentNo").asText() + "1");
+        assertThat(childB.path("documentNo").asText()).isEqualTo(root.path("documentNo").asText() + "2");
+        assertThat(childA.path("businessChainId").asText()).isEqualTo(root.path("businessChainId").asText());
+        assertThat(childB.path("businessChainId").asText()).isEqualTo(root.path("businessChainId").asText());
+        assertThat(childA.path("id").asText()).isNotEqualTo(childB.path("id").asText());
+
+        JsonNode childADetail = get("/api/v1/item/admin/claims/" + childA.path("id").asText(), adminA)
+                .path("data");
+        JsonNode childBDetail = get("/api/v1/item/admin/claims/" + childB.path("id").asText(), adminB)
+                .path("data");
+        assertThat(childADetail.path("lines")).hasSize(1);
+        assertThat(childBDetail.path("lines")).hasSize(1);
+        BigDecimal childRequestedTotal = childADetail.path("lines").get(0).path("requestedQuantity").decimalValue()
+                .add(childBDetail.path("lines").get(0).path("requestedQuantity").decimalValue());
+        assertThat(childADetail.path("lines").get(0).path("requestedQuantity").decimalValue())
+                .isEqualByComparingTo("2");
+        assertThat(childBDetail.path("lines").get(0).path("requestedQuantity").decimalValue())
+                .isEqualByComparingTo("4");
+        assertThat(childRequestedTotal).isEqualByComparingTo("6");
+        assertThat(childADetail.path("allocations").get(0).path("locationId").asText()).isEqualTo("101");
+        assertThat(childBDetail.path("allocations").get(0).path("locationId").asText()).isEqualTo("102");
+
+        JsonNode approvedA = approve(childA.path("id").asText(), 1, adminA);
+        assertThat(approvedA.path("code").asInt()).isZero();
+        assertThat(approvedA.path("data").path("reservations")).hasSize(1);
+        assertThat(approvedA.path("data").path("reservations").get(0).path("locationId").asText()).isEqualTo("101");
+        assertThat(approvedA.path("data").path("reservations").get(0).path("reservedQuantity").decimalValue())
+                .isEqualByComparingTo("2");
+        JsonNode rootAfterApproval = get("/api/v1/item/claims/" + root.path("id").asText(), teacher).path("data");
+        assertThat(rootAfterApproval.path("status").asText()).isEqualTo("PENDING");
+        assertThat(rootAfterApproval.path("reservations")).hasSize(1);
+        assertThat(childForLocation(rootAfterApproval, LOCATION_A).path("status").asText()).isEqualTo("APPROVED");
+        assertThat(childForLocation(rootAfterApproval, LOCATION_B).path("status").asText()).isEqualTo("PENDING");
+        JsonNode childBAfterApproval = get("/api/v1/item/admin/claims/" + childB.path("id").asText(), adminB)
+                .path("data");
+        assertThat(childBAfterApproval.path("status").asText()).isEqualTo("PENDING");
+        assertThat(childBAfterApproval.path("reservations")).isEmpty();
+        assertBalance(materialId, String.valueOf(LOCATION_A), "MULTI-A", "10", "10");
+        assertBalance(materialId, String.valueOf(LOCATION_B), "MULTI-B", "10", "10");
+    }
+
+    @Test
+    @DisplayName("跳选第1、2、4节仅保留一张总单并按两个实际段预占和实发")
+    void noncontiguousPeriodsReserveOnlySelectedSegmentsAndIssueOnce() throws Exception {
+        String materialId = createMaterial("ITEM_CLAIM_SEGMENTS", "跳选节次申领耗材");
+        inbound(materialId, String.valueOf(LOCATION_A), "SEGMENT-1", 10, "segment-stock");
+        String selectionJson = "\"startPeriodId\":\"1\",\"endPeriodId\":\"4\",\"periodIds\":[\"4\",\"1\",\"2\",\"2\"]";
+
+        JsonNode preview = post("/api/v1/item/claims/preview", """
+                {"bookingDate":"2026-11-10",%s,
+                 "lines":[{"materialId":"%s","requestedQuantity":2}],
+                 "allocations":[{"materialId":"%s","locationId":"101","plannedQuantity":2}]}
+                """.formatted(selectionJson, materialId, materialId), teacher);
+        assertThat(preview.path("code").asInt()).as(preview.toString()).isZero();
+        JsonNode previewSegments = preview.path("data").path("bookingSnapshot").path("segments");
+        assertThat(previewSegments).hasSize(2);
+        assertThat(previewSegments.get(0).path("startPeriodId").asText()).isEqualTo("1");
+        assertThat(previewSegments.get(0).path("endPeriodId").asText()).isEqualTo("2");
+        assertThat(previewSegments.get(1).path("startPeriodId").asText()).isEqualTo("4");
+        assertThat(previewSegments.get(1).path("endPeriodId").asText()).isEqualTo("4");
+
+        JsonNode created = post("/api/v1/item/claims", """
+                {"purpose":"跳选非连续节次","bookingDate":"2026-11-10",%s,
+                 "idempotencyKey":"noncontiguous-segment-claim",
+                 "lines":[{"materialId":"%s","requestedQuantity":2}],
+                 "allocations":[{"materialId":"%s","locationId":"101","plannedQuantity":2}]}
+                """.formatted(selectionJson, materialId, materialId), teacher);
+        assertThat(created.path("code").asInt()).as(created.toString()).isZero();
+        JsonNode root = created.path("data");
+        assertThat(root.path("claimKind").asText()).isEqualTo("ROOT");
+        assertThat(root.path("children")).hasSize(1);
+        assertThat(root.path("segments")).hasSize(2);
+        String childId = childForLocation(root, LOCATION_A).path("id").asText();
+        JsonNode child = get("/api/v1/item/admin/claims/" + childId, adminA).path("data");
+        assertThat(child.path("segments")).hasSize(2);
+
+        JsonNode approved = approve(childId, 1, adminA);
+        assertThat(approved.path("code").asInt()).as(approved.toString()).isZero();
+        JsonNode reservations = approved.path("data").path("reservations");
+        assertThat(reservations).hasSize(2);
+        List<String> windows = new ArrayList<>();
+        List<String> reservationSegmentIds = new ArrayList<>();
+        for (JsonNode reservation : reservations) {
+            assertThat(reservation.path("reservedQuantity").decimalValue()).isEqualByComparingTo("2");
+            reservationSegmentIds.add(reservation.path("claimSegmentId").asText());
+            windows.add(reservation.path("reservationStartAt").asText() + "/"
+                    + reservation.path("reservationEndAt").asText());
+        }
+        assertThat(windows).containsExactlyInAnyOrder(
+                "2026-11-10T00:00:00.000Z/2026-11-10T01:40:00.000Z",
+                "2026-11-10T02:55:00.000Z/2026-11-10T03:40:00.000Z");
+        assertThat(String.join(",", windows)).doesNotContain("2026-11-10T02:00:00.000Z");
+        assertThat(reservationSegmentIds).containsExactlyInAnyOrder(
+                child.path("segments").get(0).path("id").asText(),
+                child.path("segments").get(1).path("id").asText());
+
+        String selectedAvailability = "/api/v1/item/claims/availability?bookingDate=" + BOOKING_DATE
+                + "&periodIds=1,2,4&materialName=" + URLEncoder.encode("跳选节次申领耗材", StandardCharsets.UTF_8);
+        String unselectedAvailability = "/api/v1/item/claims/availability?bookingDate=" + BOOKING_DATE
+                + "&periodIds=3&materialName=" + URLEncoder.encode("跳选节次申领耗材", StandardCharsets.UTF_8);
+        assertThat(get(selectedAvailability, teacher).path("data").path("records").get(0)
+                .path("availableQuantity").decimalValue()).isEqualByComparingTo("8");
+        assertThat(get(unselectedAvailability, teacher).path("data").path("records").get(0)
+                .path("availableQuantity").decimalValue()).isEqualByComparingTo("10");
+
+        String claimLineId = child.path("lines").get(0).path("id").asText();
+        JsonNode issued = post("/api/v1/item/admin/claims/" + childId + "/issues", """
+                {"locationId":"101","idempotencyKey":"noncontiguous-segment-issue",
+                 "lines":[{"claimLineId":"%s","quantity":2,"positionText":"SEGMENT-1"}]}
+                """.formatted(claimLineId), adminA);
+        assertThat(issued.path("code").asInt()).as(issued.toString()).isZero();
+        assertBalance(materialId, String.valueOf(LOCATION_A), "SEGMENT-1", "10", "8");
+
+        JsonNode afterIssue = get("/api/v1/item/admin/claims/" + childId, adminA).path("data");
+        BigDecimal consumed = BigDecimal.ZERO;
+        BigDecimal released = BigDecimal.ZERO;
+        for (JsonNode reservation : afterIssue.path("reservations")) {
+            consumed = consumed.add(reservation.path("consumedQuantity").decimalValue());
+            released = released.add(reservation.path("releasedQuantity").decimalValue());
+            assertThat(reservation.path("status").asText()).isEqualTo("CLOSED");
+        }
+        assertThat(consumed).isEqualByComparingTo("2");
+        assertThat(released).isEqualByComparingTo("2");
+    }
+
+    @Test
+    @DisplayName("整组修改移除库位后重新加入复用原子单并递增版本")
+    void updateRootReusesRemovedLocationChild() throws Exception {
+        String materialId = createMaterial("ITEM_REUSE_CHILD", "移除重入库位耗材");
+        inbound(materialId, String.valueOf(LOCATION_A), "REUSE-A", 10, "reuse-child-stock-a");
+        JsonNode inboundB = post("/api/v1/item/documents/opening", """
+                {"idempotencyKey":"reuse-child-stock-b","lines":[{"materialId":"%s","locationId":"102",
+                 "positionText":"REUSE-B","quantity":10}]}
+                """.formatted(materialId), adminB);
+        assertThat(inboundB.path("code").asInt()).isZero();
+        JsonNode created = post("/api/v1/item/claims", """
+                {"purpose":"移除重入库位","bookingDate":"2026-11-10","startPeriodId":"5","endPeriodId":"5",
+                 "idempotencyKey":"reuse-child-create","lines":[{"materialId":"%s","requestedQuantity":2}],
+                 "allocations":[{"materialId":"%s","locationId":"101","plannedQuantity":1},
+                                {"materialId":"%s","locationId":"102","plannedQuantity":1}]}
+                """.formatted(materialId, materialId, materialId), teacher);
+        assertThat(created.path("code").asInt()).isZero();
+        String rootId = created.path("data").path("id").asText();
+        String childAId = childForLocation(created.path("data"), LOCATION_A).path("id").asText();
+        String childBId = childForLocation(created.path("data"), LOCATION_B).path("id").asText();
+
+        JsonNode removed = put("/api/v1/item/claims/" + rootId, """
+                {"purpose":"暂时移除乙库","bookingDate":"2026-11-10","startPeriodId":"5","endPeriodId":"5",
+                 "revisionNo":1,"lines":[{"materialId":"%s","requestedQuantity":2}],
+                 "allocations":[{"materialId":"%s","locationId":"101","plannedQuantity":2}]}
+                """.formatted(materialId, materialId), teacher);
+        assertThat(removed.path("code").asInt()).as(removed.toString()).isZero();
+        assertThat(removed.path("data").path("children")).hasSize(1);
+        assertThat(childForLocation(removed.path("data"), LOCATION_A).path("id").asText()).isEqualTo(childAId);
+
+        JsonNode readded = put("/api/v1/item/claims/" + rootId, """
+                {"purpose":"重新加入乙库","bookingDate":"2026-11-10","startPeriodId":"5","endPeriodId":"5",
+                 "revisionNo":2,"lines":[{"materialId":"%s","requestedQuantity":2}],
+                 "allocations":[{"materialId":"%s","locationId":"101","plannedQuantity":1},
+                                {"materialId":"%s","locationId":"102","plannedQuantity":1}]}
+                """.formatted(materialId, materialId, materialId), teacher);
+        assertThat(readded.path("code").asInt()).as(readded.toString()).isZero();
+        assertThat(readded.path("data").path("revisionNo").asInt()).isEqualTo(3);
+        assertThat(readded.path("data").path("children")).hasSize(2);
+        JsonNode childA = childForLocation(readded.path("data"), LOCATION_A);
+        JsonNode childB = childForLocation(readded.path("data"), LOCATION_B);
+        assertThat(childA.path("id").asText()).isEqualTo(childAId);
+        assertThat(childB.path("id").asText()).isEqualTo(childBId);
+        assertThat(childA.path("revisionNo").asInt()).isEqualTo(3);
+        assertThat(childB.path("revisionNo").asInt()).isEqualTo(3);
+        assertThat(childB.path("status").asText()).isEqualTo("PENDING");
+    }
+
+    @Test
+    @DisplayName("同库位双管理员并发审核仅一个成功且不重复预占")
+    void concurrentChildReviewSucceedsOnlyOnce() throws Exception {
+        String materialId = createMaterial("ITEM_CONCURRENT_REVIEW", "并发审核耗材");
+        inbound(materialId, String.valueOf(LOCATION_A), "CONCURRENT-1", 2, "concurrent-review-stock");
+        String childId = createChildClaim(materialId, 1, LOCATION_A, "concurrent-review-claim");
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<JsonNode> first = executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                return approve(childId, 1, adminA);
+            });
+            Future<JsonNode> second = executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                return approve(childId, 1, reviewerA);
+            });
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            List<Integer> codes = List.of(
+                    first.get(15, TimeUnit.SECONDS).path("code").asInt(),
+                    second.get(15, TimeUnit.SECONDS).path("code").asInt());
+            assertThat(codes).containsExactlyInAnyOrder(0, 40900);
+        } finally {
+            executor.shutdownNow();
+        }
+        JsonNode detail = get("/api/v1/item/admin/claims/" + childId, adminA).path("data");
+        assertThat(detail.path("status").asText()).isEqualTo("APPROVED");
+        assertThat(detail.path("reservations")).hasSize(1);
+        assertThat(detail.path("reservations").get(0).path("reservedQuantity").decimalValue())
+                .isEqualByComparingTo("1");
     }
 
     @Test
@@ -721,7 +1064,7 @@ class ItemApiIntegrationTest {
     void claimIssueAndReturnLifecycle() throws Exception {
         String materialId = createMaterial("ITEM_LIFECYCLE", "申领 lifecycle 耗材");
         inbound(materialId, String.valueOf(LOCATION_A), "LIFE-1", 10, "life-inbound");
-        String claimId = createClaim(materialId, 6, LOCATION_A, "life-claim");
+        String claimId = createChildClaim(materialId, 6, LOCATION_A, "life-claim");
         assertThat(approve(claimId, 1, adminA).path("code").asInt()).isZero();
 
         setNow("2026-11-10T05:45:00Z");
@@ -761,12 +1104,66 @@ class ItemApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("归还消耗免填原因，丢失和损坏仍必须填写原因")
+    void returnConsumptionReasonOptionalButLostAndDamagedRequired() throws Exception {
+        String materialId = createMaterial("ITEM_RETURN_REASON", "归还核销原因耗材");
+        inbound(materialId, String.valueOf(LOCATION_A), "REASON-1", 10, "return-reason-inbound");
+        String claimId = createChildClaim(materialId, 6, LOCATION_A, "return-reason-claim");
+        assertThat(approve(claimId, 1, adminA).path("code").asInt()).isZero();
+        String claimLineId = get("/api/v1/item/admin/claims/" + claimId, adminA)
+                .path("data").path("lines").get(0).path("id").asText();
+        JsonNode issued = post("/api/v1/item/admin/claims/" + claimId + "/issues", """
+                {"locationId":"101","idempotencyKey":"return-reason-issue",
+                 "lines":[{"claimLineId":"%s","quantity":6,"positionText":"REASON-1"}]}
+                """.formatted(claimLineId), adminA);
+        assertThat(issued.path("code").asInt()).isZero();
+        String sourceId = issued.path("data").path("document").path("id").asText();
+        String sourceLineId = issued.path("data").path("lines").get(0).path("id").asText();
+
+        JsonNode consumed = post("/api/v1/item/documents/" + sourceId + "/returns", """
+                {"idempotencyKey":"return-consumed-without-reason","lines":[{"sourceMaterialDocumentLineId":"%s",
+                 "returnQuantity":0,"consumedQuantity":2,"lostQuantity":0,"damagedQuantity":0,
+                 "positionText":"REASON-1"}]}
+                """.formatted(sourceLineId), adminA);
+        assertThat(consumed.path("code").asInt()).as(consumed.toString()).isZero();
+        assertBalance(materialId, String.valueOf(LOCATION_A), "REASON-1", "8", "4");
+        String consumedDocumentNo = consumed.path("data").path("document").path("documentNo").asText();
+        JsonNode consumedSettlement = get("/api/v1/item/settlements?documentNo=" + consumedDocumentNo, adminA)
+                .path("data").path("records").get(0);
+        assertThat(consumedSettlement.path("settlementType").asText()).isEqualTo("CONSUMED");
+        assertThat(consumedSettlement.path("reason").asText()).isEqualTo("教学消耗");
+
+        JsonNode lostWithoutReason = post("/api/v1/item/documents/" + sourceId + "/returns", """
+                {"idempotencyKey":"return-lost-without-reason","lines":[{"sourceMaterialDocumentLineId":"%s",
+                 "returnQuantity":0,"consumedQuantity":0,"lostQuantity":1,"damagedQuantity":0,
+                 "positionText":"REASON-1"}]}
+                """.formatted(sourceLineId), adminA);
+        assertThat(lostWithoutReason.path("code").asInt()).isEqualTo(40000);
+        assertThat(lostWithoutReason.path("msg").asText()).contains("丢失原因不能为空");
+        JsonNode damagedWithoutReason = post("/api/v1/item/documents/" + sourceId + "/returns", """
+                {"idempotencyKey":"return-damaged-without-reason","lines":[{"sourceMaterialDocumentLineId":"%s",
+                 "returnQuantity":0,"consumedQuantity":0,"lostQuantity":0,"damagedQuantity":1,
+                 "positionText":"REASON-1"}]}
+                """.formatted(sourceLineId), adminA);
+        assertThat(damagedWithoutReason.path("code").asInt()).isEqualTo(40000);
+        assertThat(damagedWithoutReason.path("msg").asText()).contains("损坏原因不能为空");
+
+        JsonNode damaged = post("/api/v1/item/documents/" + sourceId + "/returns", """
+                {"idempotencyKey":"return-damaged-with-reason","lines":[{"sourceMaterialDocumentLineId":"%s",
+                 "returnQuantity":0,"consumedQuantity":0,"lostQuantity":0,"damagedQuantity":1,
+                 "damagedReason":"外壳破损","positionText":"REASON-1"}]}
+                """.formatted(sourceLineId), adminA);
+        assertThat(damaged.path("code").asInt()).isZero();
+        assertBalance(materialId, String.valueOf(LOCATION_A), "REASON-1", "7", "4");
+    }
+
+    @Test
     @DisplayName("预约节次结束后当天仍可实发，次日禁止实发")
     void issueThroughoutBookingDayAndRejectNextDay() throws Exception {
         String materialId = createMaterial("ITEM_ISSUE_DAY", "当天实发边界耗材");
         inbound(materialId, String.valueOf(LOCATION_A), "DAY-1", 2, "issue-day-inbound");
-        String firstClaimId = createClaim(materialId, 1, LOCATION_A, "issue-day-first");
-        String secondClaimId = createClaim(materialId, 1, LOCATION_A, "issue-day-second");
+        String firstClaimId = createChildClaim(materialId, 1, LOCATION_A, "issue-day-first");
+        String secondClaimId = createChildClaim(materialId, 1, LOCATION_A, "issue-day-second");
         assertThat(approve(firstClaimId, 1, adminA).path("code").asInt()).isZero();
         assertThat(approve(secondClaimId, 1, adminA).path("code").asInt()).isZero();
         String firstLineId = get("/api/v1/item/admin/claims/" + firstClaimId, adminA)
@@ -803,8 +1200,10 @@ class ItemApiIntegrationTest {
     void revisionIncrementInvalidatesOldApproval() throws Exception {
         String materialId = createMaterial("ITEM_REVISION", "版本测试耗材");
         inbound(materialId, String.valueOf(LOCATION_A), "REV-1", 10, "rev-inbound");
-        String claimId = createClaim(materialId, 4, LOCATION_A, "rev-claim");
-        assertThat(approve(claimId, 1, adminA).path("code").asInt()).isZero();
+        JsonNode root = createClaimDetail(materialId, 4, LOCATION_A, "rev-claim");
+        String claimId = root.path("id").asText();
+        String childId = childForLocation(root, LOCATION_A).path("id").asText();
+        assertThat(approve(childId, 1, adminA).path("code").asInt()).isZero();
 
         JsonNode updated = put("/api/v1/item/claims/" + claimId,
                 claimBody(materialId, 5, LOCATION_A, 1, "修改后的申领用途", null), teacher);
@@ -813,20 +1212,24 @@ class ItemApiIntegrationTest {
         assertThat(updated.path("data").path("status").asText()).isEqualTo("PENDING");
         assertThat(updated.path("data").path("approvedBy").isNull()
                 || updated.path("data").path("approvedBy").isMissingNode()).isTrue();
+        childId = childForLocation(updated.path("data"), LOCATION_A).path("id").asText();
 
-        assertThat(approve(claimId, 1, adminA).path("code").asInt()).isEqualTo(40900);
-        JsonNode reapproved = approve(claimId, 2, adminA);
+        assertThat(approve(childId, 1, adminA).path("code").asInt()).isEqualTo(40900);
+        JsonNode reapproved = approve(childId, 2, adminA);
         assertThat(reapproved.path("code").asInt()).isZero();
+        assertThat(reapproved.path("data").path("claimKind").asText()).isEqualTo("CHILD");
         assertThat(reapproved.path("data").path("status").asText()).isEqualTo("APPROVED");
         assertThat(reapproved.path("data").path("revisionNo").asInt()).isEqualTo(2);
         assertThat(reapproved.path("data").path("reservations").get(0).path("revisionNo").asInt())
                 .isEqualTo(2);
+        assertThat(get("/api/v1/item/claims/" + claimId, teacher)
+                .path("data").path("status").asText()).isEqualTo("APPROVED");
     }
 
     @Test
     @DisplayName("4台固定资产全天预占，5台固定资产按普通预约窗口预占")
     void fixedAssetReservationRules() throws Exception {
-        String fourClaim = createClaim("9001", 1, LOCATION_A, "asset-four-claim");
+        String fourClaim = createChildClaim("9001", 1, LOCATION_A, "asset-four-claim");
         JsonNode four = approve(fourClaim, 1, adminA);
         assertThat(four.path("code").asInt()).isZero();
         JsonNode fourReservation = four.path("data").path("reservations").get(0);
@@ -843,7 +1246,7 @@ class ItemApiIntegrationTest {
                 .path("data").path("records").get(0).path("availableQuantity").decimalValue())
                 .isEqualByComparingTo("3");
 
-        String fiveClaim = createClaim("9002", 1, LOCATION_A, "asset-five-claim");
+        String fiveClaim = createChildClaim("9002", 1, LOCATION_A, "asset-five-claim");
         JsonNode five = approve(fiveClaim, 1, adminA);
         assertThat(five.path("code").asInt()).isZero();
         JsonNode fiveReservation = five.path("data").path("reservations").get(0);
@@ -892,8 +1295,10 @@ class ItemApiIntegrationTest {
         assertThat(availability.path("availableQuantity").decimalValue()).isEqualByComparingTo("15");
         assertThat(catalog.toString()).doesNotContain("assetCode", "fixedAssetId", "candidateAssets", "locationId");
 
-        String claimId = createClaim(materialId, 4, LOCATION_A, "availability-claim");
-        assertThat(approve(claimId, 1, adminA).path("code").asInt()).isZero();
+        JsonNode root = createClaimDetail(materialId, 4, LOCATION_A, "availability-claim");
+        String claimId = root.path("id").asText();
+        String childId = childForLocation(root, LOCATION_A).path("id").asText();
+        assertThat(approve(childId, 1, adminA).path("code").asInt()).isZero();
         JsonNode reserved = get(query, teacher).path("data").path("records").get(0);
         assertThat(reserved.path("ownedQuantity").decimalValue()).isEqualByComparingTo("15");
         assertThat(reserved.path("availableQuantity").decimalValue()).isEqualByComparingTo("11");
@@ -911,14 +1316,43 @@ class ItemApiIntegrationTest {
     void crossLocationReviewAndIssueForbidden() throws Exception {
         String materialId = createMaterial("ITEM_CROSS", "越库测试耗材");
         inbound(materialId, String.valueOf(LOCATION_A), "CROSS-1", 5, "cross-inbound");
-        String claimId = createClaim(materialId, 2, LOCATION_A, "cross-claim");
+        JsonNode inboundB = post("/api/v1/item/documents/opening", """
+                {"idempotencyKey":"cross-inbound-b","lines":[{"materialId":"%s","locationId":"102",
+                 "positionText":"CROSS-B","quantity":2}]}
+                """.formatted(materialId), adminB);
+        assertThat(inboundB.path("code").asInt()).isZero();
+        JsonNode root = createClaimDetail(materialId, 2, LOCATION_A, "cross-claim");
+        String rootId = root.path("id").asText();
+        String claimId = childForLocation(root, LOCATION_A).path("id").asText();
+        JsonNode rootB = createClaimDetail(materialId, 1, LOCATION_B, "cross-claim-b");
+        String childBId = childForLocation(rootB, LOCATION_B).path("id").asText();
 
+        assertThat(approve(rootId, 1, adminA).path("code").asInt()).isEqualTo(40900);
+        assertThat(approve(childBId, 1, adminA).path("code").asInt()).isEqualTo(40300);
         JsonNode reviewDenied = approve(claimId, 1, adminB);
         assertThat(reviewDenied.path("code").asInt()).isEqualTo(40300);
+        assertThat(approve(childBId, 1, adminB).path("code").asInt()).isZero();
         assertThat(approve(claimId, 1, adminA).path("code").asInt()).isZero();
         setNow("2026-11-10T05:45:00Z");
         String claimLineId = get("/api/v1/item/admin/claims/" + claimId, adminA)
                 .path("data").path("lines").get(0).path("id").asText();
+        String childBLineId = get("/api/v1/item/admin/claims/" + childBId, adminB)
+                .path("data").path("lines").get(0).path("id").asText();
+        JsonNode rootIssueDenied = post("/api/v1/item/admin/claims/" + rootId + "/issues", """
+                {"locationId":"101","idempotencyKey":"cross-root-issue",
+                 "lines":[{"claimLineId":"%s","quantity":1,"positionText":"CROSS-1"}]}
+                """.formatted(claimLineId), adminA);
+        assertThat(rootIssueDenied.path("code").asInt()).isEqualTo(40900);
+        JsonNode wrongLocationDenied = post("/api/v1/item/admin/claims/" + claimId + "/issues", """
+                {"locationId":"102","idempotencyKey":"cross-wrong-location",
+                 "lines":[{"claimLineId":"%s","quantity":1,"positionText":"CROSS-B"}]}
+                """.formatted(claimLineId), adminA);
+        assertThat(wrongLocationDenied.path("code").asInt()).isEqualTo(40900);
+        JsonNode foreignLineDenied = post("/api/v1/item/admin/claims/" + claimId + "/issues", """
+                {"locationId":"101","idempotencyKey":"cross-foreign-line",
+                 "lines":[{"claimLineId":"%s","quantity":1,"positionText":"CROSS-1"}]}
+                """.formatted(childBLineId), adminA);
+        assertThat(foreignLineDenied.path("code").asInt()).isEqualTo(40000);
         JsonNode issueDenied = post("/api/v1/item/admin/claims/" + claimId + "/issues", """
                 {"locationId":"101","idempotencyKey":"cross-issue",
                  "lines":[{"claimLineId":"%s","quantity":1,"positionText":"CROSS-1"}]}
@@ -937,6 +1371,27 @@ class ItemApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("补货入库使用BH编号且在库报废使用BF编号")
+    void replenishmentAndScrapUseSpecifiedDocumentNoPrefixes() throws Exception {
+        String materialId = createMaterial("ITEM_NUMBER_PREFIX", "编号规则测试耗材");
+        JsonNode replenishment = post("/api/v1/item/documents/replenishment", """
+                {"idempotencyKey":"prefix-replenishment","lines":[{"materialId":"%s","locationId":"101",
+                 "positionText":"PREFIX-1","quantity":3}]}
+                """.formatted(materialId), adminA);
+        assertThat(replenishment.path("code").asInt()).isZero();
+        assertThat(replenishment.path("data").path("document").path("documentNo").asText())
+                .matches("BH\\d{8}\\d{5}");
+
+        JsonNode scrap = post("/api/v1/item/documents/scrap", """
+                {"locationId":"101","idempotencyKey":"prefix-scrap",
+                 "lines":[{"materialId":"%s","quantity":1,"positionText":"PREFIX-1","reason":"编号规则报废测试"}]}
+                """.formatted(materialId), adminA);
+        assertThat(scrap.path("code").asInt()).isZero();
+        assertThat(scrap.path("data").path("document").path("documentNo").asText()).matches("BF\\d{8}\\d{5}");
+        assertThat(scrap.path("data").path("document").path("bizDocumentId").asText()).isNotBlank();
+    }
+
+    @Test
     @DisplayName("核销双人控制：不自审、未复核不过账、另一管理员复核成功")
     void settlementRequiresIndependentReview() throws Exception {
         String materialId = createMaterial("ITEM_SETTLEMENT", "双人核销耗材");
@@ -947,6 +1402,7 @@ class ItemApiIntegrationTest {
                 """.formatted(materialId), adminA);
         assertThat(created.path("code").asInt()).isZero();
         String documentId = created.path("data").path("document").path("id").asText();
+        assertThat(created.path("data").path("document").path("documentNo").asText()).matches("IM\\d+");
         assertThat(created.path("data").path("document").path("reviewStatus").asText())
                 .isEqualTo("PENDING_REVIEW");
         assertThat(created.path("data").path("document").path("postedAt").isNull()
@@ -969,6 +1425,93 @@ class ItemApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("核销明细跨单据分页筛选并保留复核与过账状态")
+    void settlementDetailPageQueriesAcrossDocuments() throws Exception {
+        String materialId = createMaterial("ITEM_SETTLEMENT_PAGE", "核销明细分页耗材");
+        inbound(materialId, String.valueOf(LOCATION_A), "SET-PAGE-1", 10, "settlement-page-inbound");
+        JsonNode adjust = post("/api/v1/item/documents/adjust", """
+                {"locationId":"101","idempotencyKey":"settlement-page-adjust",
+                 "lines":[{"materialId":"%s","quantity":2,"positionText":"SET-PAGE-1","reason":"明细分页调整"}]}
+                """.formatted(materialId), adminA);
+        JsonNode scrap = post("/api/v1/item/documents/scrap", """
+                {"locationId":"101","idempotencyKey":"settlement-page-scrap",
+                 "lines":[{"materialId":"%s","quantity":1,"positionText":"SET-PAGE-1","reason":"明细分页报废"}]}
+                """.formatted(materialId), adminA);
+        assertThat(adjust.path("code").asInt()).isZero();
+        assertThat(scrap.path("code").asInt()).isZero();
+        String adjustId = adjust.path("data").path("document").path("id").asText();
+        String scrapId = scrap.path("data").path("document").path("id").asText();
+        String adjustNo = adjust.path("data").path("document").path("documentNo").asText();
+        String scrapNo = scrap.path("data").path("document").path("documentNo").asText();
+        String query = "/api/v1/item/settlements?materialId=" + materialId;
+
+        JsonNode all = get(query, adminA);
+        assertThat(all.path("code").asInt()).as(all.toString()).isZero();
+        assertThat(all.path("data").path("total").asInt()).isEqualTo(2);
+        assertThat(all.path("data").path("records")).hasSize(2);
+        List<String> documentIds = new ArrayList<>();
+        for (JsonNode row : all.path("data").path("records")) {
+            documentIds.add(row.path("materialDocumentId").asText());
+            assertThat(row.path("materialName").asText()).isEqualTo("核销明细分页耗材");
+            assertThat(row.path("baseUnit").asText()).isEqualTo("件");
+            assertThat(row.path("locationId").asText()).isEqualTo("101");
+            assertThat(row.path("locationName").asText()).isNotBlank();
+            assertThat(row.path("operatorName").asText()).isNotBlank();
+            assertThat(row.path("occurredAt").asText()).isNotBlank();
+            assertThat(row.path("reviewStatus").asText()).isEqualTo("PENDING_REVIEW");
+            assertThat(row.path("postedAt").isNull() || row.path("postedAt").isMissingNode()).isTrue();
+        }
+        assertThat(documentIds).containsExactlyInAnyOrder(adjustId, scrapId);
+
+        JsonNode byDocumentNo = get(query + "&documentNo=" + adjustNo, adminA);
+        assertThat(byDocumentNo.path("data").path("total").asInt()).isEqualTo(1);
+        assertThat(byDocumentNo.path("data").path("records").get(0).path("materialDocumentId").asText())
+                .isEqualTo(adjustId);
+        assertThat(get(query + "&settlementType=SCRAP", adminA)
+                .path("data").path("records").get(0).path("materialDocumentId").asText()).isEqualTo(scrapId);
+        assertThat(get(query + "&locationId=102", adminA).path("data").path("total").asInt()).isZero();
+        assertThat(get(query + "&reviewStatus=PENDING_REVIEW", adminA)
+                .path("data").path("total").asInt()).isEqualTo(2);
+        assertThat(get(query + "&startDate=2026-11-10&endDate=2026-11-10", adminA)
+                .path("data").path("total").asInt()).isEqualTo(2);
+        assertThat(get(query + "&startDate=2026-11-11&endDate=2026-11-11", adminA)
+                .path("data").path("total").asInt()).isZero();
+        assertThat(get(query + "&startDate=2026-11-11&endDate=2026-11-10", adminA)
+                .path("code").asInt()).isEqualTo(40000);
+        assertThat(get(query + "&pageSize=101", adminA).path("code").asInt()).isEqualTo(40000);
+        assertThat(get("/api/v1/item/settlements", teacher).path("code").asInt()).isEqualTo(40300);
+
+        JsonNode firstPage = get(query + "&pageSize=1&pageNum=1", adminA);
+        JsonNode secondPage = get(query + "&pageSize=1&pageNum=2", adminA);
+        assertThat(firstPage.path("data").path("total").asInt()).isEqualTo(2);
+        assertThat(firstPage.path("data").path("records")).hasSize(1);
+        assertThat(secondPage.path("data").path("records")).hasSize(1);
+        assertThat(firstPage.path("data").path("records").get(0).path("id").asText())
+                .isNotEqualTo(secondPage.path("data").path("records").get(0).path("id").asText());
+
+        JsonNode approved = post("/api/v1/item/documents/" + adjustId + "/review",
+                "{\"approve\":true,\"version\":0,\"reason\":\"明细分页批准\"}", reviewerA);
+        JsonNode rejected = post("/api/v1/item/documents/" + scrapId + "/review",
+                "{\"approve\":false,\"version\":0,\"reason\":\"明细分页驳回\"}", reviewerA);
+        assertThat(approved.path("code").asInt()).isZero();
+        assertThat(rejected.path("code").asInt()).isZero();
+        JsonNode approvedRow = get(query + "&documentNo=" + adjustNo, adminA)
+                .path("data").path("records").get(0);
+        assertThat(approvedRow.path("reviewStatus").asText()).isEqualTo("APPROVED");
+        assertThat(approvedRow.path("reviewedBy").asText()).isEqualTo("13");
+        assertThat(approvedRow.path("reviewedByName").asText()).isNotBlank();
+        assertThat(approvedRow.path("reviewedAt").asText()).isNotBlank();
+        assertThat(approvedRow.path("postedAt").asText()).isNotBlank();
+        JsonNode rejectedRow = get(query + "&documentNo=" + scrapNo, adminA)
+                .path("data").path("records").get(0);
+        assertThat(rejectedRow.path("reviewStatus").asText()).isEqualTo("REJECTED");
+        assertThat(rejectedRow.path("postedAt").isNull() || rejectedRow.path("postedAt").isMissingNode()).isTrue();
+        assertThat(get(query + "&reviewStatus=APPROVED", adminA).path("data").path("total").asInt()).isEqualTo(1);
+        assertThat(get(query + "&reviewStatus=REJECTED", adminA).path("data").path("total").asInt()).isEqualTo(1);
+        assertThat(get(query + "&reviewStatus=PENDING_REVIEW", adminA).path("data").path("total").asInt()).isZero();
+    }
+
+    @Test
     @DisplayName("移动发出不增加目标库存，短收后仅按实收增加目标库存")
     void transferShortReceipt() throws Exception {
         String materialId = createMaterial("ITEM_TRANSFER", "移动短收耗材");
@@ -978,6 +1521,7 @@ class ItemApiIntegrationTest {
                  "lines":[{"materialId":"%s","quantity":4,"positionText":"MOVE-1"}]}
                 """.formatted(materialId), adminA);
         assertThat(sent.path("code").asInt()).isZero();
+        assertThat(sent.path("data").path("document").path("documentNo").asText()).matches("YD\\d{8}\\d{5}");
         String transferId = sent.path("data").path("document").path("id").asText();
         String sourceLineId = sent.path("data").path("lines").get(0)
                 .path("sourceMaterialDocumentLineId").asText();
@@ -989,6 +1533,7 @@ class ItemApiIntegrationTest {
                  "lines":[{"sourceMaterialDocumentLineId":"%s","quantity":2,"positionText":"MOVE-1"}]}
                 """.formatted(sourceLineId), adminB);
         assertThat(received.path("code").asInt()).isZero();
+        assertThat(received.path("data").path("document").path("documentNo").asText()).matches("YD\\d{8}\\d{5}");
         assertThat(received.path("data").path("document").path("transferStatus").asText())
                 .isEqualTo("PARTIALLY_RECEIVED");
         assertThat(received.path("data").path("remainingQuantity").decimalValue())
@@ -1032,7 +1577,7 @@ class ItemApiIntegrationTest {
                  "lines":[{"materialId":"%s","quantity":1.5,"positionText":"INTEGER-1"}]}
                 """.formatted(materialId), adminA));
 
-        String claimId = createClaim(materialId, 2, LOCATION_A, "integer-claim");
+        String claimId = createChildClaim(materialId, 2, LOCATION_A, "integer-claim");
         assertThat(approve(claimId, 1, adminA).path("code").asInt()).isZero();
         setNow("2026-11-10T05:45:00Z");
         String claimLineId = get("/api/v1/item/admin/claims/" + claimId, adminA)
@@ -1105,8 +1650,9 @@ class ItemApiIntegrationTest {
         assertThat(first.path("data").path("skippedAssetCount").asInt()).isZero();
         String documentId = first.path("data").path("documentId").asText();
         assertThat(documentId).isNotBlank();
-        assertThat(get("/api/v1/item/documents/" + documentId, adminA)
-                .path("data").path("lines")).hasSize(3);
+        JsonNode importedDocument = get("/api/v1/item/documents/" + documentId, adminA).path("data");
+        assertThat(importedDocument.path("lines")).hasSize(3);
+        assertThat(importedDocument.path("document").path("documentNo").asText()).matches("FSRK\\d{8}\\d{5}");
         JsonNode assets = get("/api/v1/item/assets?assetCode=ITEM_A-0004-001&pageNum=1&pageSize=20", adminA);
         assertThat(assets.path("data").path("total").asInt()).isEqualTo(1);
         assertThat(assets.path("data").path("records").get(0).path("assetCode").asText())
@@ -1388,26 +1934,29 @@ class ItemApiIntegrationTest {
     void reviewAndApprovalNotificationsFollowLocationAndRevision() throws Exception {
         String materialId = createMaterial("ITEM_NOTIFY_REVIEW", "审批通知测试耗材");
         inbound(materialId, String.valueOf(LOCATION_A), "LIFE-1", 5, "notify-review-stock");
-        String claimId = createClaim(materialId, 2, LOCATION_A, "notify-review-claim");
+        JsonNode root = createClaimDetail(materialId, 2, LOCATION_A, "notify-review-claim");
+        String claimId = root.path("id").asText();
+        String childId = childForLocation(root, LOCATION_A).path("id").asText();
 
-        assertThat(notificationRecords(adminA, claimId, "CLAIM_REVIEW_PENDING")).hasSize(1);
-        assertThat(notificationRecords(reviewerA, claimId, "CLAIM_REVIEW_PENDING")).hasSize(1);
-        assertThat(notificationRecords(adminB, claimId, "CLAIM_REVIEW_PENDING")).isEmpty();
-        assertThat(approve(claimId, 1, adminA).path("code").asInt()).isZero();
-        assertThat(notificationRecords(teacher, claimId, "CLAIM_APPROVED")).hasSize(1);
-        assertThat(approve(claimId, 1, adminA).path("code").asInt()).isEqualTo(40900);
-        assertThat(notificationRecords(teacher, claimId, "CLAIM_APPROVED")).hasSize(1);
+        assertThat(notificationRecords(adminA, childId, "CLAIM_REVIEW_PENDING")).hasSize(1);
+        assertThat(notificationRecords(reviewerA, childId, "CLAIM_REVIEW_PENDING")).hasSize(1);
+        assertThat(notificationRecords(adminB, childId, "CLAIM_REVIEW_PENDING")).isEmpty();
+        assertThat(approve(childId, 1, adminA).path("code").asInt()).isZero();
+        assertThat(notificationRecords(teacher, childId, "CLAIM_APPROVED")).hasSize(1);
+        assertThat(approve(childId, 1, adminA).path("code").asInt()).isEqualTo(40900);
+        assertThat(notificationRecords(teacher, childId, "CLAIM_APPROVED")).hasSize(1);
 
         JsonNode updated = put("/api/v1/item/claims/" + claimId,
                 claimBody(materialId, 2, LOCATION_A, 1, "修改后重新审批", null), teacher);
         assertThat(updated.path("code").asInt()).isZero();
         assertThat(updated.path("data").path("revisionNo").asInt()).isEqualTo(2);
-        assertThat(notificationRecords(adminA, claimId, "CLAIM_REVIEW_PENDING")).hasSize(2);
-        assertThat(notificationRecords(reviewerA, claimId, "CLAIM_REVIEW_PENDING")).hasSize(2);
-        assertThat(notificationRecords(adminB, claimId, "CLAIM_REVIEW_PENDING")).isEmpty();
-        assertThat(notificationRecords(teacher, claimId, "CLAIM_APPROVED")).hasSize(1);
-        assertThat(approve(claimId, 2, adminA).path("code").asInt()).isZero();
-        assertThat(notificationRecords(teacher, claimId, "CLAIM_APPROVED")).hasSize(2);
+        childId = childForLocation(updated.path("data"), LOCATION_A).path("id").asText();
+        assertThat(notificationRecords(adminA, childId, "CLAIM_REVIEW_PENDING")).hasSize(2);
+        assertThat(notificationRecords(reviewerA, childId, "CLAIM_REVIEW_PENDING")).hasSize(2);
+        assertThat(notificationRecords(adminB, childId, "CLAIM_REVIEW_PENDING")).isEmpty();
+        assertThat(notificationRecords(teacher, childId, "CLAIM_APPROVED")).hasSize(1);
+        assertThat(approve(childId, 2, adminA).path("code").asInt()).isZero();
+        assertThat(notificationRecords(teacher, childId, "CLAIM_APPROVED")).hasSize(2);
     }
 
     @Test
@@ -1453,7 +2002,7 @@ class ItemApiIntegrationTest {
     void returnReminderRepeatsEveryTwoHoursAndStopsAfterReturn() throws Exception {
         String materialId = createMaterial("ITEM_RETURN_REMINDER", "归还提醒测试耗材");
         inbound(materialId, String.valueOf(LOCATION_A), "LIFE-1", 2, "return-reminder-stock");
-        String claimId = createClaim(materialId, 2, LOCATION_A, "return-reminder-claim");
+        String claimId = createChildClaim(materialId, 2, LOCATION_A, "return-reminder-claim");
         assertThat(approve(claimId, 1, adminA).path("code").asInt()).isZero();
         setNow("2026-11-10T05:45:00Z");
         JsonNode detail = get("/api/v1/item/admin/claims/" + claimId, adminA).path("data");
@@ -1499,7 +2048,7 @@ class ItemApiIntegrationTest {
         setNow("2026-11-10T00:30:00Z");
         String abandonedMaterial = createMaterial("ITEM_REMINDER_ABANDONED", "放弃提醒测试耗材");
         inbound(abandonedMaterial, String.valueOf(LOCATION_A), "LIFE-1", 1, "reminder-abandoned-stock");
-        String abandonedClaim = createClaim(abandonedMaterial, 1, LOCATION_A, "reminder-abandoned-claim");
+        String abandonedClaim = createChildClaim(abandonedMaterial, 1, LOCATION_A, "reminder-abandoned-claim");
         assertThat(approve(abandonedClaim, 1, adminA).path("code").asInt()).isZero();
         setNow("2026-11-10T05:45:00Z");
         JsonNode abandonedDetail = get("/api/v1/item/admin/claims/" + abandonedClaim, adminA).path("data");
@@ -1529,7 +2078,9 @@ class ItemApiIntegrationTest {
         String grantId = grant.path("data").path("id").asText();
         String materialId = createMaterial("ITEM_DELEGATION", "委派权限测试耗材");
         inbound(materialId, String.valueOf(LOCATION_A), "DELEGATE-1", 5, "delegate-stock");
-        String claimId = createClaim(materialId, 2, LOCATION_A, "delegate-claim");
+        JsonNode root = createClaimDetail(materialId, 2, LOCATION_A, "delegate-claim");
+        String claimId = root.path("id").asText();
+        String childId = childForLocation(root, LOCATION_A).path("id").asText();
 
         assertThat(put("/api/v1/item/claims/" + claimId + "/delegation",
                 "{\"studentId\":\"24\"}", teacher).path("code").asInt()).isEqualTo(40900);
@@ -1555,7 +2106,8 @@ class ItemApiIntegrationTest {
         assertThat(updated.path("code").asInt()).isZero();
         assertThat(updated.path("data").path("revisionNo").asInt()).isEqualTo(2);
         assertThat(updated.path("data").path("delegateStudentId").asText()).isEqualTo("22");
-        assertThat(approve(claimId, 2, adminA).path("code").asInt()).isZero();
+        childId = childForLocation(updated.path("data"), LOCATION_A).path("id").asText();
+        assertThat(approve(childId, 2, adminA).path("code").asInt()).isZero();
 
         JsonNode pickups = get("/api/v1/item/pickups", student);
         JsonNode pickup = recordWithId(pickups.path("data").path("records"), claimId);
@@ -1597,14 +2149,16 @@ class ItemApiIntegrationTest {
         String grantId = grant.path("data").path("id").asText();
         String materialId = createMaterial("ITEM_DELEGATE_ISSUE", "代领实发测试耗材");
         inbound(materialId, String.valueOf(LOCATION_A), "LIFE-1", 4, "delegate-issue-stock");
-        String claimId = createClaim(materialId, 2, LOCATION_A, "delegate-issue-claim");
+        JsonNode root = createClaimDetail(materialId, 2, LOCATION_A, "delegate-issue-claim");
+        String claimId = root.path("id").asText();
+        String childId = childForLocation(root, LOCATION_A).path("id").asText();
         assertThat(put("/api/v1/item/claims/" + claimId + "/delegation",
                 "{\"studentId\":\"22\"}", teacher).path("code").asInt()).isZero();
-        assertThat(approve(claimId, 1, adminA).path("code").asInt()).isZero();
+        assertThat(approve(childId, 1, adminA).path("code").asInt()).isZero();
         setNow("2026-11-10T05:45:00Z");
-        String claimLineId = get("/api/v1/item/admin/claims/" + claimId, adminA)
+        String claimLineId = get("/api/v1/item/admin/claims/" + childId, adminA)
                 .path("data").path("lines").get(0).path("id").asText();
-        JsonNode context = get("/api/v1/item/admin/claims/" + claimId
+        JsonNode context = get("/api/v1/item/admin/claims/" + childId
                 + "/issue_context?locationId=101", adminA);
         assertThat(context.path("data").path("canIssue").asBoolean()).isTrue();
         assertThat(context.path("data").path("pickupUserId").asText()).isEqualTo("22");
@@ -1616,11 +2170,11 @@ class ItemApiIntegrationTest {
         assertThat(invalidDetail.path("data").path("delegationValid").asBoolean()).isFalse();
         assertThat(invalidDetail.path("data").path("canIssue").asBoolean()).isFalse();
         assertThat(invalidDetail.path("data").path("delegateStudentId").asText()).isEqualTo("22");
-        JsonNode blockedContext = get("/api/v1/item/admin/claims/" + claimId
+        JsonNode blockedContext = get("/api/v1/item/admin/claims/" + childId
                 + "/issue_context?locationId=101", adminA);
         assertThat(blockedContext.path("data").path("canIssue").asBoolean()).isFalse();
         assertThat(blockedContext.path("data").path("issueBlockedReason").asText()).contains("撤销");
-        assertThat(post("/api/v1/item/admin/claims/" + claimId + "/issues", """
+        assertThat(post("/api/v1/item/admin/claims/" + childId + "/issues", """
                 {"locationId":"101","idempotencyKey":"delegate-issue-blocked",
                  "lines":[{"claimLineId":"%s","quantity":2,"positionText":"LIFE-1"}]}
                 """.formatted(claimLineId), adminA).path("code").asInt()).isEqualTo(40900);
@@ -1638,7 +2192,7 @@ class ItemApiIntegrationTest {
         try {
             assertThat(get("/api/v1/item/claims/" + claimId, teacher)
                     .path("data").path("delegationValid").asBoolean()).isFalse();
-            assertThat(get("/api/v1/item/admin/claims/" + claimId
+            assertThat(get("/api/v1/item/admin/claims/" + childId
                             + "/issue_context?locationId=101", adminA)
                     .path("data").path("issueBlockedReason").asText()).contains("停用");
         } finally {
@@ -1646,7 +2200,7 @@ class ItemApiIntegrationTest {
             userMapper.updateById(studentAccount);
         }
 
-        JsonNode issued = post("/api/v1/item/admin/claims/" + claimId + "/issues", """
+        JsonNode issued = post("/api/v1/item/admin/claims/" + childId + "/issues", """
                 {"locationId":"101","idempotencyKey":"delegate-issue-success",
                  "lines":[{"claimLineId":"%s","quantity":2,"positionText":"LIFE-1"}]}
                 """.formatted(claimLineId), adminA);
@@ -1900,11 +2454,39 @@ class ItemApiIntegrationTest {
     }
 
     private String createClaim(String materialId, int quantity, long locationId, String key) throws Exception {
+        return createClaimDetail(materialId, quantity, locationId, key).path("id").asText();
+    }
+
+    private String createChildClaim(String materialId, int quantity, long locationId, String key) throws Exception {
+        JsonNode root = createClaimDetail(materialId, quantity, locationId, key);
+        return childForLocation(root, locationId).path("id").asText();
+    }
+
+    private JsonNode createClaimDetail(String materialId, int quantity, long locationId, String key) throws Exception {
         JsonNode body = post("/api/v1/item/claims",
                 claimBody(materialId, quantity, locationId, null, "集成测试申领", key), teacher);
         assertThat(body.path("code").asInt()).isZero();
         assertThat(body.path("data").path("status").asText()).isEqualTo("PENDING");
-        return body.path("data").path("id").asText();
+        assertThat(body.path("data").path("claimKind").asText()).isEqualTo("ROOT");
+        assertThat(body.path("data").path("documentNo").asText()).matches("SL\\d{8}\\d{5}");
+        assertThat(body.path("data").path("businessChainId").asText()).matches("ALL\\d{8}\\d{5}");
+        assertThat(body.path("data").path("bizDocumentId").asText()).isNotBlank();
+        return body.path("data");
+    }
+
+    private JsonNode childForLocation(JsonNode rootDetail, long locationId) {
+        JsonNode match = null;
+        for (JsonNode child : rootDetail.path("children")) {
+            if (locationId == child.path("locationId").asLong()) {
+                assertThat(match).as("库位 %d 应只有一个当前子申领单", locationId).isNull();
+                match = child;
+            }
+        }
+        assertThat(match).as("缺少库位 %d 的子申领单：%s", locationId, rootDetail).isNotNull();
+        assertThat(match.path("claimKind").asText()).isEqualTo("CHILD");
+        assertThat(match.path("parentClaimId").asText()).isEqualTo(rootDetail.path("id").asText());
+        assertThat(match.path("locationId").asText()).isEqualTo(String.valueOf(locationId));
+        return match;
     }
 
     private String claimBody(String materialId, int quantity, long locationId,

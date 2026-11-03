@@ -29,13 +29,16 @@
             class="claim_detail__descriptions"
           >
             <el-descriptions-item label="申领单ID">
-              {{ claim.id }}
+              {{ claim.documentNo || claim.id }}
             </el-descriptions-item>
-            <el-descriptions-item label="共享单据ID">
-              {{ claim.bizDocumentId }}
+            <el-descriptions-item label="单据类型">
+              {{ claim.claimKind === 'CHILD' ? '库位子申领单' : claim.claimKind === 'ROOT' ? '申领总单' : '独立申领单' }}
             </el-descriptions-item>
-            <el-descriptions-item label="业务链ID">
-              {{ claim.businessChainId }}
+            <el-descriptions-item
+              v-if="claim.claimKind === 'CHILD'"
+              label="所属库位"
+            >
+              {{ claim.locationName || claim.locationId || '—' }} · {{ claim.locationCode || '—' }}
             </el-descriptions-item>
             <el-descriptions-item label="预约日期">
               {{ claim.bookingDate || '—' }}
@@ -91,7 +94,7 @@
           </el-descriptions>
           <div class="claim_detail__actions">
             <el-button
-              v-if="claim.canReview"
+              v-if="canReviewClaim(claim)"
               v-permission="'item:claim:review'"
               type="primary"
               @click="emit('action', 'approve', claim)"
@@ -99,7 +102,7 @@
               审核通过
             </el-button>
             <el-button
-              v-if="claim.canReview"
+              v-if="canReviewClaim(claim)"
               v-permission="'item:claim:review'"
               type="danger"
               plain
@@ -108,7 +111,7 @@
               驳回
             </el-button>
             <el-button
-              v-if="claim.canIssue"
+              v-if="canIssueClaim(claim)"
               v-permission="'item:claim:issue'"
               type="success"
               @click="emit('action', 'issue', claim)"
@@ -194,11 +197,6 @@
                   />
                 </template>
               </el-table-column>
-              <el-table-column
-                prop="id"
-                label="申领行ID"
-                min-width="180"
-              />
             </el-table>
           </el-tab-pane>
           <el-tab-pane
@@ -231,11 +229,6 @@
                   <ItemQuantityText :value="row.plannedQuantity" />
                 </template>
               </el-table-column>
-              <el-table-column
-                prop="claimLineId"
-                label="申领行ID"
-                min-width="170"
-              />
               <el-table-column
                 prop="revisionNo"
                 label="版本"
@@ -388,6 +381,7 @@ import ItemQuantityText from '@/components/item/ItemQuantityText.vue'
 import ItemStatusPill from '@/components/item/ItemStatusPill.vue'
 import { formatInstant, formatRange } from '@/utils/datetime'
 import { eventTypeLabel, pickupModeLabel } from '@/views/item/components/claim.constants'
+import { canIssueClaim, canReviewClaim } from '@/views/item/components/claim.rules'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -403,13 +397,13 @@ const visible = computed({
 const actionItems = computed(() => {
   const claim = props.claim || {}
   return [
-    { key: 'canReview', reasonKey: 'review', label: '审核 / 驳回', allowed: claim.canReview },
+    { key: 'canReview', reasonKey: 'review', label: '审核 / 驳回', allowed: canReviewClaim(claim) },
     { key: 'canModify', reasonKey: 'modify', label: '修改', allowed: claim.canModify },
     { key: 'canCancel', reasonKey: 'cancel', label: '取消', allowed: claim.canCancel },
     { key: 'canAbandon', reasonKey: 'abandon', label: '申请废弃', allowed: claim.canAbandon },
     { key: 'canClose', reasonKey: 'close', label: '关闭', allowed: claim.canClose },
     { key: 'canRebook', reasonKey: 'rebook', label: '再次生成', allowed: claim.canRebook },
-    { key: 'canIssue', reasonKey: 'issue', label: '实发', allowed: claim.canIssue }
+    { key: 'canIssue', reasonKey: 'issue', label: '实发', allowed: canIssueClaim(claim) }
   ]
 })
 const formatTime = (value) => formatInstant(value) || '—'

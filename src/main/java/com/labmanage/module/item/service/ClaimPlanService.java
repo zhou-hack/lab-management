@@ -11,6 +11,7 @@ import com.labmanage.module.item.dto.ClaimAvailabilityQuery;
 import com.labmanage.module.item.dto.ClaimPreviewAllocationDTO;
 import com.labmanage.module.item.dto.ClaimPreviewDTO;
 import com.labmanage.module.item.dto.ClaimPreviewLineDTO;
+import com.labmanage.module.item.entity.FixedAsset;
 import com.labmanage.module.item.entity.Material;
 import com.labmanage.module.item.entity.StockBalance;
 import com.labmanage.module.item.entity.StockLocation;
@@ -20,6 +21,7 @@ import com.labmanage.module.item.mapper.StockLocationMapper;
 import com.labmanage.module.item.service.StockAvailabilityService.LocationAvailability;
 import com.labmanage.module.item.service.StockAvailabilityService.StockSnapshot;
 import com.labmanage.module.item.vo.BookingTimeSnapshotVO;
+import com.labmanage.module.item.vo.BookingTimeSegmentVO;
 import com.labmanage.module.item.vo.ClaimAvailabilityVO;
 import com.labmanage.module.item.vo.ClaimPlannedAllocationVO;
 import com.labmanage.module.item.vo.ClaimPreviewLineVO;
@@ -78,8 +80,9 @@ public class ClaimPlanService {
     }
 
     public PageResult<ClaimAvailabilityVO> availability(ClaimAvailabilityQuery query, Long excludeClaimId) {
-        ItemTimeService.BookingWindow bookingWindow = timeService.resolveBookingWindow(
-                query.getBookingDate(), Ids.parse(query.getStartPeriodId()), Ids.parse(query.getEndPeriodId()));
+        ItemTimeService.BookingSelection selection = timeService.resolveBookingSelection(
+                query.getBookingDate(), parseOptionalId(query.getStartPeriodId()), parseOptionalId(query.getEndPeriodId()),
+                query.getPeriodIds() == null ? null : List.of(query.getPeriodIds()));
         Instant asOf = timeService.now();
         List<StockLocation> locations = locationMapper.selectList(Wrappers.<StockLocation>lambdaQuery()
                 .eq(StockLocation::getEnabled, 1)
@@ -92,7 +95,7 @@ public class ClaimPlanService {
                 .orderByAsc(Material::getMaterialName)
                 .orderByAsc(Material::getId));
         List<ClaimAvailabilityVO> records = page.getRecords().stream()
-                .map(material -> toAvailabilityVO(material, bookingWindow, asOf, excludeClaimId, locations))
+                .map(material -> toAvailabilityVO(material, selection, asOf, excludeClaimId, locations))
                 .toList();
         return PageResult.of(records, page.getTotal(), (int) page.getCurrent(), (int) page.getSize());
     }
@@ -119,16 +122,14 @@ public class ClaimPlanService {
 
     private ApprovalPreview compute(ClaimPreviewDTO dto, Long excludeClaimId, boolean lockResources) {
         validateRequest(dto);
-        Long startPeriodId = Ids.parse(dto.startPeriodId());
-        Long endPeriodId = Ids.parse(dto.endPeriodId());
-        ItemTimeService.BookingWindow bookingWindow = timeService.resolveBookingWindow(
-                dto.bookingDate(), startPeriodId, endPeriodId);
+        ItemTimeService.BookingSelection selection = timeService.resolveBookingSelection(
+                dto.bookingDate(), parseOptionalId(dto.startPeriodId()), parseOptionalId(dto.endPeriodId()), dto.periodIds());
         List<StockLocation> locations = locationMapper.selectList(Wrappers.<StockLocation>lambdaQuery()
                 .eq(StockLocation::getEnabled, 1)
                 .orderByAsc(StockLocation::getId));
         Map<Long, StockLocation> locationMap = locations.stream()
                 .collect(Collectors.toMap(StockLocation::getId, Function.identity()));
-        List<ResolvedLine> lines = resolveLines(dto.lines(), locations, bookingWindow,
+        List<ResolvedLine> lines = resolveLines(dto.lines(), locations, selection,
                 timeService.now(), excludeClaimId, lockResources);
 
         List<PlannedAllocation> planned = dto.allocations() == null || dto.allocations().isEmpty()
@@ -139,22 +140,24 @@ public class ClaimPlanService {
         List<ClaimShortageVO> shortages = shortages(lines, planned, locations.isEmpty());
         List<ClaimPreviewLineVO> lineVOs = lines.stream().map(this::toLineVO).toList();
         List<ClaimPlannedAllocationVO> allocationVOs = planned.stream().map(this::toAllocationVO).toList();
-        BookingTimeSnapshotVO snapshot = new BookingTimeSnapshotVO(dto.bookingDate(),
-                String.valueOf(startPeriodId), String.valueOf(endPeriodId), bookingWindow.bookingStartAt(),
-                bookingWindow.bookingEndAt(), bookingWindow.returnDeadline(), bookingWindow.issueEarliestAt());
+        BookingTimeSnapshotVO snapshot = toSnapshot(selection);
         ClaimPreviewVO preview = new ClaimPreviewVO(shortages.isEmpty(), lineVOs, allocationVOs, shortages,
                 RISK_WARNINGS, snapshot);
         Map<String, List<Long>> candidateAssetIds = new LinkedHashMap<>();
         for (PlannedAllocation allocation : planned) {
-            candidateAssetIds.put(assetKey(allocation.line().materialId(), allocation.location().getId()),
-                    allocation.availability().candidateAssets().stream().map(asset -> asset.getId()).toList());
+            for (ResolvedSegment segment : allocation.line().segments()) {
+                candidateAssetIds.put(assetKey(allocation.line().materialId(), allocation.location().getId(),
+                                segment.segmentSeq()),
+                        segment.availabilityByLocation().get(allocation.location().getId())
+                                .candidateAssets().stream().map(FixedAsset::getId).toList());
+            }
         }
         return new ApprovalPreview(preview, candidateAssetIds);
     }
 
     private List<ResolvedLine> resolveLines(List<ClaimPreviewLineDTO> inputLines,
                                             List<StockLocation> locations,
-                                            ItemTimeService.BookingWindow bookingWindow,
+                                            ItemTimeService.BookingSelection selection,
                                             Instant asOf,
                                             Long excludeClaimId,
                                             boolean lockResources) {
@@ -188,15 +191,55 @@ public class ClaimPlanService {
                     && !isInteger(input.requestedQuantity())) {
                 throw badRequest("固定资产申请数量必须为整数：" + materialId);
             }
-            StockSnapshot snapshot = availabilityService.loadSnapshot(material, bookingWindow, asOf,
+            result.set(i, resolveLine(material, input.requestedQuantity(), locations, selection,
+                    asOf, excludeClaimId, lockResources));
+        }
+        return result;
+    }
+
+    private ResolvedLine resolveLine(Material material, BigDecimal requestedQuantity,
+                                     List<StockLocation> locations,
+                                     ItemTimeService.BookingSelection selection,
+                                     Instant asOf, Long excludeClaimId, boolean lockResources) {
+        List<ResolvedSegment> segments = new ArrayList<>();
+        for (ItemTimeService.BookingSegment bookingSegment : selection.segments()) {
+            StockSnapshot snapshot = availabilityService.loadSnapshot(material, bookingSegment.window(), asOf,
                     excludeClaimId, lockResources);
             Map<Long, LocationAvailability> availability = new LinkedHashMap<>();
             for (StockLocation location : locations) {
                 availability.put(location.getId(), availabilityService.availability(snapshot, location.getId()));
             }
-            result.set(i, new ResolvedLine(materialId, input.requestedQuantity(), material, snapshot, availability));
+            segments.add(new ResolvedSegment(bookingSegment.segmentSeq(), snapshot, availability));
         }
-        return result;
+        Map<Long, LocationAvailability> aggregated = new LinkedHashMap<>();
+        for (StockLocation location : locations) {
+            aggregated.put(location.getId(), aggregateAvailability(material, location.getId(), segments));
+        }
+        return new ResolvedLine(material.getId(), requestedQuantity, material, selection.envelope(), segments, aggregated);
+    }
+
+    private LocationAvailability aggregateAvailability(Material material, Long locationId,
+                                                       List<ResolvedSegment> segments) {
+        List<LocationAvailability> values = segments.stream()
+                .map(segment -> segment.availabilityByLocation().get(locationId)).toList();
+        BigDecimal current = values.stream().map(LocationAvailability::currentQuantity)
+                .min(BigDecimal::compareTo).orElse(BigDecimal.ZERO);
+        BigDecimal expected = values.stream().map(LocationAvailability::expectedReturnQuantity)
+                .min(BigDecimal::compareTo).orElse(BigDecimal.ZERO);
+        BigDecimal reserved = values.stream().map(LocationAvailability::overlappingReservationQuantity)
+                .min(BigDecimal::compareTo).orElse(BigDecimal.ZERO);
+        BigDecimal available = values.stream().map(LocationAvailability::availableQuantity)
+                .min(BigDecimal::compareTo).orElse(BigDecimal.ZERO);
+        if (material.getMaterialType() != MaterialType.FIXED_ASSET) {
+            return new LocationAvailability(current, expected, reserved, available, List.of());
+        }
+        List<FixedAsset> candidates = new ArrayList<>(values.get(0).candidateAssets());
+        for (LocationAvailability value : values.subList(1, values.size())) {
+            Set<Long> candidateIds = value.candidateAssets().stream().map(FixedAsset::getId).collect(Collectors.toSet());
+            candidates.removeIf(asset -> !candidateIds.contains(asset.getId()));
+        }
+        return new LocationAvailability(current, expected, reserved,
+                BigDecimal.valueOf(candidates.size()), candidates);
     }
 
     private List<PlannedAllocation> automaticAllocations(List<ResolvedLine> lines,
@@ -328,18 +371,18 @@ public class ClaimPlanService {
     }
 
     private ClaimAvailabilityVO toAvailabilityVO(Material material,
-                                                 ItemTimeService.BookingWindow bookingWindow,
+                                                 ItemTimeService.BookingSelection selection,
                                                  Instant asOf,
                                                  Long excludeClaimId,
                                                  List<StockLocation> locations) {
-        StockSnapshot snapshot = availabilityService.loadSnapshot(material, bookingWindow, asOf,
-                excludeClaimId, false);
-        BigDecimal availableQuantity = locations.stream()
-                .map(location -> availabilityService.availability(snapshot, location.getId()).availableQuantity())
+        ResolvedLine line = resolveLine(material, BigDecimal.ONE, locations, selection, asOf, excludeClaimId, false);
+        BigDecimal availableQuantity = line.availabilityByLocation().values().stream()
+                .map(LocationAvailability::availableQuantity)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        StockSnapshot firstSnapshot = line.snapshot();
         BigDecimal ownedQuantity = material.getMaterialType() == MaterialType.FIXED_ASSET
-                ? BigDecimal.valueOf(snapshot.ownedAssetTotal())
-                : snapshot.balances().stream()
+                ? BigDecimal.valueOf(firstSnapshot.ownedAssetTotal())
+                : firstSnapshot.balances().stream()
                 .map(StockBalance::getOwnedQuantity)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return new ClaimAvailabilityVO(str(material.getId()), material.getMaterialName(), material.getSpecification(),
@@ -354,8 +397,8 @@ public class ClaimPlanService {
         Material material = line.material();
         return new ClaimPreviewLineVO(str(line.materialId()), material.getMaterialName(), material.getSpecification(),
                 material.getMaterialType(), material.getQuantityMode(), material.getBaseUnit(), line.requestedQuantity(),
-                totalAvailable, line.snapshot().reservationRule(), line.snapshot().reservationWindow().startAt(),
-                line.snapshot().reservationWindow().endAt(), line.snapshot().ownedAssetTotal());
+                totalAvailable, line.snapshot().reservationRule(), line.envelope().bookingStartAt(),
+                line.envelope().bookingEndAt(), line.snapshot().ownedAssetTotal());
     }
 
     private ClaimPlannedAllocationVO toAllocationVO(PlannedAllocation allocation) {
@@ -375,10 +418,28 @@ public class ClaimPlanService {
                 requested.subtract(available).max(BigDecimal.ZERO));
     }
 
+    private BookingTimeSnapshotVO toSnapshot(ItemTimeService.BookingSelection selection) {
+        List<BookingTimeSegmentVO> segments = selection.segments().stream()
+                .map(segment -> new BookingTimeSegmentVO(segment.segmentSeq(),
+                        String.valueOf(segment.startPeriodId()), String.valueOf(segment.endPeriodId()),
+                        segment.window().bookingStartAt(), segment.window().bookingEndAt()))
+                .toList();
+        return new BookingTimeSnapshotVO(selection.envelope().bookingDate(),
+                String.valueOf(selection.segments().get(0).startPeriodId()),
+                String.valueOf(selection.segments().get(segments.size() - 1).endPeriodId()),
+                selection.envelope().bookingStartAt(), selection.envelope().bookingEndAt(),
+                selection.envelope().returnDeadline(), selection.envelope().issueEarliestAt(), segments);
+    }
+
+    private Long parseOptionalId(String value) {
+        return value == null || value.isBlank() ? null : Ids.parse(value);
+    }
+
     private void validateRequest(ClaimPreviewDTO dto) {
-        if (dto == null || dto.bookingDate() == null || !hasText(dto.startPeriodId())
-                || !hasText(dto.endPeriodId()) || dto.lines() == null || dto.lines().isEmpty()) {
-            throw badRequest("预约日期、起止节次和申领物料行均不能为空");
+        if (dto == null || dto.bookingDate() == null || dto.lines() == null || dto.lines().isEmpty()
+                || ((!hasText(dto.startPeriodId()) || !hasText(dto.endPeriodId()))
+                && (dto.periodIds() == null || dto.periodIds().isEmpty()))) {
+            throw badRequest("预约日期、节次和申领物料行均不能为空");
         }
         for (ClaimPreviewLineDTO line : dto.lines()) {
             if (line == null || !hasText(line.materialId())) {
@@ -419,16 +480,16 @@ public class ClaimPlanService {
         return new BusinessException(ResultCode.BAD_REQUEST.getCode(), message);
     }
 
-    private static String assetKey(Long materialId, Long locationId) {
-        return materialId + ":" + locationId;
+    private static String assetKey(Long materialId, Long locationId, Integer segmentSeq) {
+        return materialId + ":" + locationId + ":" + segmentSeq;
     }
 
     public record ApprovalPreview(
             ClaimPreviewVO preview,
             Map<String, List<Long>> candidateAssetIds
     ) {
-        public List<Long> candidateAssets(Long materialId, Long locationId) {
-            return candidateAssetIds.getOrDefault(assetKey(materialId, locationId), List.of());
+        public List<Long> candidateAssets(Long materialId, Long locationId, Integer segmentSeq) {
+            return candidateAssetIds.getOrDefault(assetKey(materialId, locationId, segmentSeq), List.of());
         }
     }
 
@@ -436,6 +497,17 @@ public class ClaimPlanService {
             Long materialId,
             BigDecimal requestedQuantity,
             Material material,
+            ItemTimeService.BookingWindow envelope,
+            List<ResolvedSegment> segments,
+            Map<Long, LocationAvailability> availabilityByLocation
+    ) {
+        StockSnapshot snapshot() {
+            return segments.get(0).snapshot();
+        }
+    }
+
+    private record ResolvedSegment(
+            Integer segmentSeq,
             StockSnapshot snapshot,
             Map<Long, LocationAvailability> availabilityByLocation
     ) {

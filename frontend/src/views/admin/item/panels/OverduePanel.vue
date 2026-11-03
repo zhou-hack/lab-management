@@ -2,14 +2,6 @@
   <div class="overdue_panel">
     <div class="card">
       <div class="overdue_panel__head">
-        <div>
-          <h2 class="t-title">
-            申领逾期记录
-          </h2>
-          <p class="t-sub">
-            未还与已还逾期分栏保留；归还完成不会掩盖历史逾期时长和原因
-          </p>
-        </div>
         <el-button
           :loading="loading"
           @click="loadData"
@@ -340,9 +332,7 @@ defineExpose({ reload: loadData })
 </script>
 
 <style scoped>
-.overdue_panel__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.overdue_panel__head h2 { margin: 0 0 5px; }
-.overdue_panel__head p { margin: 0; }
+.overdue_panel__head { display: flex; align-items: flex-start; justify-content: flex-end; gap: 16px; }
 .overdue_panel__filters { padding-bottom: 4px; }
 .overdue_panel__location { width: 200px; }
 .overdue_panel__document { display: flex; flex-direction: column; gap: 3px; }

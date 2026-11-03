@@ -50,6 +50,10 @@ export function getDocument(id) {
   return request.get(`/item/documents/${stringId(id)}`)
 }
 
+export function pageSettlements(params) {
+  return request.get('/item/settlements', { params })
+}
+
 export function getReturnContext(sourceId) {
   return request.get(`/item/documents/${stringId(sourceId)}/return_context`)
 }

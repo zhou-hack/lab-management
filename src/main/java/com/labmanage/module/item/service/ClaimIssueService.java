@@ -79,8 +79,10 @@ public class ClaimIssueService {
     private final StockDocumentService documentService;
     private final ItemFlowService flowService;
     private final ItemTimeService timeService;
+    private final ItemDocumentNoService documentNoService;
     private final ItemLocationAccessService locationAccessService;
     private final ClaimPlanService planService;
+    private final ClaimGroupService groupService;
     private final AssistantGrantService assistantGrantService;
     private final MaterialQuantityValidator quantityValidator;
 
@@ -99,8 +101,10 @@ public class ClaimIssueService {
                              StockDocumentService documentService,
                              ItemFlowService flowService,
                              ItemTimeService timeService,
+                             ItemDocumentNoService documentNoService,
                              ItemLocationAccessService locationAccessService,
                              ClaimPlanService planService,
+                             ClaimGroupService groupService,
                              AssistantGrantService assistantGrantService,
                              MaterialQuantityValidator quantityValidator) {
         this.claimMapper = claimMapper;
@@ -118,14 +122,17 @@ public class ClaimIssueService {
         this.documentService = documentService;
         this.flowService = flowService;
         this.timeService = timeService;
+        this.documentNoService = documentNoService;
         this.locationAccessService = locationAccessService;
         this.planService = planService;
+        this.groupService = groupService;
         this.assistantGrantService = assistantGrantService;
         this.quantityValidator = quantityValidator;
     }
 
     public ClaimIssueContextVO issueContext(Long claimId, Long locationId) {
         MaterialClaim claim = requireClaim(claimId);
+        requireIssueKind(claim, locationId);
         StockLocation location = requireLocation(locationId);
         PickupResolution pickup = assistantGrantService.resolvePickup(claim);
         Long operatorId = SecurityUtils.currentUserId();
@@ -175,9 +182,9 @@ public class ClaimIssueService {
                 physicalAvailable = positions.stream()
                         .anyMatch(position -> position.availableQuantity().signum() > 0);
             } else {
-                ItemTimeService.ReservationWindow window = reservationWindow(claim, lineAllReservations);
-                Set<Long> blockedAssetIds = reservationMapper.selectEffectiveOverlapping(material.getId(),
-                                window.startAt(), window.endAt(), claimId).stream()
+                Set<Long> blockedAssetIds = lineAllReservations.stream()
+                        .flatMap(window -> reservationMapper.selectEffectiveOverlapping(material.getId(),
+                                window.getReservationStartAt(), window.getReservationEndAt(), claimId).stream())
                         .map(MaterialReservation::getFixedAssetId)
                         .filter(java.util.Objects::nonNull)
                         .collect(Collectors.toSet());
@@ -224,6 +231,7 @@ public class ClaimIssueService {
         Long operatorId = SecurityUtils.currentUserId();
         Long locationId = Ids.parse(dto.locationId());
         MaterialClaim claim = requireClaimForUpdate(claimId);
+        requireIssueKind(claim, locationId);
         PickupResolution pickup = assistantGrantService.lockAndResolvePickup(claim);
         if (!pickup.valid()) {
             throw conflict(pickup.blockedReason());
@@ -327,6 +335,7 @@ public class ClaimIssueService {
         }
         appendClaimEvent(claim, previousStatus, nextStatus, document.getId(), operatorId, dto.remark(), postedAt);
         appendStockEvent(document, operatorId, postedAt, dto.remark());
+        groupService.syncParentStatus(claim, operatorId);
         return documentService.detail(document.getId());
     }
 
@@ -415,7 +424,7 @@ public class ClaimIssueService {
     private MaterialDocument createDocument(MaterialClaim claim, Long locationId, Long operatorId, Long pickupUserId,
                                             String idem, String remark, Instant now) {
         Long documentId = IdWorker.getId();
-        String documentNo = "IM" + documentId;
+        String documentNo = documentNoService.nextDocumentNo("CK", now);
         SysUser operator = userMapper.selectById(operatorId);
         BizDocument shared = new BizDocument();
         shared.setId(IdWorker.getId());
@@ -517,16 +526,6 @@ public class ClaimIssueService {
         return null;
     }
 
-    private ItemTimeService.ReservationWindow reservationWindow(MaterialClaim claim,
-                                                                 List<MaterialReservation> reservations) {
-        if (!reservations.isEmpty()) {
-            MaterialReservation reservation = reservations.get(0);
-            return new ItemTimeService.ReservationWindow(reservation.getReservationStartAt(),
-                    reservation.getReservationEndAt());
-        }
-        return timeService.normalReservationWindow(claim.getBookingStartAt(), claim.getBookingEndAt());
-    }
-
     private ClaimIssueContextVO.Asset toAssetVO(FixedAsset asset, boolean reservedByThisClaim) {
         return new ClaimIssueContextVO.Asset(str(asset.getId()), asset.getAssetCode(), str(asset.getLocationId()),
                 asset.getPositionText(), asset.getStatus(), reservedByThisClaim);
@@ -567,11 +566,16 @@ public class ClaimIssueService {
     }
 
     private MaterialClaim requireClaimForUpdate(Long id) {
-        MaterialClaim claim = claimMapper.selectByIdForUpdate(id);
-        if (claim == null) {
-            throw notFound("申领单不存在");
+        return groupService.requireClaimForUpdate(id);
+    }
+
+    private void requireIssueKind(MaterialClaim claim, Long locationId) {
+        if (groupService.isRoot(claim)) {
+            throw conflict("总申领单不能实发，请按库位处理子申领单");
         }
-        return claim;
+        if (groupService.isChild(claim) && !claim.getLocationId().equals(locationId)) {
+            throw conflict("子申领单只能在所属库位实发");
+        }
     }
 
     private StockLocation requireLocation(Long id) {

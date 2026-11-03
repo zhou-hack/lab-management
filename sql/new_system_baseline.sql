@@ -886,6 +886,10 @@ CREATE TABLE IF NOT EXISTS material_assistant_grant (
 CREATE TABLE IF NOT EXISTS material_claim (
   id BIGINT NOT NULL COMMENT '申领ID及业务链ID',
   biz_document_id BIGINT NOT NULL COMMENT '共享单据ID',
+  business_chain_no VARCHAR(64) DEFAULT NULL COMMENT '新申领外部业务链编号（ALL+yyyyMMdd+5位随机数字），历史为NULL',
+  claim_kind VARCHAR(32) NOT NULL DEFAULT 'STANDALONE' COMMENT 'STANDALONE独立申领/ROOT拆分父单/CHILD库位子单',
+  parent_claim_id BIGINT DEFAULT NULL COMMENT '父申领ID，仅CHILD非空',
+  location_id BIGINT DEFAULT NULL COMMENT '子单所属库位ID，仅CHILD非空',
   applicant_id BIGINT NOT NULL COMMENT '申请教师',
   purpose VARCHAR(512) NOT NULL COMMENT '用途',
   booking_date DATE NOT NULL COMMENT '上海预约日期',
@@ -918,6 +922,9 @@ CREATE TABLE IF NOT EXISTS material_claim (
   update_user_id BIGINT DEFAULT NULL COMMENT '最后操作人，审计不建外键',
   PRIMARY KEY (id),
   UNIQUE KEY uk_material_claim_biz_document (biz_document_id),
+  KEY idx_material_claim_business_chain_no (business_chain_no),
+  UNIQUE KEY uk_material_claim_parent_location (parent_claim_id, location_id),
+  KEY idx_material_claim_location (location_id),
   KEY idx_material_claim_applicant (applicant_id, create_time),
   KEY idx_material_claim_status_time (status, booking_start_at, booking_end_at),
   KEY idx_material_claim_delegate (delegate_student_id, status, booking_start_at),
@@ -926,6 +933,8 @@ CREATE TABLE IF NOT EXISTS material_claim (
   KEY idx_material_claim_closed_by (closed_by),
   KEY idx_material_claim_cancelled_by (cancelled_by),
   CONSTRAINT fk_material_claim_biz_document FOREIGN KEY (biz_document_id) REFERENCES biz_document (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT fk_material_claim_parent FOREIGN KEY (parent_claim_id) REFERENCES material_claim (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT fk_material_claim_location FOREIGN KEY (location_id) REFERENCES stock_location (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_material_claim_applicant FOREIGN KEY (applicant_id) REFERENCES sys_user (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_material_claim_start_period FOREIGN KEY (start_period_id) REFERENCES class_period (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_material_claim_end_period FOREIGN KEY (end_period_id) REFERENCES class_period (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
@@ -938,6 +947,11 @@ CREATE TABLE IF NOT EXISTS material_claim (
   CONSTRAINT chk_material_claim_window CHECK (booking_start_at < booking_end_at AND return_deadline >= booking_end_at),
   CONSTRAINT chk_material_claim_revision CHECK (revision_no >= 1),
   CONSTRAINT chk_material_claim_status CHECK (status IN ('PENDING', 'APPROVED', 'PARTIALLY_ISSUED', 'EXPIRED', 'CANCELLED', 'CLOSED', 'REJECTED')),
+  CONSTRAINT chk_material_claim_kind CHECK (claim_kind IN ('STANDALONE', 'ROOT', 'CHILD')),
+  CONSTRAINT chk_material_claim_split CHECK (
+    (claim_kind = 'CHILD' AND parent_claim_id IS NOT NULL AND location_id IS NOT NULL AND parent_claim_id <> id)
+    OR (claim_kind IN ('STANDALONE', 'ROOT') AND parent_claim_id IS NULL AND location_id IS NULL)
+  ),
   CONSTRAINT chk_material_claim_close_reason CHECK (close_reason IS NULL OR close_reason IN ('FULFILLED', 'ABANDONED')),
   CONSTRAINT chk_material_claim_pickup CHECK (
     (pickup_mode = 'SELF' AND delegate_student_id IS NULL AND delegate_grant_id IS NULL AND delegated_at IS NULL)
@@ -945,6 +959,32 @@ CREATE TABLE IF NOT EXISTS material_claim (
   ),
   CONSTRAINT chk_material_claim_deleted CHECK (deleted = 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='物料申领主表';
+
+CREATE TABLE IF NOT EXISTS material_claim_segment (
+  id BIGINT NOT NULL COMMENT '申领节次段ID（雪花ID）',
+  claim_id BIGINT NOT NULL COMMENT 'ROOT申领ID',
+  revision_no INT NOT NULL COMMENT '申领内容版本',
+  segment_seq INT NOT NULL COMMENT '同一版本内段序号，从1开始',
+  start_period_id BIGINT NOT NULL COMMENT '段开始节次ID',
+  end_period_id BIGINT NOT NULL COMMENT '段结束节次ID',
+  booking_start_at DATETIME(3) NOT NULL COMMENT '段预约开始（UTC快照）',
+  booking_end_at DATETIME(3) NOT NULL COMMENT '段预约结束（UTC快照，半开区间）',
+  create_time DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)) COMMENT '创建时间（UTC）',
+  update_time DATETIME(3) NOT NULL DEFAULT (UTC_TIMESTAMP(3)) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间（UTC）',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除：0正常 1删除',
+  create_user_id BIGINT DEFAULT NULL COMMENT '创建人，审计不建外键',
+  update_user_id BIGINT DEFAULT NULL COMMENT '最后操作人，审计不建外键',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_material_claim_segment_revision (claim_id, revision_no, segment_seq),
+  KEY idx_material_claim_segment_start_period (start_period_id),
+  KEY idx_material_claim_segment_end_period (end_period_id),
+  CONSTRAINT fk_material_claim_segment_claim FOREIGN KEY (claim_id) REFERENCES material_claim (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT fk_material_claim_segment_start_period FOREIGN KEY (start_period_id) REFERENCES class_period (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT fk_material_claim_segment_end_period FOREIGN KEY (end_period_id) REFERENCES class_period (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT chk_material_claim_segment_seq CHECK (segment_seq > 0),
+  CONSTRAINT chk_material_claim_segment_window CHECK (booking_start_at < booking_end_at),
+  CONSTRAINT chk_material_claim_segment_deleted CHECK (deleted IN (0, 1))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='ROOT申领非连续节次的连续段表';
 
 CREATE TABLE IF NOT EXISTS material_claim_line (
   id BIGINT NOT NULL COMMENT '主键（雪花ID）',
@@ -999,6 +1039,7 @@ CREATE TABLE IF NOT EXISTS material_reservation (
   claim_id BIGINT NOT NULL COMMENT '申领ID',
   claim_line_id BIGINT NOT NULL COMMENT '申领行ID',
   allocation_id BIGINT NOT NULL COMMENT '计划分配ID',
+  claim_segment_id BIGINT DEFAULT NULL COMMENT '申领节次段ID；历史无段预占保持NULL',
   revision_no INT NOT NULL COMMENT '申领内容版本',
   material_id BIGINT NOT NULL COMMENT '物料ID',
   location_id BIGINT NOT NULL COMMENT '预占库位ID',
@@ -1019,7 +1060,8 @@ CREATE TABLE IF NOT EXISTS material_reservation (
   create_user_id BIGINT DEFAULT NULL COMMENT '创建人，审计不建外键',
   update_user_id BIGINT DEFAULT NULL COMMENT '最后操作人，审计不建外键',
   PRIMARY KEY (id),
-  UNIQUE KEY uk_material_reservation_subject (allocation_id, reservation_subject_id),
+  UNIQUE KEY uk_material_reservation_subject (allocation_id, claim_segment_id, reservation_subject_id),
+  KEY idx_material_reservation_segment (claim_segment_id),
   KEY idx_material_reservation_claim (claim_id, revision_no),
   KEY idx_material_reservation_overlap (material_id, location_id, status, reservation_start_at, reservation_end_at),
   KEY idx_material_reservation_asset_overlap (fixed_asset_id, status, reservation_start_at, reservation_end_at),
@@ -1028,6 +1070,7 @@ CREATE TABLE IF NOT EXISTS material_reservation (
   CONSTRAINT fk_material_reservation_claim FOREIGN KEY (claim_id) REFERENCES material_claim (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_material_reservation_line FOREIGN KEY (claim_line_id) REFERENCES material_claim_line (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_material_reservation_allocation FOREIGN KEY (allocation_id) REFERENCES material_claim_allocation (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT fk_material_reservation_segment FOREIGN KEY (claim_segment_id) REFERENCES material_claim_segment (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_material_reservation_material FOREIGN KEY (material_id) REFERENCES material (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_material_reservation_location FOREIGN KEY (location_id) REFERENCES stock_location (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_material_reservation_asset FOREIGN KEY (fixed_asset_id) REFERENCES fixed_asset (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
@@ -1340,8 +1383,8 @@ DELIMITER //
 CREATE PROCEDURE assert_new_system_baseline_complete()
 BEGIN
   IF (SELECT COUNT(*) FROM information_schema.tables
-      WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE') <> 40 THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '新基线完成校验失败：必须为22张基础表加18张物料表，共40表';
+      WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE') <> 41 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '新基线完成校验失败：必须为22张基础表加19张物料表，共41表';
   END IF;
   IF (SELECT COUNT(*) FROM sys_permission WHERE module_code = 'item' AND id BETWEEN 4001 AND 4030) <> 30 THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '新基线物料权限种子不完整';
